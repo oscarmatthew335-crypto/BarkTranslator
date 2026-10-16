@@ -2,3 +2,5 @@ test_main.py
 __pycache__/
 .pytest_cache/
 README.md
+train/
+deploy.sh

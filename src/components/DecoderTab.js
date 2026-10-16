@@ -46,8 +46,10 @@ export default function DecoderTab({ species }) {
       ))}
 
       <Text style={s.note}>
-        The Translate tab is just for fun. It measures real {species.sound} length, count and loudness to pick a line,
-        but no app can truly read a pet's words. The tips on this page are real.
+        How Pawlingo works: the lines are written for fun, and your pet's real sounds choose which ones you get. Every
+        time you teach Pawlingo what a {species.sound} meant, it learns your pet's own language a little better, and as
+        owners share, it learns what {species.sounds} mean in general. It's a companion that grows with your pet, not a
+        word-for-word translator. The tips on this page are real.
       </Text>
     </ScrollView>
   );

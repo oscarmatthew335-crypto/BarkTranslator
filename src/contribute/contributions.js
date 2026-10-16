@@ -14,6 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { File, Directory, Paths } from 'expo-file-system';
+import * as Network from 'expo-network';
 import appJson from '../../app.json';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
@@ -24,6 +25,21 @@ const MAX_QUEUED_CLIPS = 40;
 const APP_VERSION = appJson?.expo?.version || 'unknown';
 
 export const uploadsConfigured = Boolean(API);
+
+// Clips are up to about 0.5 MB, so by default they only upload on Wi-Fi.
+let allowMobileData = false;
+export function setAllowMobileData(on) {
+  allowMobileData = Boolean(on);
+}
+async function onAllowedNetwork() {
+  if (allowMobileData) return true;
+  try {
+    const s = await Network.getNetworkStateAsync();
+    return s.type === Network.NetworkStateType.WIFI || s.type === Network.NetworkStateType.ETHERNET;
+  } catch (_) {
+    return true; // if we can't tell, don't block
+  }
+}
 
 // Last upload outcome, shown in pet settings so problems are visible.
 let lastResult = { at: null, ok: null, detail: null };
@@ -116,11 +132,13 @@ async function keepClipFile(tempUri, clipId) {
 }
 
 // Queue a recording with its measurements and the situation the owner picked.
-export async function queueClip({ clipId, tempUri, species, breedId, contextId, analysis }) {
+export async function queueClip({ clipId, tempUri, petId, species, breedId, contextId, analysis, features, guess }) {
   const uri = await keepClipFile(tempUri, clipId);
   const meta = {
     clipId,
     species,
+    // A random ID for this pet (not its name), so the model can tell pets apart
+    petKey: petId || null,
     breedId: breedId || null,
     chosenContext: contextId,
     pattern: analysis.pattern,
@@ -134,7 +152,11 @@ export async function queueClip({ clipId, tempUri, species, breedId, contextId, 
     noiseFloorDb: Number(analysis.noiseFloorDb.toFixed(1)),
     recordedAt: new Date().toISOString(),
     appVersion: APP_VERSION,
-    platform: Platform.OS
+    platform: Platform.OS,
+    format: /\.wav$/i.test(uri) ? 'wav' : 'm4a',
+    featureVersion: features?.version || null,
+    features: features?.vector || null,
+    guess: guess ? { context: guess.contextId, confidence: guess.confidence, source: guess.source } : null
   };
   const box = await readOutbox();
   box.push({ type: 'clip', clipId, uri, meta });
@@ -175,7 +197,17 @@ export function flush() {
   if (flushing) return flushing;
   flushing = (async () => {
     const installId = await getInstallId();
-    let box = await readOutbox();
+    const clipsAllowed = await onAllowedNetwork();
+    // Without Wi-Fi (and mobile data not allowed), clips wait. Answers are
+    // tiny, so they still go, except answers for clips that haven't gone yet.
+    const sendable = (list) => {
+      if (clipsAllowed) return list;
+      const waiting = new Set(list.filter((o) => o.type === 'clip').map((o) => o.clipId));
+      return list.filter((o) => o.type === 'label' && !waiting.has(o.clipId));
+    };
+    let full = await readOutbox();
+    if (!clipsAllowed && full.some((o) => o.type === 'clip')) setResult(false, 'Waiting for Wi-Fi to send clips');
+    let box = sendable(full);
     while (box.length) {
       const op = box[0];
       let res;
@@ -185,8 +217,9 @@ export function flush() {
           if (!file.exists) {
             // The recording is gone (e.g. app data cleared); nothing to send.
             setResult(false, 'Dropped one clip: recording file missing');
-            await writeOutbox(dropFirstMatch(await readOutbox(), op));
-            box = await readOutbox();
+            full = dropFirstMatch(await readOutbox(), op);
+            await writeOutbox(full);
+            box = sendable(full);
             continue;
           }
           // Expo's fetch needs a real file object here (it reads its bytes);
@@ -220,8 +253,9 @@ export function flush() {
       // 2xx is done; any other 4xx will never succeed, so drop it.
       if (op.type === 'clip') deleteFile(op.uri);
       // Re-read in case something was queued while this upload ran.
-      box = dropFirstMatch(await readOutbox(), op);
-      await writeOutbox(box);
+      full = dropFirstMatch(await readOutbox(), op);
+      await writeOutbox(full);
+      box = sendable(full);
     }
   })().finally(() => {
     flushing = null;

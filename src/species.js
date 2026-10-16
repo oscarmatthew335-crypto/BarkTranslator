@@ -8,6 +8,9 @@ import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 import { HUMAN_TO_CAT_PHRASES, CAT_DECODER_GUIDE } from './data/cat/speakAndDecoder';
 
 export const APP_NAME = 'Pawlingo';
+export const STORE_URL = 'https://play.google.com/store/apps/details?id=com.pawlingo.app';
+export const SUPPORT_EMAIL = 'support@zdns.co.za';
+export const MIN_AGE = 13;
 
 export const SPECIES = {
   dog: {

@@ -7,7 +7,7 @@ import { Sticker, StickerButton } from './ui';
 
 const POINTS = [
   ['🎙️', 'We keep a short recording each time you translate, up to 15 seconds.'],
-  ['🧠', 'After a translation you can tell us what was really going on. That is the part that teaches the model.'],
+  ['🧠', 'Your answers about what was really going on are shared too. That is the part that teaches the model.'],
   ['🔊', 'Recordings can pick up background sound, including people talking. Avoid translating during private conversations.'],
   ['🙈', "We don't collect your name, your pet's name, contacts or location. Clips are linked to a random ID, not to you."],
   ['⚙️', "Turn it off, or delete everything you've shared, any time from your pet's settings."]
@@ -21,8 +21,9 @@ export default function ConsentScreen({ petName, onChoose }) {
       <ScrollView contentContainerStyle={s.content}>
         <Text style={s.title}>Help {APP_NAME} learn real pet language</Text>
         <Text style={s.sub}>
-          Today the translations are just for fun. We're building one that actually learns what barks and meows mean, and{' '}
-          {petName || 'your pet'} can help.
+          {APP_NAME} grows with {petName || 'your pet'}. It learns {petName || 'your pet'}'s own sounds on this phone
+          whatever you choose here. Sharing clips also teaches it what barks and meows mean across every pet, so its
+          guesses get better for everyone.
         </Text>
 
         <Sticker radius={24} innerStyle={s.card} style={{ marginTop: 20 }}>
@@ -35,7 +36,10 @@ export default function ConsentScreen({ petName, onChoose }) {
           ))}
         </Sticker>
 
-        <Text style={s.no}>If you say not now, nothing is recorded or sent, and the app works exactly the same.</Text>
+        <Text style={s.no}>
+          If you say not now, no recordings are kept or sent. {APP_NAME} still learns {petName || 'your pet'}'s sounds
+          privately on this phone.
+        </Text>
       </ScrollView>
 
       <View style={s.footer}>
