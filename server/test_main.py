@@ -18,11 +18,15 @@ class FakeBackend:
     def __init__(self):
         self.docs = {}
         self.blobs = {}
+        self.models = {}
 
     def clip_exists(self, doc_id):
         return doc_id in self.docs
 
-    def save_clip(self, doc_id, path, data, record):
+    def get_model(self, species, fv):
+        return self.models.get((species, fv))
+
+    def save_clip(self, doc_id, path, data, record, content_type="audio/mp4"):
         self.blobs[path] = data
         self.docs[doc_id] = record
 
@@ -122,3 +126,37 @@ def test_accepts_expo_fetch_multipart(client):
     r = client.post("/clips", data=body, headers={**HEADERS, "Content-Type": f"multipart/form-data; boundary={b}"})
     assert r.status_code == 201
     assert f"clips/dog/{INSTALL}/dog-1760000000002.m4a" in client.fake.blobs
+
+
+def test_wav_with_features_and_guess(client):
+    wav = b"RIFF" + b"\x00" * 4 + b"WAVE" + b"x" * 3000
+    meta = {
+        "clipId": "dog-1760000000003", "species": "dog", "format": "wav", "featureVersion": "f1",
+        "features": [0.1, -2.5, 3] , "guess": {"context": "door", "confidence": 0.71, "source": "pet", "x": "<b>"},
+    }
+    r = client.post(
+        "/clips",
+        data={"meta": json.dumps(meta), "clip": (io.BytesIO(wav), "c.wav", "audio/wav")},
+        headers=HEADERS, content_type="multipart/form-data",
+    )
+    assert r.status_code == 201
+    doc = client.fake.docs[f"{INSTALL}_dog-1760000000003"]
+    assert doc["storagePath"].endswith(".wav")
+    assert doc["meta"]["features"] == [0.1, -2.5, 3.0]
+    assert doc["meta"]["guess"] == {"context": "door", "source": "pet", "confidence": 0.71}
+
+
+def test_bad_features_dropped(client):
+    meta = {"clipId": "dog-1760000000004", "species": "dog", "features": ["a", 1]}
+    client.post("/clips", data={"meta": json.dumps(meta), "clip": (io.BytesIO(b"x" * 500), "c.m4a")},
+                headers=HEADERS, content_type="multipart/form-data")
+    assert "features" not in client.fake.docs[f"{INSTALL}_dog-1760000000004"]["meta"]
+
+
+def test_model_endpoint(client):
+    assert client.get("/model?species=dog&fv=f1", headers=HEADERS).status_code == 204
+    client.fake.models[("dog", "f1")] = {"version": "v7", "contexts": ["door"]}
+    r = client.get("/model?species=dog&fv=f1", headers=HEADERS)
+    assert r.status_code == 200 and r.get_json()["version"] == "v7"
+    assert client.get("/model?species=dog&fv=f1&have=v7", headers=HEADERS).status_code == 204
+    assert client.get("/model?species=fish&fv=f1", headers=HEADERS).status_code == 400

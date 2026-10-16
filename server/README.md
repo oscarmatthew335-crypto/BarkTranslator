@@ -47,6 +47,24 @@ In the GitHub repo, go to **Settings → Secrets and variables → Actions**:
 
 The next APK build picks them up. Builds without them still work; clips just wait on the phone until a build with them is installed.
 
+## Updating, and the training job
+
+After pulling new code, run from the repo root in Cloud Shell:
+
+```bash
+bash server/deploy.sh
+```
+
+It updates the server (keeping the same app key), deploys the training job (`server/train`) as a Cloud Run job, schedules it every Monday at 03:00, and runs it once.
+
+**What the training job does:** it reads every labelled clip's sound fingerprint and the owner's answer, trains a small classifier per species, and scores it on phones it never saw. It only publishes when there's enough data (15+ phones and 40+ labelled examples per situation), when it clearly beats guessing, and when it beats the model phones already have. Phones download a new model within about 12 hours, with no app store update.
+
+Run it by hand any time:
+
+```bash
+gcloud run jobs execute pawlingo-train --region=africa-south1 --wait
+```
+
 ## Exporting data for training
 
 ```bash

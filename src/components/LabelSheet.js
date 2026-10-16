@@ -32,7 +32,7 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
           <Pressable style={s.sheet} onPress={() => {}}>
             <ScrollView keyboardShouldPersistTaps="handled">
               <Text style={s.title}>What was {petName} really saying?</Text>
-              <Text style={s.sub}>You know {petName} best. Your answer teaches the model.</Text>
+              <Text style={s.sub}>You know {petName} best. Every answer makes Pawlingo's next guess better.</Text>
 
               <Text style={s.label}>What was going on?</Text>
               <View style={s.chips}>

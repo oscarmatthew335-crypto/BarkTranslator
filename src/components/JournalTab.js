@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, Image, StyleSheet, Alert } from 'rea
 import { C, F } from '../theme';
 import { getSpecies } from '../species';
 import { Sticker, StickerButton, ScreenTitle } from './ui';
+import LearningCard from './LearningCard';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -11,7 +12,7 @@ function formatDate(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function JournalTab({ history, onReplay, onShare, onClear, onGoScan, onTeach, species }) {
+export default function JournalTab({ history, onReplay, onShare, onClear, onGoScan, onTeach, species, progress, petName }) {
   const rated = history.filter((h) => h.rating);
   const thumbsUp = rated.length ? `${Math.round((rated.filter((h) => h.rating === 'up').length / rated.length) * 100)}%` : '–';
   const totalSounds = history.reduce((sum, h) => sum + (h.soundCount ?? h.barkCount ?? 0), 0);
@@ -25,6 +26,8 @@ export default function JournalTab({ history, onReplay, onShare, onClear, onGoSc
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title="Journal" subtitle="Every translation, saved on this phone." />
+
+      <LearningCard progress={progress} species={species} petName={petName} />
 
       <View style={s.stats}>
         <Stat value={history.length} label="Translations" color={C.butter} />
@@ -72,7 +75,7 @@ export default function JournalTab({ history, onReplay, onShare, onClear, onGoSc
               <View style={s.actions}>
                 <StickerButton label="Replay" emoji="🔊" small color={C.paper} onPress={() => onReplay(item)} />
                 <StickerButton label="Share" emoji="📤" small onPress={() => onShare(item)} />
-                {item.clipId && !item.labelled && (
+                {item.features && !item.labelled && (
                   <StickerButton label="Teach" emoji="🧠" small color={C.pink} onPress={() => onTeach(item)} />
                 )}
               </View>

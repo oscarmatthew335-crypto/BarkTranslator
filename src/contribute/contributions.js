@@ -116,7 +116,7 @@ async function keepClipFile(tempUri, clipId) {
 }
 
 // Queue a recording with its measurements and the situation the owner picked.
-export async function queueClip({ clipId, tempUri, species, breedId, contextId, analysis }) {
+export async function queueClip({ clipId, tempUri, species, breedId, contextId, analysis, features, guess }) {
   const uri = await keepClipFile(tempUri, clipId);
   const meta = {
     clipId,
@@ -134,7 +134,11 @@ export async function queueClip({ clipId, tempUri, species, breedId, contextId, 
     noiseFloorDb: Number(analysis.noiseFloorDb.toFixed(1)),
     recordedAt: new Date().toISOString(),
     appVersion: APP_VERSION,
-    platform: Platform.OS
+    platform: Platform.OS,
+    format: /\.wav$/i.test(uri) ? 'wav' : 'm4a',
+    featureVersion: features?.version || null,
+    features: features?.vector || null,
+    guess: guess ? { context: guess.contextId, confidence: guess.confidence, source: guess.source } : null
   };
   const box = await readOutbox();
   box.push({ type: 'clip', clipId, uri, meta });

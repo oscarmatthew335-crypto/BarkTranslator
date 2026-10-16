@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { C, F, INK_WIDTH } from '../theme';
+import { APP_NAME } from '../species';
 import { Sticker } from './ui';
 import PawButton from './PawButton';
 import SpeechBubble from './SpeechBubble';
@@ -103,6 +104,13 @@ export default function ScannerScreen(props) {
             animateKey={currentResult.id}
             footer={
               <>
+                {currentResult.guess && (
+                  <View style={s.guessRow}>
+                    <Text style={s.guessText}>
+                      🧠 {currentResult.petName} sounds like: {currentResult.guess.label} ({Math.round(currentResult.guess.confidence * 100)}%)
+                    </Text>
+                  </View>
+                )}
                 <View style={s.statRow}>
                   <Tag text={currentResult.patternLabel} color={C.sky} />
                   <Tag
@@ -118,9 +126,11 @@ export default function ScannerScreen(props) {
                   <Action emoji="👎" onPress={() => onRate('down')} active={currentResult.rating === 'down'} label="Not quite" />
                   <Action emoji="✕" onPress={onDismissResult} label="Close" />
                 </View>
-                {currentResult.clipId && !currentResult.labelled && (
+                {currentResult.features && !currentResult.labelled && (
                   <Pressable onPress={() => onTeach(currentResult)} style={s.teach} accessibilityRole="button">
-                    <Text style={s.teachText}>🧠 Tell us what {currentResult.petName} really meant</Text>
+                    <Text style={s.teachText}>
+                      🧠 {currentResult.guess ? 'Right or wrong? Teach' : 'Teach'} {APP_NAME} what {currentResult.petName} meant
+                    </Text>
                   </Pressable>
                 )}
               </>
@@ -285,6 +295,17 @@ const s = StyleSheet.create({
   actionEmoji: { fontSize: 16 },
   actionLabel: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
 
+  guessRow: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    backgroundColor: C.bg,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: C.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 5
+  },
+  guessText: { fontFamily: F.semibold, fontSize: 13, color: C.ink },
   teach: {
     marginTop: 10,
     backgroundColor: C.pink,

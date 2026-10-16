@@ -16,7 +16,9 @@ export default function Onboarding({ onDone }) {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.content}>
           <Text style={s.title}>Who's doing the talking?</Text>
-          <Text style={s.sub}>Pick your pet. You can switch any time.</Text>
+          <Text style={s.sub}>
+            Pick your pet. Pawlingo learns their language as you go and gets better the more you use it.
+          </Text>
 
           <View style={s.choices}>
             {Object.values(SPECIES).map((opt) => {

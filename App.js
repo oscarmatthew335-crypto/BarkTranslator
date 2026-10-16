@@ -17,6 +17,8 @@ import Onboarding from './src/components/Onboarding';
 import ConsentScreen from './src/components/ConsentScreen';
 import LabelSheet from './src/components/LabelSheet';
 import { queueClip, queueLabel, flush, discardQueued, deleteMyData } from './src/contribute/contributions';
+import { guessContext, addExample, learningProgress } from './src/learning/petLearning';
+import { loadSharedModel, refreshSharedModel } from './src/learning/sharedModel';
 import ScannerScreen from './src/components/ScannerScreen';
 import SpeakTab from './src/components/SpeakTab';
 import DecoderTab from './src/components/DecoderTab';
@@ -63,6 +65,7 @@ function PetApp() {
   const [history, setHistory] = useState([]);
   const [shareClips, setShareClips] = useState(null); // null = not asked yet
   const [labelEntry, setLabelEntry] = useState(null);
+  const [progress, setProgress] = useState(null);
   const noticeTimer = useRef(null);
 
   const breed = species.breeds ? species.breeds.find((b) => b.id === breedId) || species.breeds[0] : null;
@@ -92,6 +95,16 @@ function PetApp() {
     if (!loaded || needsSetup) return;
     saveState({ species: speciesId, petName, breedId, personality, context: contextId, history, shareClips });
   }, [loaded, needsSetup, speciesId, petName, breedId, personality, contextId, history, shareClips]);
+
+  // Keep the learning progress and the shared model up to date for this pet.
+  const refreshProgress = useCallback(() => {
+    learningProgress(speciesId).then(setProgress);
+  }, [speciesId]);
+  useEffect(() => {
+    if (!loaded || needsSetup) return;
+    refreshProgress();
+    refreshSharedModel(speciesId);
+  }, [loaded, needsSetup, speciesId, refreshProgress]);
 
   // Send anything that was waiting for a connection.
   useEffect(() => {
@@ -200,8 +213,15 @@ function PetApp() {
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
+    // Pawlingo's own guess at what's going on, from this pet's taught barks
+    // and the shared model. Used only when it's confident; otherwise the
+    // situation the owner picked decides the line.
+    const sharedModel = await loadSharedModel(species.id);
+    const guess = await guessContext(species.id, out.features?.vector, sharedModel);
+    const guessCtx = guess?.show ? species.contexts.find((c) => c.id === guess.contextId) : null;
+
     const pack = species.packs[personality] || species.packs[species.defaultPersonality];
-    const ctx = species.contexts.find((c) => c.id === contextId) || species.contexts[0];
+    const ctx = guessCtx || species.contexts.find((c) => c.id === contextId) || species.contexts[0];
     const contextLines = pack.lines[ctx.id] || Object.values(pack.lines)[0];
     const pool = contextLines[pickLinePool(analysis.pattern)] || contextLines.short;
     const text = pool[Math.floor(Math.random() * pool.length)];
@@ -231,6 +251,9 @@ function PetApp() {
       emotions: moodScores(analysis, ctx.id, personality),
       photoUri,
       contextId: ctx.id,
+      pickedContextId: contextId,
+      guess: guessCtx ? { contextId: guess.contextId, label: guessCtx.label, confidence: guess.confidence, source: guess.source } : null,
+      features: out.features?.vector || null,
       clipId: out.clipUri ? `${species.id}-${now.getTime()}` : null,
       labelled: false,
       date: now.toISOString(),
@@ -243,8 +266,10 @@ function PetApp() {
         tempUri: out.clipUri,
         species: species.id,
         breedId: breed?.id,
-        contextId: ctx.id,
-        analysis
+        contextId,
+        analysis,
+        features: out.features,
+        guess
       });
     }
 
@@ -253,16 +278,27 @@ function PetApp() {
     speak(entry);
   };
 
-  const submitLabel = ({ contextId: labelContext, moods, comment }) => {
+  const submitLabel = async ({ contextId: labelContext, moods, comment }) => {
     const entry = labelEntry;
     setLabelEntry(null);
-    if (!entry?.clipId) return;
-    queueLabel({ clipId: entry.clipId, contextId: labelContext, moods, comment, rating: entry.rating });
-    const mark = (h) => (h.id === entry.id ? { ...h, labelled: true } : h);
+    if (!entry) return;
+    // Teach this pet's own model on the phone (works with or without sharing)
+    const sp = entry.species || speciesId;
+    const examples = await addExample(sp, entry.features, labelContext, moods);
+    // ...and, if the owner shares clips, send the answer for the shared model
+    if (entry.clipId) queueLabel({ clipId: entry.clipId, contextId: labelContext, moods, comment, rating: entry.rating });
+    const mark = (h) => (h.id === entry.id ? { ...h, labelled: true, taughtContextId: labelContext } : h);
     setHistory((prev) => prev.map(mark));
     setCurrentResult((cur) => (cur ? mark(cur) : cur));
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    showNotice(`Thanks! That helps ${APP_NAME} learn what ${petName} means.`);
+    if (sp === speciesId) refreshProgress();
+    const name = entry.petName || petName;
+    const n = examples.length;
+    showNotice(
+      n < 6
+        ? `Got it. ${APP_NAME} has learned ${n} of ${name}'s sounds. Its own guesses start at 6.`
+        : `Got it. ${APP_NAME} has learned ${n} of ${name}'s sounds and keeps getting better.`
+    );
   };
 
   const chooseSharing = async (on) => {
@@ -367,6 +403,8 @@ function PetApp() {
               setCurrentResult(null);
             }}
             onGoScan={() => setActiveTab('scanner')}
+            progress={progress}
+            petName={petName}
             onTeach={setLabelEntry}
             species={species}
           />

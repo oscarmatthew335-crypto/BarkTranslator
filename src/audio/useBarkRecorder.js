@@ -1,37 +1,22 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import {
-  useAudioRecorder,
-  useAudioRecorderState,
-  RecordingPresets,
+  useAudioStream,
   setAudioModeAsync,
   getRecordingPermissionsAsync,
   requestRecordingPermissionsAsync
 } from 'expo-audio';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import { analyzeBark } from './barkAnalysis';
+import { computeFeatures, encodeWav, resample, windowLevels, SAMPLE_RATE } from './features';
 
-// Mono AAC at 22 kHz: small files (about 8 KB a second) that still keep
-// enough detail to train a sound model on.
-const BARK_RECORDING = {
-  ...RecordingPresets.HIGH_QUALITY,
-  sampleRate: 22050,
-  numberOfChannels: 1,
-  bitRate: 64000,
-  isMeteringEnabled: true
-};
-
-const POLL_MS = 60;
 const MIN_HOLD_MS = 300;
-const MAX_CLIP_SECONDS = 15; // recording stops by itself after this
+const MAX_CLIP_SECONDS = 15; // listening stops by itself after this
 
-// Records while the button is held and returns real measurements of the
-// sound. The audio file is deleted straight after it's measured, unless the
-// owner has opted in to sharing clips (stop({ keepClip: true })), in which
-// case its location is returned so it can be labelled and uploaded.
+// Listens to the raw microphone signal while the button is held. From it we
+// get the live meter, the bark measurements, the sound fingerprint used for
+// learning, and (only if the owner opted in to sharing) a WAV clip.
+// Nothing is written to disk unless keepClip is set.
 export default function useBarkRecorder() {
-  const recorder = useAudioRecorder(BARK_RECORDING);
-  const state = useAudioRecorderState(recorder, POLL_MS);
-
   const [phase, setPhaseState] = useState('idle'); // idle | starting | recording | analysing
   const phaseRef = useRef('idle');
   const setPhase = (p) => {
@@ -39,18 +24,42 @@ export default function useBarkRecorder() {
     setPhaseState(p);
   };
   const [levels, setLevels] = useState([]);
-  const samplesRef = useRef([]);
+  const [liveMs, setLiveMs] = useState(0);
+  const chunksRef = useRef([]);
+  const totalRef = useRef(0);
+  const rateRef = useRef(SAMPLE_RATE);
+  const samplesRef = useRef([]); // { t, db } every 60 ms, for the bark analysis
   const startedAtRef = useRef(0);
   const releasedRef = useRef(false);
+  const cappedRef = useRef(false);
+  const streamRef = useRef(null);
 
-  // Collect a level reading on every status poll while recording.
-  useEffect(() => {
-    if (phase !== 'recording' || !state.isRecording) return;
-    if (typeof state.metering !== 'number') return;
-    const t = Date.now() - startedAtRef.current;
-    samplesRef.current.push({ t, db: state.metering });
-    setLevels((prev) => [...prev.slice(-11), state.metering]);
-  }, [state.metering, state.durationMillis, state.isRecording, phase]);
+  const onBuffer = useCallback((buf) => {
+    if (phaseRef.current !== 'recording' || cappedRef.current) return;
+    if (!buf?.data) return;
+    let chunk = new Float32Array(buf.data.slice(0));
+    if (buf.channels > 1) {
+      const mono = new Float32Array(Math.floor(chunk.length / buf.channels));
+      for (let i = 0; i < mono.length; i++) mono[i] = chunk[i * buf.channels];
+      chunk = mono;
+    }
+    rateRef.current = buf.sampleRate || SAMPLE_RATE;
+    const lv = windowLevels(chunk, rateRef.current, totalRef.current);
+    samplesRef.current.push(...lv);
+    chunksRef.current.push(chunk);
+    totalRef.current += chunk.length;
+    setLevels((prev) => [...prev, ...lv.map((l) => l.db)].slice(-14));
+    setLiveMs((totalRef.current / rateRef.current) * 1000);
+    if (totalRef.current >= MAX_CLIP_SECONDS * rateRef.current) {
+      cappedRef.current = true;
+      try {
+        streamRef.current?.stop();
+      } catch (_) {}
+    }
+  }, []);
+
+  const { stream } = useAudioStream({ sampleRate: SAMPLE_RATE, channels: 1, encoding: 'float32', onBuffer });
+  streamRef.current = stream;
 
   const ensurePermission = useCallback(async () => {
     const current = await getRecordingPermissionsAsync();
@@ -72,49 +81,68 @@ export default function useBarkRecorder() {
         return { ok: false, reason: perm };
       }
       await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await recorder.prepareToRecordAsync();
+      chunksRef.current = [];
       samplesRef.current = [];
+      totalRef.current = 0;
+      cappedRef.current = false;
       setLevels([]);
+      setLiveMs(0);
       startedAtRef.current = Date.now();
-      recorder.record({ forDuration: MAX_CLIP_SECONDS });
       setPhase('recording');
+      await stream.start();
       return { ok: true, releasedEarly: releasedRef.current };
     } catch (e) {
       setPhase('idle');
       return { ok: false, reason: 'error', error: e };
     }
-  }, [recorder, ensurePermission]);
+  }, [stream, ensurePermission]);
 
-  const stop = useCallback(async ({ keepClip = false } = {}) => {
-    releasedRef.current = true;
-    if (phaseRef.current !== 'recording') return null;
-    setPhase('analysing');
-    const heldMs = Date.now() - startedAtRef.current;
-    let uri = null;
-    try {
-      await recorder.stop();
-      uri = recorder.uri;
-    } catch (_) {}
-    try {
-      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
-    } catch (_) {}
-    const result = heldMs < MIN_HOLD_MS ? null : analyzeBark(samplesRef.current, heldMs);
-    const keep = keepClip && uri && result && result.heard;
-    if (uri && !keep) {
+  const stop = useCallback(
+    async ({ keepClip = false } = {}) => {
+      releasedRef.current = true;
+      if (phaseRef.current !== 'recording') return null;
+      setPhase('analysing');
+      const heldMs = Date.now() - startedAtRef.current;
       try {
-        const f = new File(uri);
-        if (f.exists) f.delete();
+        stream.stop();
       } catch (_) {}
-    }
-    samplesRef.current = [];
-    setPhase('idle');
-    return { heldMs, analysis: result, clipUri: keep ? uri : null };
-  }, [recorder]);
+      try {
+        await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+      } catch (_) {}
+
+      // Join the captured chunks and bring them to 16 kHz.
+      const raw = new Float32Array(totalRef.current);
+      let off = 0;
+      for (const c of chunksRef.current) {
+        raw.set(c, off);
+        off += c.length;
+      }
+      chunksRef.current = [];
+      const pcm = resample(raw, rateRef.current, SAMPLE_RATE);
+
+      const analysis = heldMs < MIN_HOLD_MS ? null : analyzeBark(samplesRef.current, heldMs);
+      samplesRef.current = [];
+      const features = analysis?.heard ? computeFeatures(pcm) : null;
+
+      let clipUri = null;
+      if (keepClip && analysis?.heard) {
+        try {
+          const f = new File(Paths.cache, `bark-${Date.now()}.wav`);
+          f.write(encodeWav(pcm, SAMPLE_RATE));
+          clipUri = f.uri;
+        } catch (_) {}
+      }
+      setPhase('idle');
+      setLiveMs(0);
+      return { heldMs, analysis, features, clipUri };
+    },
+    [stream]
+  );
 
   return {
     phase,
     isRecording: phase === 'recording',
-    liveMs: phase === 'recording' ? state.durationMillis : 0,
+    liveMs,
     levels,
     start,
     stop
