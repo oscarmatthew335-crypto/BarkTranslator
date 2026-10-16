@@ -1,71 +1,70 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
-import { DECODER_GUIDE } from '../data/speakDogAndDecoder';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
+import { C, F } from '../theme';
+import { Sticker, ScreenTitle } from './ui';
 
-export default function DecoderTab() {
+// Real behaviour tips for the selected species.
+export default function DecoderTab({ species }) {
+  const categories = ['All', ...Array.from(new Set(species.decoder.map((i) => i.category)))];
   const [filter, setFilter] = useState('All');
-  const categories = ['All', 'Vocalizations', 'Body Language', 'SA Pet Safety'];
-  const items = filter === 'All' ? DECODER_GUIDE : DECODER_GUIDE.filter((i) => i.category === filter);
+  useEffect(() => setFilter('All'), [species.id]);
+  const items = filter === 'All' ? species.decoder : species.decoder.filter((i) => i.category === filter);
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Text style={s.headerTitle}>🧠 Canine Behaviour & Bark Decoder</Text>
-      <Text style={s.headerSub}>Backed by animal behaviour science & South African veterinary tips.</Text>
-      <View style={s.funNote}>
-        <Text style={s.funNoteText}>
-          🐾 The Scanner's translations are for entertainment. It measures your dog's real bark count, length and
-          loudness to pick a line, but no app can truly read a dog's words. The tips below are real.
-        </Text>
-      </View>
+      <ScreenTitle
+        title={`${species.label} decoder`}
+        subtitle={`What ${species.sounds} and body language really mean.`}
+      />
 
-      <View style={s.pillRow}>
-        {categories.map((cat) => (
-          <TouchableOpacity
-            key={cat}
-            style={[s.filterPill, filter === cat && s.filterPillActive]}
-            onPress={() => setFilter(cat)}
-          >
-            <Text style={s.filterPillText}>{cat}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={{ marginBottom: 16 }}>
+        {categories.map((cat) => {
+          const on = filter === cat;
+          return (
+            <Pressable
+              key={cat}
+              onPress={() => setFilter(cat)}
+              style={[s.filter, on && s.filterOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+            >
+              <Text style={s.filterText}>{cat}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       {items.map((item) => (
-        <View key={item.id} style={[s.card, { borderLeftWidth: 4, borderLeftColor: item.color }]}>
-          <View style={s.rowBetween}>
-            <Text style={s.categoryTag}>{item.category.toUpperCase()}</Text>
-            <Text style={[s.badge, { color: item.color }]}>{item.badge}</Text>
+        <Sticker key={item.id} radius={22} style={{ marginBottom: 14 }} innerStyle={s.card}>
+          <View style={[s.badge, { backgroundColor: item.color }]}>
+            <Text style={s.badgeText}>{item.badge}</Text>
           </View>
-          <Text style={s.cardTitle}>{item.title}</Text>
-          <Text style={s.summaryText}>{item.summary}</Text>
-          <View style={s.scienceBox}>
-            <Text style={s.scienceLabel}>🔬 Why Dogs Do This:</Text>
-            <Text style={s.scienceText}>{item.science}</Text>
-          </View>
-        </View>
+          <Text style={s.title}>{item.title}</Text>
+          <Text style={s.summary}>{item.summary}</Text>
+          <Text style={s.science}>{item.science}</Text>
+        </Sticker>
       ))}
+
+      <Text style={s.note}>
+        The Translate tab is just for fun. It measures real {species.sound} length, count and loudness to pick a line,
+        but no app can truly read a pet's words. The tips on this page are real.
+      </Text>
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F17' },
-  content: { padding: 16, paddingBottom: 32 },
-  headerTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 4 },
-  headerSub: { color: '#9CA3AF', fontSize: 13, marginBottom: 14 },
-  funNote: { backgroundColor: '#161F30', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#2E3C56' },
-  funNoteText: { color: '#D1D5DB', fontSize: 12, lineHeight: 18 },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  filterPill: { backgroundColor: '#161F30', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#26334D' },
-  filterPillActive: { backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
-  filterPillText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
-  card: { backgroundColor: '#161F30', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#26334D' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  categoryTag: { color: '#9CA3AF', fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
-  badge: { fontSize: 11, fontWeight: '800' },
-  cardTitle: { color: '#FFF', fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  summaryText: { color: '#E5E7EB', fontSize: 13, lineHeight: 19, marginBottom: 10 },
-  scienceBox: { backgroundColor: '#0B0F17', padding: 10, borderRadius: 10 },
-  scienceLabel: { color: '#FFB800', fontSize: 11, fontWeight: '800', marginBottom: 2 },
-  scienceText: { color: '#9CA3AF', fontSize: 12, lineHeight: 17 }
+  container: { flex: 1, backgroundColor: C.bg },
+  content: { padding: 18, paddingBottom: 36 },
+  filters: { gap: 8 },
+  filter: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper },
+  filterOn: { backgroundColor: C.butter },
+  filterText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
+  card: { padding: 16 },
+  badge: { alignSelf: 'flex-start', borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 10, paddingVertical: 3, marginBottom: 10 },
+  badgeText: { fontFamily: F.semibold, fontSize: 12, color: C.ink },
+  title: { fontFamily: F.bold, fontSize: 20, color: C.ink, marginBottom: 6 },
+  summary: { fontFamily: F.medium, fontSize: 15, lineHeight: 21, color: C.ink, marginBottom: 8 },
+  science: { fontFamily: F.regular, fontSize: 14, lineHeight: 20, color: C.inkSoft },
+  note: { fontFamily: F.regular, fontSize: 13, lineHeight: 19, color: C.inkSoft, marginTop: 6 }
 });
