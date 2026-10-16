@@ -1,76 +1,127 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Share, Vibration, StatusBar, Linking } from 'react-native';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { StyleSheet, View, Share, Linking, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useCameraPermissions } from 'expo-camera';
 import * as Speech from 'expo-speech';
+import * as Haptics from 'expo-haptics';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
+import { useFonts, Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
 
-import { CONTEXTS, DOG_BREEDS } from './src/data/contextsAndBreeds';
-import { PERSONALITY_PACKS } from './src/data/personalityPacks';
-import { PATTERN_LABELS, pickLinePool, moodScores } from './src/audio/barkAnalysis';
+import { getSpecies, APP_NAME } from './src/species';
+import { pickLinePool, moodScores } from './src/audio/barkAnalysis';
 import useBarkRecorder from './src/audio/useBarkRecorder';
 import { loadState, saveState } from './src/storage/savedState';
-import SpeakDogTab from './src/components/SpeakDogTab';
+import { C } from './src/theme';
+import Onboarding from './src/components/Onboarding';
+import ConsentScreen from './src/components/ConsentScreen';
+import LabelSheet from './src/components/LabelSheet';
+import { queueClip, queueLabel, flush, discardQueued, deleteMyData } from './src/contribute/contributions';
+import ScannerScreen from './src/components/ScannerScreen';
+import SpeakTab from './src/components/SpeakTab';
 import DecoderTab from './src/components/DecoderTab';
 import JournalTab from './src/components/JournalTab';
-import DogProfileModal from './src/components/DogProfileModal';
-import ScannerHud from './src/components/ScannerHud';
+import PetProfileModal from './src/components/PetProfileModal';
+import ShareCard from './src/components/ShareCard';
+import TabBar from './src/components/TabBar';
 
 export default function App() {
+  const [fontsLoaded] = useFonts({ Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold });
   return (
     <SafeAreaProvider>
-      <BarkApp />
+      <StatusBar barStyle="dark-content" />
+      {fontsLoaded ? <PetApp /> : <View style={{ flex: 1, backgroundColor: C.bg }} />}
     </SafeAreaProvider>
   );
 }
 
-function BarkApp() {
+function PetApp() {
   const [camPerm, requestCamPerm] = useCameraPermissions();
   const bark = useBarkRecorder();
+  const cameraRef = useRef(null);
+  const shareCardRef = useRef(null);
 
   const [loaded, setLoaded] = useState(false);
-  const [activeTab, setActiveTab] = useState('scanner');
-  const [dogName, setDogName] = useState('Bruno');
-  const [selectedBreed, setSelectedBreed] = useState(DOG_BREEDS[0]);
-  const [profileModalVisible, setProfileModalVisible] = useState(false);
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [speciesId, setSpeciesId] = useState('dog');
+  const species = getSpecies(speciesId);
 
-  const [selectedPersonality, setSelectedPersonality] = useState('boet');
-  const [selectedContext, setSelectedContext] = useState('door');
+  const [activeTab, setActiveTab] = useState('scanner');
+  const [petName, setPetName] = useState('Bruno');
+  const [breedId, setBreedId] = useState(null);
+  const [profileVisible, setProfileVisible] = useState(false);
+
+  const [personality, setPersonality] = useState('boet');
+  const [contextId, setContextId] = useState('door');
   const [facing, setFacing] = useState('back');
   const [torch, setTorch] = useState(false);
   const [cameraWanted, setCameraWanted] = useState(true);
 
   const [currentResult, setCurrentResult] = useState(null);
+  const [shareItem, setShareItem] = useState(null);
   const [notice, setNotice] = useState(null);
   const [history, setHistory] = useState([]);
+  const [shareClips, setShareClips] = useState(null); // null = not asked yet
+  const [labelEntry, setLabelEntry] = useState(null);
   const noticeTimer = useRef(null);
 
-  // Restore the saved dog profile, settings and journal.
+  const breed = species.breeds ? species.breeds.find((b) => b.id === breedId) || species.breeds[0] : null;
+
+  // Restore saved pet, settings and journal (older saves were dog-only).
   useEffect(() => {
     loadState().then((saved) => {
-      if (saved) {
-        if (typeof saved.dogName === 'string') setDogName(saved.dogName);
-        const breed = DOG_BREEDS.find((b) => b.id === saved.breedId);
-        if (breed) setSelectedBreed(breed);
-        if (PERSONALITY_PACKS[saved.personality]) setSelectedPersonality(saved.personality);
-        if (CONTEXTS.some((c) => c.id === saved.context)) setSelectedContext(saved.context);
-        if (Array.isArray(saved.history)) setHistory(saved.history);
+      if (!saved) {
+        setNeedsSetup(true);
+        setLoaded(true);
+        return;
       }
+      const sp = getSpecies(saved.species || 'dog');
+      setSpeciesId(sp.id);
+      const name = saved.petName ?? saved.dogName;
+      if (typeof name === 'string') setPetName(name);
+      if (saved.breedId) setBreedId(saved.breedId);
+      setPersonality(sp.packs[saved.personality] ? saved.personality : sp.defaultPersonality);
+      setContextId(sp.contexts.some((c) => c.id === saved.context) ? saved.context : sp.defaultContext);
+      if (Array.isArray(saved.history)) setHistory(saved.history);
+      if (typeof saved.shareClips === 'boolean') setShareClips(saved.shareClips);
       setLoaded(true);
     });
   }, []);
 
   useEffect(() => {
-    if (!loaded) return;
-    saveState({
-      dogName,
-      breedId: selectedBreed.id,
-      personality: selectedPersonality,
-      context: selectedContext,
-      history
-    });
-  }, [loaded, dogName, selectedBreed, selectedPersonality, selectedContext, history]);
+    if (!loaded || needsSetup) return;
+    saveState({ species: speciesId, petName, breedId, personality, context: contextId, history, shareClips });
+  }, [loaded, needsSetup, speciesId, petName, breedId, personality, contextId, history, shareClips]);
+
+  // Send anything that was waiting for a connection.
+  useEffect(() => {
+    if (shareClips) flush();
+  }, [shareClips]);
 
   useEffect(() => () => noticeTimer.current && clearTimeout(noticeTimer.current), []);
+
+  const switchSpecies = useCallback(
+    (id, name) => {
+      const sp = getSpecies(id);
+      if (id !== speciesId) {
+        setPersonality(sp.defaultPersonality);
+        setContextId(sp.defaultContext);
+        setCurrentResult(null);
+      }
+      setSpeciesId(id);
+      if (name !== undefined) setPetName(name);
+    },
+    [speciesId]
+  );
+
+  const finishSetup = (id, name) => {
+    const sp = getSpecies(id);
+    setSpeciesId(id);
+    setPetName(name.trim() || sp.defaultName);
+    setPersonality(sp.defaultPersonality);
+    setContextId(sp.defaultContext);
+    setNeedsSetup(false);
+  };
 
   const showNotice = (text, action) => {
     setNotice({ text, action });
@@ -78,39 +129,36 @@ function BarkApp() {
     noticeTimer.current = setTimeout(() => setNotice(null), 5000);
   };
 
-  const speakTranslation = (item) => {
+  const speak = (item) => {
     Speech.stop();
     Speech.speak(item.text, { pitch: item.pitch, rate: item.rate });
   };
 
-  const shareTranslation = async (item) => {
-    const stats = item.barkCount
-      ? `${item.barkCount} bark${item.barkCount === 1 ? '' : 's'} in ${item.duration}s • loudness ${item.loudness}/100`
-      : `${item.duration}s`;
+  // Share a picture card (photo + speech bubble); fall back to text.
+  const shareResult = async (item) => {
+    setShareItem(item);
+    await new Promise((r) => setTimeout(r, 250)); // let the card render
     try {
-      await Share.share({
-        message:
-          `🐾 BarkTranslator: ${item.dogName} (${item.breedName}) says:\n\n` +
-          `💬 "${item.text}"\n\n` +
-          `🎭 ${item.personalityName} • ${item.contextLabel}\n` +
-          `🎙️ ${item.intensity} • ${stats}`
-      });
+      if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareCardRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1350 });
+        await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: `Share ${item.petName}'s translation` });
+        return;
+      }
+    } catch (_) {}
+    try {
+      await Share.share({ message: `${item.petName} says: "${item.text}"\n\nTranslated with ${APP_NAME} 🐾` });
     } catch (_) {}
   };
 
   const handleStartFailure = (reason) => {
-    if (reason === 'just-granted') {
-      showNotice('Mic is on. Now hold the button while your dog barks.');
-    } else if (reason === 'denied') {
-      showNotice('BarkTranslator needs the microphone to hear barks.');
-    } else if (reason === 'blocked') {
-      showNotice('Microphone is blocked. Allow it in Settings to hear barks.', {
+    if (reason === 'just-granted') showNotice(`Mic is on. Now hold the paw while ${petName} ${species.sounds}.`);
+    else if (reason === 'denied') showNotice(`${APP_NAME} needs the microphone to hear ${species.sounds}.`);
+    else if (reason === 'blocked')
+      showNotice(`The microphone is blocked. Allow it in Settings to hear ${species.sounds}.`, {
         label: 'Open Settings',
         onPress: () => Linking.openSettings()
       });
-    } else if (reason === 'error') {
-      showNotice("Couldn't start the microphone. Try again.");
-    }
+    else if (reason === 'error') showNotice("Couldn't start the microphone. Try again.");
   };
 
   const startListening = async () => {
@@ -121,74 +169,135 @@ function BarkApp() {
       handleStartFailure(res.reason);
       return;
     }
-    Vibration.vibrate(35);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     if (res.releasedEarly) finishListening();
   };
 
-  const stopListening = () => {
-    finishListening();
+  const snapPhoto = async () => {
+    if (!cameraOn || !cameraRef.current) return null;
+    try {
+      const pic = await cameraRef.current.takePictureAsync({ quality: 0.6, shutterSound: false });
+      return pic?.uri || null;
+    } catch (_) {
+      return null;
+    }
   };
 
   const finishListening = async () => {
-    const out = await bark.stop();
+    const photoPromise = bark.isRecording ? snapPhoto() : Promise.resolve(null);
+    const out = await bark.stop({ keepClip: shareClips === true });
+    const photoUri = await photoPromise;
     if (!out) return;
-    Vibration.vibrate([0, 40, 50, 60]);
 
     const { analysis, heldMs } = out;
     if (!analysis) {
-      showNotice('Hold the button down the whole time your dog is barking.');
+      showNotice(`Hold the paw down the whole time ${petName} ${species.sounds}.`);
       return;
     }
     if (!analysis.heard) {
-      showNotice("Didn't hear a bark. Get a bit closer and try again.");
+      showNotice(`Didn't hear a ${species.sound}. Get a bit closer and try again.`);
       return;
     }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-    const pack = PERSONALITY_PACKS[selectedPersonality];
-    const ctxObj = CONTEXTS.find((c) => c.id === selectedContext) || CONTEXTS[0];
-    const contextLines = pack.lines[selectedContext] || pack.lines.door;
+    const pack = species.packs[personality] || species.packs[species.defaultPersonality];
+    const ctx = species.contexts.find((c) => c.id === contextId) || species.contexts[0];
+    const contextLines = pack.lines[ctx.id] || Object.values(pack.lines)[0];
     const pool = contextLines[pickLinePool(analysis.pattern)] || contextLines.short;
-    const chosenLine = pool[Math.floor(Math.random() * pool.length)];
+    const text = pool[Math.floor(Math.random() * pool.length)];
 
-    const pitch = Math.max(0.5, Math.min(1.8, pack.pitch + selectedBreed.pitchMod));
-    const rate = Math.max(0.6, Math.min(1.5, pack.rate + selectedBreed.rateMod));
-
+    const pitch = Math.max(0.5, Math.min(1.8, pack.pitch + (breed?.pitchMod || 0)));
+    const rate = Math.max(0.6, Math.min(1.5, pack.rate + (breed?.rateMod || 0)));
     const now = new Date();
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
     const entry = {
-      id: String(Date.now()),
-      dogName: dogName.trim() || 'Doggo',
-      breedName: selectedBreed.name,
+      id: String(now.getTime()),
+      species: species.id,
+      petName: petName.trim() || species.defaultName,
+      breedName: breed?.name || null,
       personalityName: pack.name,
-      personalityBadge: pack.badge,
+      personalityFace: pack.face,
       personalityColor: pack.color,
-      contextLabel: ctxObj.label,
-      tip: ctxObj.tip,
-      text: chosenLine,
+      contextLabel: ctx.label,
+      tip: ctx.tip,
+      text,
       duration: (heldMs / 1000).toFixed(1),
-      intensity: PATTERN_LABELS[analysis.pattern],
+      patternLabel: species.patternLabels[analysis.pattern],
       pattern: analysis.pattern,
-      barkCount: analysis.barkCount,
+      soundCount: analysis.barkCount,
       loudness: analysis.loudness,
-      clarity: analysis.clarity,
       pitch,
       rate,
-      emotions: moodScores(analysis, selectedContext, selectedPersonality),
-      time: timeStr,
+      emotions: moodScores(analysis, ctx.id, personality),
+      photoUri,
+      contextId: ctx.id,
+      clipId: out.clipUri ? `${species.id}-${now.getTime()}` : null,
+      labelled: false,
       date: now.toISOString(),
       rating: null
     };
 
+    if (out.clipUri) {
+      queueClip({
+        clipId: entry.clipId,
+        tempUri: out.clipUri,
+        species: species.id,
+        breedId: breed?.id,
+        contextId: ctx.id,
+        analysis
+      });
+    }
+
     setCurrentResult(entry);
     setHistory((prev) => [entry, ...prev]);
-    speakTranslation(entry);
+    speak(entry);
   };
+
+  const submitLabel = ({ contextId: labelContext, moods, comment }) => {
+    const entry = labelEntry;
+    setLabelEntry(null);
+    if (!entry?.clipId) return;
+    queueLabel({ clipId: entry.clipId, contextId: labelContext, moods, comment, rating: entry.rating });
+    const mark = (h) => (h.id === entry.id ? { ...h, labelled: true } : h);
+    setHistory((prev) => prev.map(mark));
+    setCurrentResult((cur) => (cur ? mark(cur) : cur));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    showNotice(`Thanks! That helps ${APP_NAME} learn what ${petName} means.`);
+  };
+
+  const chooseSharing = async (on) => {
+    setShareClips(on);
+    if (!on) await discardQueued();
+  };
+
+  const confirmDeleteData = () =>
+    Alert.alert(
+      'Delete what you have shared?',
+      `This removes every clip and answer this phone has sent to ${APP_NAME}, and anything still waiting to send.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await deleteMyData();
+            setHistory((prev) => prev.map((h) => (h.clipId ? { ...h, clipId: null } : h)));
+            setCurrentResult((cur) => (cur?.clipId ? { ...cur, clipId: null } : cur));
+            Alert.alert(
+              res === 'failed' ? "Couldn't reach the server" : 'Deleted',
+              res === 'failed'
+                ? 'Anything waiting on this phone was deleted. Try again when you are online to remove what was already sent.'
+                : 'Your shared clips and answers have been deleted.'
+            );
+          }
+        }
+      ]
+    );
 
   const rateResult = (rating) => {
     if (!currentResult) return;
-    Vibration.vibrate(25);
-    const updated = { ...currentResult, rating };
+    Haptics.selectionAsync().catch(() => {});
+    const updated = { ...currentResult, rating: currentResult.rating === rating ? null : rating };
     setCurrentResult(updated);
     setHistory((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
   };
@@ -200,113 +309,109 @@ function BarkApp() {
     }
     const res = await requestCamPerm();
     if (res?.granted) setCameraWanted(true);
-    else if (res && !res.canAskAgain) {
-      showNotice('Camera is blocked. You can still translate barks without it.', {
+    else if (res && !res.canAskAgain)
+      showNotice(`The camera is blocked. You can still translate ${species.sounds} without it.`, {
         label: 'Open Settings',
         onPress: () => Linking.openSettings()
       });
-    }
   };
 
   const cameraOn = Boolean(camPerm?.granted && cameraWanted);
 
-  const hudProps = {
-    dogName,
-    selectedBreed,
-    onOpenProfile: () => setProfileModalVisible(true),
-    facing,
-    setFacing,
-    torch,
-    setTorch,
-    cameraOn,
-    onToggleCamera: toggleCamera,
-    isRecording: bark.isRecording,
-    isBusy: bark.phase === 'starting' || bark.phase === 'analysing',
-    liveMs: bark.liveMs,
-    levels: bark.levels,
-    currentResult,
-    notice,
-    onReplay: speakTranslation,
-    onShare: shareTranslation,
-    onRate: rateResult,
-    selectedContext,
-    setSelectedContext,
-    selectedPersonality,
-    setSelectedPersonality,
-    onStartListening: startListening,
-    onStopListening: stopListening
-  };
+  if (!loaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
+  if (needsSetup) return <Onboarding onDone={finishSetup} />;
+  if (shareClips === null) return <ConsentScreen petName={petName} onChoose={chooseSharing} />;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <StatusBar barStyle="light-content" />
-      <View style={styles.mainArea}>
-        {activeTab === 'scanner' &&
-          (cameraOn ? (
-            <CameraView style={styles.camera} facing={facing} enableTorch={torch} mute>
-              <ScannerHud {...hudProps} />
-            </CameraView>
-          ) : (
-            <View style={[styles.camera, { backgroundColor: '#0B0F17' }]}>
-              <ScannerHud {...hudProps} />
-            </View>
-          ))}
-        {activeTab === 'speak' && <SpeakDogTab dogName={dogName} />}
-        {activeTab === 'decoder' && <DecoderTab />}
+      <View style={styles.main}>
+        {activeTab === 'scanner' && (
+          <ScannerScreen
+            species={species}
+            petName={petName}
+            breed={breed}
+            onOpenProfile={() => setProfileVisible(true)}
+            cameraRef={cameraRef}
+            cameraOn={cameraOn}
+            cameraAsked={Boolean(camPerm && (camPerm.granted || !camPerm.canAskAgain || camPerm.status !== 'undetermined'))}
+            onToggleCamera={toggleCamera}
+            facing={facing}
+            onFlip={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+            torch={torch}
+            onTorch={() => setTorch((t) => !t)}
+            recorder={bark}
+            currentResult={currentResult}
+            onDismissResult={() => setCurrentResult(null)}
+            notice={notice}
+            onReplay={speak}
+            onShare={shareResult}
+            onRate={rateResult}
+            onTeach={setLabelEntry}
+            contextId={contextId}
+            setContextId={setContextId}
+            personality={personality}
+            setPersonality={setPersonality}
+            onStartListening={startListening}
+            onStopListening={finishListening}
+          />
+        )}
+        {activeTab === 'speak' && <SpeakTab species={species} petName={petName} />}
+        {activeTab === 'decoder' && <DecoderTab species={species} />}
         {activeTab === 'journal' && (
           <JournalTab
             history={history}
-            onReplay={speakTranslation}
-            onShare={shareTranslation}
+            onReplay={speak}
+            onShare={shareResult}
             onClear={() => {
               setHistory([]);
               setCurrentResult(null);
             }}
+            onGoScan={() => setActiveTab('scanner')}
+            onTeach={setLabelEntry}
+            species={species}
           />
         )}
       </View>
 
-      <View style={styles.tabBar}>
-        {[
-          { id: 'scanner', icon: '🎙️', label: 'Scanner' },
-          { id: 'speak', icon: '🐕', label: 'Speak Dog' },
-          { id: 'decoder', icon: '🧠', label: 'Decoder' },
-          { id: 'journal', icon: '📜', label: `Journal (${history.length})` }
-        ].map((tab) => {
-          const active = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              style={styles.tabItem}
-              disabled={bark.phase !== 'idle'}
-              onPress={() => setActiveTab(tab.id)}
-            >
-              <Text style={styles.tabIcon}>{tab.icon}</Text>
-              <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{tab.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <DogProfileModal
-        visible={profileModalVisible}
-        dogName={dogName}
-        setDogName={setDogName}
-        selectedBreed={selectedBreed}
-        setSelectedBreed={setSelectedBreed}
-        onClose={() => setProfileModalVisible(false)}
+      <TabBar
+        active={activeTab}
+        onChange={setActiveTab}
+        disabled={bark.phase !== 'idle'}
+        species={species}
+        journalCount={history.length}
       />
+
+      <PetProfileModal
+        visible={profileVisible}
+        speciesId={speciesId}
+        petName={petName}
+        breedId={breed?.id || null}
+        shareClips={shareClips === true}
+        onToggleShare={chooseSharing}
+        onDeleteData={confirmDeleteData}
+        onSave={({ speciesId: sp, petName: name, breedId: b }) => {
+          switchSpecies(sp, name.trim() || getSpecies(sp).defaultName);
+          setBreedId(b);
+          setProfileVisible(false);
+        }}
+        onClose={() => setProfileVisible(false)}
+      />
+
+      <LabelSheet
+        visible={Boolean(labelEntry)}
+        species={labelEntry ? getSpecies(labelEntry.species) : species}
+        petName={labelEntry?.petName || petName}
+        entry={labelEntry}
+        onSubmit={submitLabel}
+        onClose={() => setLabelEntry(null)}
+      />
+
+      {shareItem && <ShareCard ref={shareCardRef} item={shareItem} />}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#070A10' },
-  mainArea: { flex: 1 },
-  camera: { flex: 1 },
-  tabBar: { flexDirection: 'row', backgroundColor: '#0E1420', borderTopWidth: 1, borderTopColor: '#1F293D', paddingVertical: 8 },
-  tabItem: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
-  tabIcon: { fontSize: 18, marginBottom: 2 },
-  tabLabel: { color: '#6B7280', fontSize: 11, fontWeight: '700' },
-  tabLabelActive: { color: '#FFB800' }
+  container: { flex: 1, backgroundColor: C.bg },
+  main: { flex: 1 }
 });

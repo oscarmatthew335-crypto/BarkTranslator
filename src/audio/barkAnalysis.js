@@ -131,6 +131,8 @@ export function pickLinePool(pattern) {
   return pattern === 'howl' || pattern === 'rapid' ? 'long' : 'short';
 }
 
+const PLAY_CONTEXTS = ['play', 'zoomies', 'window', 'attention'];
+
 // Mood bars driven by the measured sound plus the context the owner picked.
 export function moodScores(analysis, contextId, personalityId) {
   const { loudness, barksPerSec, barkCount, longestMs, pattern } = analysis;
@@ -139,7 +141,7 @@ export function moodScores(analysis, contextId, personalityId) {
 
   const urgency = 25 + loudness * 0.45 + pace * 30;
   const play =
-    20 + pace * 35 + (pattern === 'rapid' ? 15 : 0) + (contextId === 'play' || contextId === 'zoomies' ? 30 : 0);
+    20 + pace * 35 + (pattern === 'rapid' ? 15 : 0) + (PLAY_CONTEXTS.includes(contextId) ? 30 : 0);
   const hunger = 10 + (contextId === 'food' ? 55 : 0) + Math.min(barkCount, 6) * 4 + length * 10;
   const sass = 20 + length * 35 + (pattern === 'soft' ? 15 : 0) + (personalityId === 'diva' ? 30 : 0);
 

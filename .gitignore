@@ -41,3 +41,7 @@ yarn-error.*
 /android
 *.apk
 
+
+# python
+__pycache__/
+.pytest_cache/

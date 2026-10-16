@@ -1,6 +1,8 @@
 export const PERSONALITY_PACKS = {
   boet: {
     name: '🥩 Local SA Boet',
+    face: '🥩',
+    shortName: 'Boet',
     badge: 'SA FAVOURITE 🇿🇦',
     tagline: 'Biltong, braais & guarding the pavement, bru',
     color: '#FF6B00',
@@ -74,6 +76,8 @@ export const PERSONALITY_PACKS = {
   },
   grumpy: {
     name: '👴 Grumpy Old Man',
+    face: '👴',
+    shortName: 'Grumpy',
     badge: 'CLASSIC CURMUDGEON',
     tagline: 'Get off my lawn & respect my nap schedule',
     color: '#F59E0B',
@@ -141,6 +145,8 @@ export const PERSONALITY_PACKS = {
   },
   diva: {
     name: '💅 Sassy Diva',
+    face: '💅',
+    shortName: 'Diva',
     badge: 'VIP QUEEN',
     tagline: 'Too glamorous to fetch, requires gourmet treats',
     color: '#EC4899',
@@ -210,6 +216,8 @@ export const PERSONALITY_PACKS = {
   },
   detective: {
     name: '🕵️‍♂️ Officer K-9',
+    face: '🕵️',
+    shortName: 'Officer',
     badge: 'TACTICAL UNIT',
     tagline: 'Perimeter sweeps & forensic crumb investigation',
     color: '#3B82F6',
@@ -274,6 +282,8 @@ export const PERSONALITY_PACKS = {
   },
   puppy: {
     name: '🥺 Velcro Puppy',
+    face: '🥺',
+    shortName: 'Puppy',
     badge: 'MAXIMUM CUTE',
     tagline: 'Obsessed with you, easily distracted by butterflies',
     color: '#10B981',
@@ -338,6 +348,8 @@ export const PERSONALITY_PACKS = {
   },
   royal: {
     name: '👑 Sir Barkington',
+    face: '👑',
+    shortName: 'Sir Bark',
     badge: 'ARISTOCRAT',
     tagline: 'Distinguished gentleman of the manor',
     color: '#8B5CF6',
