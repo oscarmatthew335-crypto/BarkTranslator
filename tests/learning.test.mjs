@@ -44,3 +44,21 @@ test('shared model maths', () => {
   assert.ok(p.a > 0.9 && Math.abs(p.a + p.b - 1) < 1e-9);
   assert.equal(predictShared(m, [1, 2, 3]), null);
 });
+
+test('bond levels count down to the next target', async () => {
+  const { bondLevel } = await import('../src/learning/petLearning.js');
+  let b = bondLevel({ total: 2, needsMoreContexts: true });
+  assert.equal(b.level, 1);
+  assert.equal(b.remaining, 4);
+  assert.ok(b.unlocksGuesses);
+  b = bondLevel({ total: 7, needsMoreContexts: true });
+  assert.ok(b.needsContext);
+  assert.equal(b.level, 1);
+  b = bondLevel({ total: 11, needsMoreContexts: false });
+  assert.equal(b.level, 2);
+  assert.equal(b.remaining, 4);
+  assert.ok(b.fraction > 0.5 && b.fraction < 0.6);
+  b = bondLevel({ total: 250, needsMoreContexts: false });
+  assert.equal(b.level, 7);
+  assert.equal(b.remaining, 50);
+});

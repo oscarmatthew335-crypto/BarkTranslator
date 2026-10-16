@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { APP_NAME } from '../species';
 import { Sticker } from './ui';
+import { bondLevel } from '../learning/petLearning';
 
 const CONFIDENT_AT = 25;
 
@@ -33,7 +34,7 @@ export default function LearningCard({ progress, species, petName, compact }) {
   return (
     <Sticker color={C.paper} radius={22} innerStyle={s.card} style={{ marginBottom: 16 }}>
       <Text style={s.kicker}>
-        🧠 {petName}'s language
+        🧠 {petName}'s language · Level {bondLevel(progress).level}: {bondLevel(progress).name}
       </Text>
       <Text style={s.headline}>{headline}</Text>
       <View style={s.track}>

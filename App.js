@@ -112,6 +112,7 @@ function PetApp() {
             onConfirmGuess={t.confirmGuess}
             onChangeContext={(id) => data.updatePet(pet.id, { contextId: id })}
             onChangePersonality={(id) => data.updatePet(pet.id, { personality: id })}
+            progress={t.progress}
           />
         )}
         {activeTab === 'speak' && <SpeakTab species={species} petName={pet.name} />}
