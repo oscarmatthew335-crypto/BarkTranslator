@@ -7,8 +7,18 @@ import { APP_NAME } from '../species';
 import useMeter from '../audio/useMeter';
 import { Sticker } from './ui';
 import PawButton from './PawButton';
+import ProgressRing from './ProgressRing';
+import { bondLevel } from '../learning/petLearning';
 import SpeechBubble from './SpeechBubble';
 import ContextSheet from './ContextSheet';
+
+// The goal under the paw: how many answers until the next bond level.
+function targetLine(bond, name) {
+  if (bond.needsContext) return `🎯 Teach me a sound from a new situation to unlock guesses`;
+  const n = bond.remaining;
+  if (bond.unlocksGuesses) return `🎯 ${n} more till I can guess what ${name} means`;
+  return `🎯 ${n} more till I know ${name} better`;
+}
 
 export default function ScannerScreen(props) {
   const {
@@ -37,8 +47,10 @@ export default function ScannerScreen(props) {
     onTeach,
     onConfirmGuess,
     onChangeContext,
-    onChangePersonality
+    onChangePersonality,
+    progress
   } = props;
+  const bond = progress ? bondLevel(progress) : null;
 
   const [contextOpen, setContextOpen] = useState(false);
   const context = species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
@@ -181,13 +193,19 @@ export default function ScannerScreen(props) {
               </Pressable>
             </Sticker>
           )}
-          <PawButton
-            recorder={recorder}
-            onPress={pressPaw}
-            label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
-          />
-          <Text style={s.pawHint} maxFontSizeMultiplier={1.3}>
-            {listening ? `Listening… tap to stop` : `Tap the paw to listen to ${pet.name}`}
+          <ProgressRing bond={bond}>
+            <PawButton
+              recorder={recorder}
+              onPress={pressPaw}
+              label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
+            />
+          </ProgressRing>
+          <Text style={s.pawHint} maxFontSizeMultiplier={1.3} numberOfLines={2}>
+            {listening
+              ? `Listening… tap to stop`
+              : showPawHint || !bond
+              ? `Tap the paw to listen to ${pet.name}`
+              : targetLine(bond, pet.name)}
           </Text>
         </View>
       </View>
@@ -458,7 +476,7 @@ const s = StyleSheet.create({
   faceLabel: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, marginTop: 6 },
   faceLabelActive: { fontFamily: F.bold, color: C.ink },
   pawRow: { alignItems: 'center', paddingTop: 8 },
-  pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 8 },
+  pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
   hintWrap: { position: 'absolute', bottom: 150, left: 16, right: 16, zIndex: 5 },
   hintBox: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
   hintText: { fontFamily: F.medium, fontSize: 14, lineHeight: 19, color: C.ink, flex: 1 },

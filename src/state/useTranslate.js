@@ -7,7 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 
 import useBarkRecorder from '../audio/useBarkRecorder';
 import { pickLinePool, moodScores } from '../audio/barkAnalysis';
-import { guessContext, addExample, learningProgress, MIN_TO_GUESS } from '../learning/petLearning';
+import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
 import { keepPhoto } from '../storage/photos';
@@ -215,12 +215,17 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       const ctxLabel = sp.contexts.find((c) => c.id === contextId)?.label;
       if (before.stage === 'starting' && after.stage !== 'starting') {
         showNotice(`🎉 Guesses unlocked! ${APP_NAME} will now try to tell what ${name} means.`, null, 7000);
+      } else if (bondLevel(after).level > bondLevel(before).level) {
+        showNotice(`🎉 Level up! You and ${name} are now "${bondLevel(after).name}".`, null, 7000);
       } else if (ctxLabel && (before.byContext[contextId] || 0) < MILESTONE_PER_CONTEXT && after.byContext[contextId] >= MILESTONE_PER_CONTEXT) {
         showNotice(`🎉 ${APP_NAME} is learning ${name}'s ${ctxLabel.replace(/^\S+\s/, '')} sounds.`, null, 7000);
-      } else if (after.total < MIN_TO_GUESS) {
-        showNotice(`Got it. ${after.total} of ${name}'s sounds learned. Guesses start at ${MIN_TO_GUESS}.`);
       } else {
-        showNotice(`Got it. ${APP_NAME} keeps getting better at ${name}'s sounds.`);
+        const b = bondLevel(after);
+        showNotice(
+          b.needsContext
+            ? `Got it. Now teach me a sound from a different situation.`
+            : `Got it! ${b.remaining} more ${b.remaining === 1 ? 'answer' : 'answers'} to the next level.`
+        );
       }
     },
     [pet, updateEntry, showNotice]

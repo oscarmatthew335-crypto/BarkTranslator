@@ -158,3 +158,30 @@ export async function learningProgress(petId) {
   const toUnlock = Math.max(0, MIN_TO_GUESS - n);
   return { total: n, byContext, covered, stage, toUnlock, needsMoreContexts: covered < MIN_CONTEXTS };
 }
+
+// Bond levels give owners a target: "4 more answers and I'll know Rex better".
+// Each level is a number of taught sounds; the first also needs two situations.
+export const BOND_LEVELS = [
+  { at: 0, name: 'Just met' },
+  { at: MIN_TO_GUESS, name: 'Getting to know you' },
+  { at: 15, name: 'Learning your language' },
+  { at: 25, name: 'Good mates' },
+  { at: 50, name: 'Best mates' },
+  { at: 100, name: 'Fluent' },
+  { at: 200, name: 'Soulmates' }
+];
+
+export function bondLevel(progress) {
+  const n = progress?.total || 0;
+  let i = 0;
+  while (i + 1 < BOND_LEVELS.length && n >= BOND_LEVELS[i + 1].at) i++;
+  // Enough sounds but all from one situation: guesses are still locked.
+  if (i >= 1 && progress?.needsMoreContexts) i = 0;
+  const cur = BOND_LEVELS[i];
+  const next = BOND_LEVELS[i + 1] || { at: cur.at + 100 * Math.ceil((n - cur.at + 1) / 100), name: cur.name };
+  const needsContext = i === 0 && n >= MIN_TO_GUESS && !!progress?.needsMoreContexts;
+  const remaining = needsContext ? 1 : Math.max(1, next.at - n);
+  const span = next.at - cur.at;
+  const fraction = needsContext ? 0.9 : Math.max(0, Math.min(1, (n - cur.at) / span));
+  return { level: i + 1, name: cur.name, nextName: next.name, remaining, fraction, needsContext, unlocksGuesses: i === 0 };
+}
