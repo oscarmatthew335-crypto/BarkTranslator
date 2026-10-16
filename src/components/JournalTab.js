@@ -1,17 +1,25 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
 
+function formatDate(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function JournalTab({ history, onReplay, onShare, onClear }) {
   const accurateCount = history.filter((h) => h.rating === 'up').length;
   const ratedCount = history.filter((h) => h.rating).length;
-  const accuracyPct = ratedCount > 0 ? Math.round((accurateCount / ratedCount) * 100) : 96;
+  const thumbsUpPct = ratedCount > 0 ? `${Math.round((accurateCount / ratedCount) * 100)}%` : '—';
+  const totalBarks = history.reduce((sum, h) => sum + (h.barkCount || 0), 0);
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <View style={s.rowBetween}>
         <View>
-          <Text style={s.headerTitle}>📜 Bark Journal & AI Stats</Text>
-          <Text style={s.headerSub}>Session history & acoustic translation logs</Text>
+          <Text style={s.headerTitle}>📜 Bark Journal</Text>
+          <Text style={s.headerSub}>Every bark you've translated, saved on this phone</Text>
         </View>
         {history.length > 0 && (
           <TouchableOpacity style={s.clearBtn} onPress={onClear}>
@@ -23,15 +31,15 @@ export default function JournalTab({ history, onReplay, onShare, onClear }) {
       <View style={s.statsRow}>
         <View style={s.statCard}>
           <Text style={s.statValue}>{history.length}</Text>
-          <Text style={s.statLabel}>Barks Decoded</Text>
+          <Text style={s.statLabel}>Translations</Text>
         </View>
         <View style={s.statCard}>
-          <Text style={[s.statValue, { color: '#10B981' }]}>{accuracyPct}%</Text>
-          <Text style={s.statLabel}>AI Match Score</Text>
+          <Text style={[s.statValue, { color: '#10B981' }]}>{thumbsUpPct}</Text>
+          <Text style={s.statLabel}>👍 Rating</Text>
         </View>
         <View style={s.statCard}>
-          <Text style={[s.statValue, { color: '#FFB800' }]}>v2.5</Text>
-          <Text style={s.statLabel}>Acoustic Engine</Text>
+          <Text style={[s.statValue, { color: '#FFB800' }]}>{totalBarks}</Text>
+          <Text style={s.statLabel}>Barks Heard</Text>
         </View>
       </View>
 
@@ -46,11 +54,11 @@ export default function JournalTab({ history, onReplay, onShare, onClear }) {
           <View key={item.id} style={s.card}>
             <View style={s.rowBetween}>
               <Text style={s.logMeta}>🐾 {item.dogName} • {item.personalityName}</Text>
-              <Text style={s.logTime}>{item.time}</Text>
+              <Text style={s.logTime}>{item.date ? formatDate(item.date) : item.time}</Text>
             </View>
             <Text style={s.logQuote}>"{item.text}"</Text>
             <Text style={s.logStats}>
-              {item.contextLabel} • {item.intensity} ({item.duration}s • {item.confidence}% match)
+              {item.contextLabel} • {item.intensity} ({item.barkCount ?? '?'} bark{item.barkCount === 1 ? '' : 's'} • {item.duration}s • 🔊 {item.loudness ?? '?'}/100)
             </Text>
             <View style={s.actionRow}>
               <TouchableOpacity style={s.smallBtn} onPress={() => onReplay(item)}>

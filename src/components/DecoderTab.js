@@ -11,6 +11,12 @@ export default function DecoderTab() {
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <Text style={s.headerTitle}>🧠 Canine Behaviour & Bark Decoder</Text>
       <Text style={s.headerSub}>Backed by animal behaviour science & South African veterinary tips.</Text>
+      <View style={s.funNote}>
+        <Text style={s.funNoteText}>
+          🐾 The Scanner's translations are for entertainment. It measures your dog's real bark count, length and
+          loudness to pick a line, but no app can truly read a dog's words. The tips below are real.
+        </Text>
+      </View>
 
       <View style={s.pillRow}>
         {categories.map((cat) => (
@@ -47,6 +53,8 @@ const s = StyleSheet.create({
   content: { padding: 16, paddingBottom: 32 },
   headerTitle: { color: '#FFF', fontSize: 22, fontWeight: '800', marginBottom: 4 },
   headerSub: { color: '#9CA3AF', fontSize: 13, marginBottom: 14 },
+  funNote: { backgroundColor: '#161F30', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#2E3C56' },
+  funNoteText: { color: '#D1D5DB', fontSize: 12, lineHeight: 18 },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   filterPill: { backgroundColor: '#161F30', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#26334D' },
   filterPillActive: { backgroundColor: '#FF6B00', borderColor: '#FF6B00' },
