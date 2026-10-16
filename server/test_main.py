@@ -192,3 +192,50 @@ def test_daily_limits(client):
         assert codes == [201, 201, 429]
     finally:
         main.DAILY_LIMITS["errors"] = 50
+
+
+def _wav(seconds=0.6, rate=16000):
+    import math
+    import struct
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        n = int(seconds * rate)
+        w.writeframes(b"".join(struct.pack("<h", int(12000 * math.sin(i / 8) * (i % 4000 < 2000))) for i in range(n)))
+    return buf.getvalue()
+
+
+def _jpeg():
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (400, 500), (180, 140, 90)).save(buf, "JPEG")
+    return buf.getvalue()
+
+
+def post_video(client, meta, **files):
+    data = {"meta": json.dumps(meta)}
+    for k, (blob, name, ctype) in files.items():
+        data[k] = (io.BytesIO(blob), name, ctype)
+    return client.post("/video", data=data, headers=HEADERS, content_type="multipart/form-data")
+
+
+def test_video_with_photo_and_sound(client):
+    meta = {"text": "Eish, where is the biltong?", "petName": "Rex", "label": "🍖 Food", "species": "dog"}
+    r = post_video(client, meta, photo=(_jpeg(), "p.jpg", "image/jpeg"), clip=(_wav(), "c.wav", "audio/wav"))
+    assert r.status_code == 200, r.data[:200]
+    assert r.headers["Content-Type"] == "video/mp4"
+    assert r.data[4:8] == b"ftyp" and len(r.data) > 10_000
+
+
+def test_video_without_photo_or_sound(client):
+    r = post_video(client, {"text": "Mrrp?", "petName": "Luna", "species": "cat"})
+    assert r.status_code == 200 and r.data[4:8] == b"ftyp"
+
+
+def test_video_needs_text(client):
+    assert post_video(client, {"petName": "Rex"}).status_code == 400

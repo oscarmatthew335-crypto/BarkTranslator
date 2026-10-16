@@ -85,7 +85,15 @@ export default function useAppData() {
   const updateSettings = useCallback((changes) => setSettings((s) => ({ ...s, ...changes })), []);
   const markSeen = useCallback((what) => setSettings((s) => ({ ...s, seen: { ...s.seen, [what]: true } })), []);
 
-  const addEntry = useCallback((entry) => setHistory((h) => [entry, ...h]), []);
+  const addEntry = useCallback(
+    (entry) =>
+      setHistory((h) => {
+        const next = [entry, ...h];
+        if (next.length % 10 === 0) prunePhotos(next);
+        return next;
+      }),
+    []
+  );
   const updateEntry = useCallback((id, changes) => setHistory((h) => h.map((e) => (e.id === id ? { ...e, ...changes } : e))), []);
   const clearHistory = useCallback(() => {
     setHistory([]);
