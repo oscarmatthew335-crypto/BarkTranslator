@@ -8,10 +8,10 @@
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.oscarmatthew.barktranslator"
+      "bundleIdentifier": "com.pawlingo.app"
     },
     "android": {
-      "package": "com.oscarmatthew.barktranslator",
+      "package": "com.pawlingo.app",
       "adaptiveIcon": {
         "backgroundColor": "#0B0F17",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -23,7 +23,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.VIBRATE"
       ],
-      "versionCode": 4,
+      "versionCode": 1,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
