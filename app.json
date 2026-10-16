@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "BarkTranslator",
-    "slug": "BarkTranslator",
-    "version": "2.2.0",
+    "name": "Pawlingo",
+    "slug": "pawlingo",
+    "version": "2.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -23,7 +23,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.VIBRATE"
       ],
-      "versionCode": 3,
+      "versionCode": 4,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -33,7 +33,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow BarkTranslator to use your camera as the scanner background",
+          "cameraPermission": "Allow Pawlingo to use your camera to show your pet on screen",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false
         }
@@ -41,7 +41,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "Allow BarkTranslator to listen to your dog's barks",
+          "microphonePermission": "Allow Pawlingo to listen to your pet's barks and meows",
           "enableBackgroundPlayback": false
         }
       ]

@@ -28,6 +28,7 @@ export default function ScannerScreen(props) {
     onReplay,
     onShare,
     onRate,
+    onTeach,
     contextId,
     setContextId,
     personality,
@@ -117,6 +118,11 @@ export default function ScannerScreen(props) {
                   <Action emoji="👎" onPress={() => onRate('down')} active={currentResult.rating === 'down'} label="Not quite" />
                   <Action emoji="✕" onPress={onDismissResult} label="Close" />
                 </View>
+                {currentResult.clipId && !currentResult.labelled && (
+                  <Pressable onPress={() => onTeach(currentResult)} style={s.teach} accessibilityRole="button">
+                    <Text style={s.teachText}>🧠 Tell us what {currentResult.petName} really meant</Text>
+                  </Pressable>
+                )}
               </>
             }
           />
@@ -279,6 +285,17 @@ const s = StyleSheet.create({
   actionEmoji: { fontSize: 16 },
   actionLabel: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
 
+  teach: {
+    marginTop: 10,
+    backgroundColor: C.pink,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: C.ink,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    alignItems: 'center'
+  },
+  teachText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
   noticeBox: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   noticeText: { fontFamily: F.medium, fontSize: 15, color: C.ink, flex: 1, lineHeight: 20 },
   noticeAction: { backgroundColor: C.paper, borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 12, paddingVertical: 6 },

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { StyleSheet, View, Share, Linking, StatusBar } from 'react-native';
+import { StyleSheet, View, Share, Linking, StatusBar, Alert } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermissions } from 'expo-camera';
 import * as Speech from 'expo-speech';
@@ -14,6 +14,9 @@ import useBarkRecorder from './src/audio/useBarkRecorder';
 import { loadState, saveState } from './src/storage/savedState';
 import { C } from './src/theme';
 import Onboarding from './src/components/Onboarding';
+import ConsentScreen from './src/components/ConsentScreen';
+import LabelSheet from './src/components/LabelSheet';
+import { queueClip, queueLabel, flush, discardQueued, deleteMyData } from './src/contribute/contributions';
 import ScannerScreen from './src/components/ScannerScreen';
 import SpeakTab from './src/components/SpeakTab';
 import DecoderTab from './src/components/DecoderTab';
@@ -58,6 +61,8 @@ function PetApp() {
   const [shareItem, setShareItem] = useState(null);
   const [notice, setNotice] = useState(null);
   const [history, setHistory] = useState([]);
+  const [shareClips, setShareClips] = useState(null); // null = not asked yet
+  const [labelEntry, setLabelEntry] = useState(null);
   const noticeTimer = useRef(null);
 
   const breed = species.breeds ? species.breeds.find((b) => b.id === breedId) || species.breeds[0] : null;
@@ -78,14 +83,20 @@ function PetApp() {
       setPersonality(sp.packs[saved.personality] ? saved.personality : sp.defaultPersonality);
       setContextId(sp.contexts.some((c) => c.id === saved.context) ? saved.context : sp.defaultContext);
       if (Array.isArray(saved.history)) setHistory(saved.history);
+      if (typeof saved.shareClips === 'boolean') setShareClips(saved.shareClips);
       setLoaded(true);
     });
   }, []);
 
   useEffect(() => {
     if (!loaded || needsSetup) return;
-    saveState({ species: speciesId, petName, breedId, personality, context: contextId, history });
-  }, [loaded, needsSetup, speciesId, petName, breedId, personality, contextId, history]);
+    saveState({ species: speciesId, petName, breedId, personality, context: contextId, history, shareClips });
+  }, [loaded, needsSetup, speciesId, petName, breedId, personality, contextId, history, shareClips]);
+
+  // Send anything that was waiting for a connection.
+  useEffect(() => {
+    if (shareClips) flush();
+  }, [shareClips]);
 
   useEffect(() => () => noticeTimer.current && clearTimeout(noticeTimer.current), []);
 
@@ -174,7 +185,7 @@ function PetApp() {
 
   const finishListening = async () => {
     const photoPromise = bark.isRecording ? snapPhoto() : Promise.resolve(null);
-    const out = await bark.stop();
+    const out = await bark.stop({ keepClip: shareClips === true });
     const photoUri = await photoPromise;
     if (!out) return;
 
@@ -200,7 +211,7 @@ function PetApp() {
     const now = new Date();
 
     const entry = {
-      id: String(Date.now()),
+      id: String(now.getTime()),
       species: species.id,
       petName: petName.trim() || species.defaultName,
       breedName: breed?.name || null,
@@ -219,14 +230,69 @@ function PetApp() {
       rate,
       emotions: moodScores(analysis, ctx.id, personality),
       photoUri,
+      contextId: ctx.id,
+      clipId: out.clipUri ? `${species.id}-${now.getTime()}` : null,
+      labelled: false,
       date: now.toISOString(),
       rating: null
     };
+
+    if (out.clipUri) {
+      queueClip({
+        clipId: entry.clipId,
+        tempUri: out.clipUri,
+        species: species.id,
+        breedId: breed?.id,
+        contextId: ctx.id,
+        analysis
+      });
+    }
 
     setCurrentResult(entry);
     setHistory((prev) => [entry, ...prev]);
     speak(entry);
   };
+
+  const submitLabel = ({ contextId: labelContext, moods, comment }) => {
+    const entry = labelEntry;
+    setLabelEntry(null);
+    if (!entry?.clipId) return;
+    queueLabel({ clipId: entry.clipId, contextId: labelContext, moods, comment, rating: entry.rating });
+    const mark = (h) => (h.id === entry.id ? { ...h, labelled: true } : h);
+    setHistory((prev) => prev.map(mark));
+    setCurrentResult((cur) => (cur ? mark(cur) : cur));
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    showNotice(`Thanks! That helps ${APP_NAME} learn what ${petName} means.`);
+  };
+
+  const chooseSharing = async (on) => {
+    setShareClips(on);
+    if (!on) await discardQueued();
+  };
+
+  const confirmDeleteData = () =>
+    Alert.alert(
+      'Delete what you have shared?',
+      `This removes every clip and answer this phone has sent to ${APP_NAME}, and anything still waiting to send.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            const res = await deleteMyData();
+            setHistory((prev) => prev.map((h) => (h.clipId ? { ...h, clipId: null } : h)));
+            setCurrentResult((cur) => (cur?.clipId ? { ...cur, clipId: null } : cur));
+            Alert.alert(
+              res === 'failed' ? "Couldn't reach the server" : 'Deleted',
+              res === 'failed'
+                ? 'Anything waiting on this phone was deleted. Try again when you are online to remove what was already sent.'
+                : 'Your shared clips and answers have been deleted.'
+            );
+          }
+        }
+      ]
+    );
 
   const rateResult = (rating) => {
     if (!currentResult) return;
@@ -254,6 +320,7 @@ function PetApp() {
 
   if (!loaded) return <View style={{ flex: 1, backgroundColor: C.bg }} />;
   if (needsSetup) return <Onboarding onDone={finishSetup} />;
+  if (shareClips === null) return <ConsentScreen petName={petName} onChoose={chooseSharing} />;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -279,6 +346,7 @@ function PetApp() {
             onReplay={speak}
             onShare={shareResult}
             onRate={rateResult}
+            onTeach={setLabelEntry}
             contextId={contextId}
             setContextId={setContextId}
             personality={personality}
@@ -299,6 +367,7 @@ function PetApp() {
               setCurrentResult(null);
             }}
             onGoScan={() => setActiveTab('scanner')}
+            onTeach={setLabelEntry}
             species={species}
           />
         )}
@@ -317,12 +386,24 @@ function PetApp() {
         speciesId={speciesId}
         petName={petName}
         breedId={breed?.id || null}
+        shareClips={shareClips === true}
+        onToggleShare={chooseSharing}
+        onDeleteData={confirmDeleteData}
         onSave={({ speciesId: sp, petName: name, breedId: b }) => {
           switchSpecies(sp, name.trim() || getSpecies(sp).defaultName);
           setBreedId(b);
           setProfileVisible(false);
         }}
         onClose={() => setProfileVisible(false)}
+      />
+
+      <LabelSheet
+        visible={Boolean(labelEntry)}
+        species={labelEntry ? getSpecies(labelEntry.species) : species}
+        petName={labelEntry?.petName || petName}
+        entry={labelEntry}
+        onSubmit={submitLabel}
+        onClose={() => setLabelEntry(null)}
       />
 
       {shareItem && <ShareCard ref={shareCardRef} item={shareItem} />}

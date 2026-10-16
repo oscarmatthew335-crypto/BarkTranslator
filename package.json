@@ -1,6 +1,6 @@
 {
-  "name": "barktranslator",
-  "version": "2.2.0",
+  "name": "pawlingo",
+  "version": "2.3.0",
   "main": "index.js",
   "dependencies": {
     "@expo-google-fonts/fredoka": "0.4.1",

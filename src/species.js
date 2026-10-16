@@ -7,7 +7,7 @@ import { CAT_CONTEXTS } from './data/cat/contexts';
 import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 import { HUMAN_TO_CAT_PHRASES, CAT_DECODER_GUIDE } from './data/cat/speakAndDecoder';
 
-export const APP_NAME = 'BarkTranslator';
+export const APP_NAME = 'Pawlingo';
 
 export const SPECIES = {
   dog: {
@@ -31,6 +31,15 @@ export const SPECIES = {
       howl: '🐺 Full howl',
       soft: '🥺 Soft whine'
     },
+    moods: [
+      { id: 'excited', label: '🎉 Excited / playful' },
+      { id: 'wants', label: '🙏 Wants something' },
+      { id: 'alert', label: '🚨 Alert / warning' },
+      { id: 'scared', label: '😟 Scared / anxious' },
+      { id: 'lonely', label: '🥺 Lonely / bored' },
+      { id: 'angry', label: '😠 Angry' },
+      { id: 'unsure', label: '🤷 Not sure' }
+    ],
     syllables: ['Woof', 'Arf', 'Bork', 'Ruff', 'Yip', 'Awoo', 'Boof'],
     tools: [
       { id: 'click', emoji: '🔘', label: 'Clicker', say: 'Click! Good dog!', pitch: 1.6, rate: 1.35 },
@@ -59,6 +68,15 @@ export const SPECIES = {
       howl: '🙀 Full yowl',
       soft: '😽 Soft mew'
     },
+    moods: [
+      { id: 'hungry', label: '🍽️ Hungry' },
+      { id: 'attention', label: '🫶 Wants attention' },
+      { id: 'hunting', label: '🐦 Hunting excitement' },
+      { id: 'annoyed', label: '😾 Annoyed' },
+      { id: 'scared', label: '🙀 Scared' },
+      { id: 'content', label: '😽 Content' },
+      { id: 'unsure', label: '🤷 Not sure' }
+    ],
     syllables: ['Meow', 'Mrrp', 'Mew', 'Prrr', 'Mrow', 'Nya', 'Mrrm'],
     tools: [
       { id: 'treats', emoji: '🥫', label: 'Treat shake', say: 'Shake shake shake! Treats!', pitch: 1.5, rate: 1.3 },

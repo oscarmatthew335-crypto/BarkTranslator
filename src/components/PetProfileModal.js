@@ -1,10 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, Modal, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, ScrollView, Modal, StyleSheet, Switch } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
-import { SPECIES } from '../species';
+import { SPECIES, APP_NAME } from '../species';
 import { StickerButton } from './ui';
 
-export default function PetProfileModal({ visible, speciesId, petName, breedId, onSave, onClose }) {
+export default function PetProfileModal({
+  visible,
+  speciesId,
+  petName,
+  breedId,
+  shareClips,
+  onToggleShare,
+  onDeleteData,
+  onSave,
+  onClose
+}) {
   const [sp, setSp] = useState(speciesId);
   const [name, setName] = useState(petName);
   const [breed, setBreed] = useState(breedId);
@@ -75,6 +85,29 @@ export default function PetProfileModal({ visible, speciesId, petName, breedId, 
             </>
           )}
 
+          <View style={s.shareBox}>
+            <View style={s.shareRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.shareTitle}>Help {APP_NAME} learn</Text>
+                <Text style={s.shareSub}>
+                  {shareClips
+                    ? 'Short clips and your answers are shared to train a real translator.'
+                    : 'Off. Nothing is recorded or sent.'}
+                </Text>
+              </View>
+              <Switch
+                value={shareClips}
+                onValueChange={onToggleShare}
+                trackColor={{ true: C.mint, false: '#CFC6EA' }}
+                thumbColor={C.paper}
+                accessibilityLabel={`Help ${APP_NAME} learn`}
+              />
+            </View>
+            <Pressable onPress={onDeleteData} accessibilityRole="button" style={{ paddingTop: 8 }}>
+              <Text style={s.deleteText}>Delete everything I've shared</Text>
+            </Pressable>
+          </View>
+
           <View style={{ marginTop: 18 }}>
             <StickerButton label="Save" emoji="✅" onPress={() => onSave({ speciesId: sp, petName: name, breedId: breed })} />
           </View>
@@ -120,6 +153,18 @@ const s = StyleSheet.create({
     color: C.ink,
     marginBottom: 8
   },
+  shareBox: {
+    marginTop: 14,
+    backgroundColor: C.paper,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: C.ink,
+    padding: 12
+  },
+  shareRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  shareTitle: { fontFamily: F.semibold, fontSize: 16, color: C.ink },
+  shareSub: { fontFamily: F.regular, fontSize: 13, lineHeight: 18, color: C.inkSoft, marginTop: 2 },
+  deleteText: { fontFamily: F.semibold, fontSize: 13, color: C.tomato },
   breedRow: { padding: 12, borderRadius: 16, backgroundColor: C.paper, borderWidth: INK_WIDTH, borderColor: 'rgba(36,22,74,0.15)' },
   breedRowActive: { borderColor: C.ink, backgroundColor: C.butter },
   breedName: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
