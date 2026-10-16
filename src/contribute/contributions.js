@@ -181,9 +181,19 @@ export function flush() {
       let res;
       try {
         if (op.type === 'clip') {
+          const file = new File(op.uri);
+          if (!file.exists) {
+            // The recording is gone (e.g. app data cleared); nothing to send.
+            setResult(false, 'Dropped one clip: recording file missing');
+            await writeOutbox(dropFirstMatch(await readOutbox(), op));
+            box = await readOutbox();
+            continue;
+          }
+          // Expo's fetch needs a real file object here (it reads its bytes);
+          // the old React Native { uri, name, type } shape is rejected.
           const form = new FormData();
           form.append('meta', JSON.stringify(op.meta));
-          form.append('clip', { uri: op.uri, name: `${op.clipId}.m4a`, type: 'audio/mp4' });
+          form.append('clip', file);
           res = await fetch(`${API}/clips`, {
             method: 'POST',
             headers: { 'X-App-Key': KEY, 'X-Install-Id': installId },
@@ -197,7 +207,7 @@ export function flush() {
           });
         }
       } catch (e) {
-        setResult(false, `No connection (${e?.message || 'network error'})`);
+        setResult(false, `Couldn't send (${e?.message || 'network error'})`);
         break; // offline: try later
       }
       if (res.status >= 500 || res.status === 429 || res.status === 401) {
