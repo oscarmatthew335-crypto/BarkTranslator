@@ -5,7 +5,7 @@
     "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.pawlingo.app"
@@ -13,7 +13,7 @@
     "android": {
       "package": "com.pawlingo.app",
       "adaptiveIcon": {
-        "backgroundColor": "#0B0F17",
+        "backgroundColor": "#FFD43B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -43,6 +43,15 @@
         {
           "microphonePermission": "Allow Pawlingo to listen to your pet's barks and meows",
           "enableBackgroundPlayback": false
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#EEE7FF"
         }
       ]
     ],

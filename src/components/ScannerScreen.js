@@ -4,6 +4,7 @@ import { CameraView } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { C, F, INK_WIDTH } from '../theme';
 import { APP_NAME } from '../species';
+import useMeter from '../audio/useMeter';
 import { Sticker } from './ui';
 import PawButton from './PawButton';
 import SpeechBubble from './SpeechBubble';
@@ -11,10 +12,12 @@ import ContextSheet from './ContextSheet';
 
 export default function ScannerScreen(props) {
   const {
+    pet,
+    pets,
     species,
-    petName,
     breed,
-    onOpenProfile,
+    onOpenPets,
+    onOpenSettings,
     cameraRef,
     cameraOn,
     onToggleCamera,
@@ -23,26 +26,29 @@ export default function ScannerScreen(props) {
     torch,
     onTorch,
     recorder,
+    onPawPress,
+    showPawHint,
+    onPawHintSeen,
     currentResult,
     onDismissResult,
     notice,
     onReplay,
     onShare,
-    onRate,
     onTeach,
-    contextId,
-    setContextId,
-    personality,
-    setPersonality,
-    onStartListening,
-    onStopListening
+    onConfirmGuess,
+    onChangeContext,
+    onChangePersonality
   } = props;
 
   const [contextOpen, setContextOpen] = useState(false);
-  const context = species.contexts.find((c) => c.id === contextId) || species.contexts[0];
-  const recording = recorder.isRecording;
-  const level = recorder.levels[recorder.levels.length - 1];
-  const showResult = currentResult && !recording && currentResult.species === species.id;
+  const context = species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
+  const listening = recorder.isRecording;
+  const result = currentResult && !listening && currentResult.petId === pet.id ? currentResult : null;
+
+  const pressPaw = () => {
+    if (showPawHint) onPawHintSeen();
+    onPawPress();
+  };
 
   return (
     <View style={s.container}>
@@ -52,26 +58,31 @@ export default function ScannerScreen(props) {
       ) : (
         <View style={[StyleSheet.absoluteFill, s.paperBg]}>
           <Text style={s.bigPet}>{species.emoji}</Text>
-          {!showResult && !recording && !notice && (
+          {!result && !listening && !notice && (
             <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
-              <Text style={s.camHintText}>📸 Show {petName} on camera</Text>
+              <Text style={s.camHintText}>📸 Show {pet.name} on camera</Text>
             </Pressable>
           )}
         </View>
       )}
 
-      {/* Top row */}
+      {/* Top row: pet switcher, camera tools, settings */}
       <View style={s.topRow}>
-        <Pressable onPress={onOpenProfile} accessibilityRole="button" accessibilityLabel="Edit your pet">
-          <Sticker radius={999} offset={3} innerStyle={s.profileChip}>
-            <Text style={s.profileText} numberOfLines={1}>
-              {species.emoji} {petName}
-              {breed ? <Text style={s.profileSub}>  {breed.name.replace(/^\S+\s/, '')}</Text> : null}
+        <Pressable
+          onPress={onOpenPets}
+          accessibilityRole="button"
+          accessibilityLabel={`${pet.name}. Switch or edit pets`}
+          style={{ flexShrink: 1 }}
+        >
+          <Sticker radius={999} offset={3} innerStyle={s.petChip}>
+            <Text style={s.petText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+              {species.emoji} {pet.name}
+              {breed ? <Text style={s.petSub}>  {breed.name.replace(/^\S+\s/, '')}</Text> : null}
             </Text>
-            <Text style={s.profileEdit}>✎</Text>
+            <Text style={s.petCaret}>{pets.length > 1 ? '⇄' : '✎'}</Text>
           </Sticker>
         </Pressable>
-        <View style={s.camTools}>
+        <View style={s.tools}>
           {cameraOn && <RoundTool emoji="🔄" label="Flip camera" onPress={onFlip} />}
           {cameraOn && <RoundTool emoji="🔦" label="Torch" onPress={onTorch} active={torch} />}
           <RoundTool
@@ -80,67 +91,37 @@ export default function ScannerScreen(props) {
             onPress={onToggleCamera}
             active={!cameraOn}
           />
+          <RoundTool emoji="⚙️" label="Settings" onPress={onOpenSettings} />
         </View>
       </View>
 
-      {/* Middle: the speech bubble, live meter or a hint */}
+      {/* Middle: live listening, the speech bubble, or a message */}
       <View style={s.middle} pointerEvents="box-none">
-        {recording ? (
-          <Sticker color={C.paper} radius={24} innerStyle={s.listenBox}>
-            <Text style={s.listenTitle}>Listening… {(recorder.liveMs / 1000).toFixed(1)}s</Text>
-            <View style={s.meterRow}>
-              {Array.from({ length: 14 }, (_, i) => {
-                const db = recorder.levels[recorder.levels.length - 14 + i];
-                const h = typeof db === 'number' ? Math.max(0, Math.min(1, (db + 60) / 55)) : 0;
-                return <View key={i} style={[s.meterBar, { height: 8 + h * 52 }]} />;
-              })}
-            </View>
-          </Sticker>
-        ) : showResult ? (
+        {listening ? (
+          <ListeningCard recorder={recorder} pet={pet} species={species} />
+        ) : result ? (
           <SpeechBubble
-            name={currentResult.petName}
-            face={currentResult.personalityFace}
-            text={currentResult.text}
-            animateKey={currentResult.id}
+            name={result.petName}
+            face={result.personalityFace}
+            text={result.text}
+            animateKey={result.id}
             footer={
-              <>
-                {currentResult.guess && (
-                  <View style={s.guessRow}>
-                    <Text style={s.guessText}>
-                      🧠 {currentResult.petName} sounds like: {currentResult.guess.label} ({Math.round(currentResult.guess.confidence * 100)}%)
-                    </Text>
-                  </View>
-                )}
-                <View style={s.statRow}>
-                  <Tag text={currentResult.patternLabel} color={C.sky} />
-                  <Tag
-                    text={`${currentResult.soundCount} ${currentResult.soundCount === 1 ? species.sound : species.sounds}`}
-                    color={C.butter}
-                  />
-                  <Tag text={`🔊 ${currentResult.loudness}`} color={C.mint} />
-                </View>
-                <View style={s.actions}>
-                  <Action emoji="🔊" label="Replay" onPress={() => onReplay(currentResult)} />
-                  <Action emoji="📤" label="Share" onPress={() => onShare(currentResult)} primary />
-                  <Action emoji="👍" onPress={() => onRate('up')} active={currentResult.rating === 'up'} label="Spot on" />
-                  <Action emoji="👎" onPress={() => onRate('down')} active={currentResult.rating === 'down'} label="Not quite" />
-                  <Action emoji="✕" onPress={onDismissResult} label="Close" />
-                </View>
-                {currentResult.features && !currentResult.labelled && (
-                  <Pressable onPress={() => onTeach(currentResult)} style={s.teach} accessibilityRole="button">
-                    <Text style={s.teachText}>
-                      🧠 {currentResult.guess ? 'Right or wrong? Teach' : 'Teach'} {APP_NAME} what {currentResult.petName} meant
-                    </Text>
-                  </Pressable>
-                )}
-              </>
+              <ResultFooter
+                result={result}
+                species={species}
+                onReplay={onReplay}
+                onShare={onShare}
+                onDismiss={onDismissResult}
+                onTeach={onTeach}
+                onConfirmGuess={onConfirmGuess}
+              />
             }
           />
         ) : notice ? (
           <Sticker color={C.butter} radius={20} innerStyle={s.noticeBox}>
             <Text style={s.noticeText}>{notice.text}</Text>
             {notice.action && (
-              <Pressable style={s.noticeAction} onPress={notice.action.onPress}>
+              <Pressable style={s.noticeAction} onPress={notice.action.onPress} accessibilityRole="button">
                 <Text style={s.noticeActionText}>{notice.action.label}</Text>
               </Pressable>
             )}
@@ -150,8 +131,14 @@ export default function ScannerScreen(props) {
 
       {/* Bottom panel */}
       <View style={s.panel}>
-        <Pressable onPress={() => setContextOpen(true)} accessibilityRole="button" style={s.contextChip}>
-          <Text style={s.contextText} numberOfLines={1}>
+        <Pressable
+          onPress={() => setContextOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`Situation: ${context.shortLabel}. Change`}
+          style={s.contextChip}
+          disabled={listening}
+        >
+          <Text style={s.contextText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {context.label}
           </Text>
           <Text style={s.contextChange}>Change</Text>
@@ -159,39 +146,48 @@ export default function ScannerScreen(props) {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faces}>
           {Object.entries(species.packs).map(([key, p]) => {
-            const active = key === personality;
+            const active = key === pet.personality;
             return (
               <Pressable
                 key={key}
                 onPress={() => {
                   Haptics.selectionAsync().catch(() => {});
-                  setPersonality(key);
+                  onChangePersonality(key);
                 }}
                 style={s.faceItem}
                 accessibilityRole="button"
-                accessibilityLabel={p.name}
+                accessibilityLabel={`Voice: ${p.shortName}`}
                 accessibilityState={{ selected: active }}
               >
                 <View style={[s.faceCircle, active && { backgroundColor: p.color, transform: [{ scale: 1.12 }] }]}>
                   <Text style={s.faceEmoji}>{p.face}</Text>
                 </View>
-                <Text style={[s.faceLabel, active && s.faceLabelActive]}>{p.shortName}</Text>
+                <Text style={[s.faceLabel, active && s.faceLabelActive]} maxFontSizeMultiplier={1.2}>
+                  {p.shortName}
+                </Text>
               </Pressable>
             );
           })}
         </ScrollView>
 
         <View style={s.pawRow}>
+          {showPawHint && !listening && !result && (
+            <Sticker color={C.paper} radius={16} offset={3} style={s.hintWrap} innerStyle={s.hintBox}>
+              <Text style={s.hintText}>
+                Tap the paw, then let {pet.name} {species.sound}. {APP_NAME} stops listening when {pet.name} is done.
+              </Text>
+              <Pressable onPress={onPawHintSeen} accessibilityRole="button" hitSlop={8}>
+                <Text style={s.hintOk}>Got it</Text>
+              </Pressable>
+            </Sticker>
+          )}
           <PawButton
-            recording={recording}
-            busy={recorder.phase !== 'idle'}
-            level={level}
-            onPressIn={onStartListening}
-            onPressOut={onStopListening}
-            label={`Hold while ${petName} ${species.sounds}`}
+            recorder={recorder}
+            onPress={pressPaw}
+            label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
           />
-          <Text style={s.pawHint}>
-            {recording ? `Let go when ${petName} stops` : `Hold the paw while ${petName} ${species.sounds}`}
+          <Text style={s.pawHint} maxFontSizeMultiplier={1.3}>
+            {listening ? `Listening… tap to stop` : `Tap the paw to listen to ${pet.name}`}
           </Text>
         </View>
       </View>
@@ -199,15 +195,90 @@ export default function ScannerScreen(props) {
       <ContextSheet
         visible={contextOpen}
         contexts={species.contexts}
-        selected={contextId}
-        petName={petName}
+        selected={pet.contextId}
+        petName={pet.name}
         onSelect={(id) => {
-          setContextId(id);
+          onChangeContext(id);
           setContextOpen(false);
         }}
         onClose={() => setContextOpen(false)}
       />
     </View>
+  );
+}
+
+// Live meter while listening. Only this card redraws with the audio.
+function ListeningCard({ recorder, pet, species }) {
+  const meter = useMeter(recorder);
+  return (
+    <Sticker color={C.paper} radius={24} innerStyle={s.listenBox}>
+      <Text style={s.listenTitle} maxFontSizeMultiplier={1.3}>
+        {meter.heard ? `Hearing ${pet.name}…` : `Listening for ${pet.name}…`} {(meter.ms / 1000).toFixed(1)}s
+      </Text>
+      <View style={s.meterRow} accessible={false}>
+        {Array.from({ length: 14 }, (_, i) => {
+          const db = meter.levels[meter.levels.length - 14 + i];
+          const h = typeof db === 'number' ? Math.max(0, Math.min(1, (db + 60) / 55)) : 0;
+          return <View key={i} style={[s.meterBar, { height: 8 + h * 52 }]} />;
+        })}
+      </View>
+      <Text style={s.listenSub}>
+        {meter.heard ? `Stops by itself when ${pet.name} goes quiet` : `Waiting for a ${species.sound}`}
+      </Text>
+    </Sticker>
+  );
+}
+
+function ResultFooter({ result, species, onReplay, onShare, onDismiss, onTeach, onConfirmGuess }) {
+  const count = result.soundCount;
+  return (
+    <>
+      {result.guess && (
+        <View style={s.guessRow}>
+          <Text style={s.guessText} maxFontSizeMultiplier={1.3}>
+            🧠 {result.guess.wording || 'Maybe'}: {result.guess.label}
+          </Text>
+        </View>
+      )}
+      <View style={s.statRow}>
+        <Tag text={result.patternLabel} color={C.sky} />
+        <Tag text={`${count} ${count === 1 ? species.sound : species.sounds}`} color={C.butter} />
+        <Tag text={`🔊 ${result.loudness}`} color={C.mint} />
+      </View>
+      <View style={s.actions}>
+        <Action emoji="🔊" label="Replay" onPress={() => onReplay(result)} />
+        <Action emoji="📤" label="Share" onPress={() => onShare(result)} primary />
+        <Action emoji="✕" label="Close" onPress={onDismiss} />
+      </View>
+      {result.features && !result.labelled && (
+        result.guess ? (
+          <View style={s.confirm}>
+            <Text style={s.confirmText} maxFontSizeMultiplier={1.3}>
+              Did I get it right?
+            </Text>
+            <View style={s.confirmBtns}>
+              <Pressable style={[s.yesNo, { backgroundColor: C.mint }]} onPress={() => onConfirmGuess(result, true)} accessibilityRole="button">
+                <Text style={s.yesNoText}>✅ Yes</Text>
+              </Pressable>
+              <Pressable style={[s.yesNo, { backgroundColor: C.paper }]} onPress={() => onConfirmGuess(result, false)} accessibilityRole="button">
+                <Text style={s.yesNoText}>❌ No</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable onPress={() => onTeach(result)} style={s.teach} accessibilityRole="button">
+            <Text style={s.teachText} maxFontSizeMultiplier={1.3}>
+              🧠 Tell {APP_NAME} what {result.petName} meant
+            </Text>
+          </Pressable>
+        )
+      )}
+      {result.labelled && (
+        <Text style={s.taught} maxFontSizeMultiplier={1.3}>
+          ✓ Thanks, {APP_NAME} learned from this one
+        </Text>
+      )}
+    </>
   );
 }
 
@@ -224,22 +295,28 @@ function RoundTool({ emoji, label, onPress, active }) {
 function Tag({ text, color }) {
   return (
     <View style={[s.tag, { backgroundColor: color }]}>
-      <Text style={s.tagText}>{text}</Text>
+      <Text style={s.tagText} maxFontSizeMultiplier={1.2}>
+        {text}
+      </Text>
     </View>
   );
 }
 
-function Action({ emoji, label, onPress, active, primary }) {
+function Action({ emoji, label, onPress, primary }) {
   return (
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={label}
-      style={[s.action, primary && s.actionPrimary, active && s.actionActive]}
+      style={[s.action, primary && s.actionPrimary]}
       hitSlop={4}
     >
       <Text style={s.actionEmoji}>{emoji}</Text>
-      {primary ? <Text style={s.actionLabel}>{label}</Text> : null}
+      {primary ? (
+        <Text style={s.actionLabel} maxFontSizeMultiplier={1.2}>
+          {label}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
@@ -259,41 +336,20 @@ const s = StyleSheet.create({
   },
   camHintText: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
 
-  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 10 },
-  profileChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 8, maxWidth: 220 },
-  profileText: { fontFamily: F.semibold, fontSize: 16, color: C.ink, flexShrink: 1 },
-  profileSub: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft },
-  profileEdit: { fontFamily: F.semibold, fontSize: 15, color: C.inkSoft },
-  camTools: { flexDirection: 'row', gap: 8 },
-  tool: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 10, gap: 8 },
+  petChip: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, gap: 8 },
+  petText: { fontFamily: F.semibold, fontSize: 16, color: C.ink, flexShrink: 1 },
+  petSub: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft },
+  petCaret: { fontFamily: F.semibold, fontSize: 15, color: C.inkSoft },
+  tools: { flexDirection: 'row', gap: 6 },
+  tool: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
   middle: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: 16, paddingBottom: 10 },
   listenBox: { padding: 16, alignItems: 'center' },
   listenTitle: { fontFamily: F.bold, fontSize: 18, color: C.ink, marginBottom: 10 },
+  listenSub: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft, marginTop: 8 },
   meterRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 62 },
   meterBar: { width: 10, borderRadius: 5, backgroundColor: C.pink, borderWidth: 2, borderColor: C.ink },
-
-  statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
-  tag: { borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 9, paddingVertical: 3 },
-  tagText: { fontFamily: F.medium, fontSize: 12, color: C.ink },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
-  action: {
-    height: 38,
-    minWidth: 38,
-    borderRadius: 19,
-    borderWidth: 2,
-    borderColor: C.ink,
-    backgroundColor: C.paper,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    paddingHorizontal: 8,
-    gap: 4
-  },
-  actionPrimary: { backgroundColor: C.butter, paddingHorizontal: 14 },
-  actionActive: { backgroundColor: C.mint },
-  actionEmoji: { fontSize: 16 },
-  actionLabel: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
 
   guessRow: {
     marginTop: 10,
@@ -305,18 +361,46 @@ const s = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5
   },
-  guessText: { fontFamily: F.semibold, fontSize: 13, color: C.ink },
+  guessText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
+  statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
+  tag: { borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 9, paddingVertical: 3 },
+  tagText: { fontFamily: F.medium, fontSize: 12, color: C.ink },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  action: {
+    height: 40,
+    minWidth: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: C.ink,
+    backgroundColor: C.paper,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 10,
+    gap: 4
+  },
+  actionPrimary: { backgroundColor: C.butter, paddingHorizontal: 16 },
+  actionEmoji: { fontSize: 16 },
+  actionLabel: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
+
+  confirm: { marginTop: 12, paddingTop: 10, borderTopWidth: 2, borderTopColor: 'rgba(36,22,74,0.12)' },
+  confirmText: { fontFamily: F.semibold, fontSize: 15, color: C.ink, marginBottom: 8 },
+  confirmBtns: { flexDirection: 'row', gap: 8 },
+  yesNo: { flex: 1, borderRadius: 14, borderWidth: 2, borderColor: C.ink, paddingVertical: 9, alignItems: 'center' },
+  yesNoText: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
   teach: {
-    marginTop: 10,
+    marginTop: 12,
     backgroundColor: C.pink,
     borderRadius: 14,
     borderWidth: 2,
     borderColor: C.ink,
-    paddingVertical: 9,
+    paddingVertical: 10,
     paddingHorizontal: 12,
     alignItems: 'center'
   },
-  teachText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
+  teachText: { fontFamily: F.semibold, fontSize: 14, color: C.ink, textAlign: 'center' },
+  taught: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft, marginTop: 10 },
+
   noticeBox: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
   noticeText: { fontFamily: F.medium, fontSize: 15, color: C.ink, flex: 1, lineHeight: 20 },
   noticeAction: { backgroundColor: C.paper, borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 12, paddingVertical: 6 },
@@ -374,5 +458,9 @@ const s = StyleSheet.create({
   faceLabel: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, marginTop: 6 },
   faceLabelActive: { fontFamily: F.bold, color: C.ink },
   pawRow: { alignItems: 'center', paddingTop: 8 },
-  pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 8 }
+  pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 8 },
+  hintWrap: { position: 'absolute', bottom: 150, left: 16, right: 16, zIndex: 5 },
+  hintBox: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  hintText: { fontFamily: F.medium, fontSize: 14, lineHeight: 19, color: C.ink, flex: 1 },
+  hintOk: { fontFamily: F.bold, fontSize: 14, color: C.ink, textDecorationLine: 'underline' }
 });

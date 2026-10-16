@@ -1,17 +1,23 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
+import { useReduceMotion } from './ui';
 
 // The comic speech bubble that pops onto the pet. `size` scales the text for
 // the on-screen version vs. the share card.
 export default function SpeechBubble({ name, face, text, footer, animateKey, size = 'screen', children }) {
   const pop = useRef(new Animated.Value(animateKey ? 0 : 1)).current;
+  const reduceMotion = useReduceMotion();
 
   useEffect(() => {
     if (!animateKey) return;
+    if (reduceMotion) {
+      pop.setValue(1);
+      return;
+    }
     pop.setValue(0);
     Animated.spring(pop, { toValue: 1, useNativeDriver: true, speed: 14, bounciness: 12 }).start();
-  }, [animateKey, pop]);
+  }, [animateKey, pop, reduceMotion]);
 
   const big = size === 'card';
   const textSize = text.length > 110 ? (big ? 21 : 19) : text.length > 70 ? (big ? 24 : 21) : big ? 28 : 24;
@@ -29,10 +35,12 @@ export default function SpeechBubble({ name, face, text, footer, animateKey, siz
       <View style={s.wrap}>
         <View style={[s.shadow, StyleSheet.absoluteFill]} />
         <View style={s.bubble}>
-          <Text style={s.name}>
+          <Text style={s.name} maxFontSizeMultiplier={1.3}>
             {face} {name} says
           </Text>
-          <Text style={[s.text, { fontSize: textSize, lineHeight: textSize * 1.18 }]}>{text}</Text>
+          <Text style={[s.text, { fontSize: textSize, lineHeight: textSize * 1.18 }]} maxFontSizeMultiplier={1.25}>
+            {text}
+          </Text>
           {footer}
           {children}
         </View>

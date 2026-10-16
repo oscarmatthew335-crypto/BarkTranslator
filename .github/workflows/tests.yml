@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  app:
+    name: App logic (fingerprints, learning)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run tests
+        run: npm test
+
+  server:
+    name: Server and training job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: |
+          pip install -r server/requirements.txt
+          pip install -r server/train/requirements.txt pytest
+      - name: Server tests
+        working-directory: server
+        env:
+          APP_KEY: test
+        run: python -m pytest -q test_main.py
+      - name: Training tests
+        working-directory: server/train
+        run: python -m pytest -q

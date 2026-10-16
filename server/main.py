@@ -7,6 +7,11 @@ Google Cloud Functions (2nd gen, Python 3.12), one HTTP function, three routes:
   DELETE /me       deletes every clip and label for the calling install
   GET    /model    ?species=dog&fv=f1&have=<version>: the current shared model
                    (written by train/train.py), or 204 if none / unchanged
+  POST   /errors   JSON crash report: {message, stack, fatal, where, appVersion, platform, osVersion}
+  GET    /privacy  the public privacy policy page (no key needed)
+
+Each phone (install ID) is limited per day: DAILY_LIMITS below. Over the
+limit the server answers 429 and the app keeps the item and retries later.
 
 Every request carries:
   X-App-Key     must match the APP_KEY env var (a speed bump, not real auth:
@@ -35,6 +40,8 @@ WORD_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 META_NUMBERS = ("soundCount", "loudness", "clarity", "durationMs", "activeMs", "longestMs", "peakDb", "noiseFloorDb")
 META_WORDS = ("breedId", "chosenContext", "pattern", "platform", "format", "featureVersion")
 MAX_FEATURES = 128
+DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50}
+PRIVACY_PAGE = os.path.join(os.path.dirname(__file__), "privacy.html")
 
 
 class Backend:
@@ -66,6 +73,18 @@ class Backend:
         if not blob.exists():
             return None
         return json.loads(blob.download_as_text())
+
+    def bump(self, install_id, kind):
+        """Count one more request of this kind today for this phone; returns the new count."""
+        from google.cloud import firestore as fs_mod
+
+        day = datetime.now(timezone.utc).strftime("%Y%m%d")
+        ref = self.fs.collection("limits").document(f"{install_id}_{kind}_{day}")
+        ref.set({"n": fs_mod.Increment(1), "day": day}, merge=True)
+        return (ref.get().to_dict() or {}).get("n", 1)
+
+    def save_error(self, record):
+        self.fs.collection("errors").add(record)
 
     def delete_install(self, install_id):
         docs = list(self.fs.collection("clips").where("installId", "==", install_id).stream())
@@ -134,6 +153,9 @@ def _clean_meta(raw):
 
 @functions_framework.http
 def ingest(request):
+    if request.path.rstrip("/").endswith("/privacy") and request.method == "GET":
+        with open(PRIVACY_PAGE, encoding="utf-8") as f:
+            return f.read(), 200, {"Content-Type": "text/html; charset=utf-8", "Cache-Control": "public, max-age=3600"}
     key = os.environ.get("APP_KEY", "")
     if not key or not hmac.compare_digest(request.headers.get("X-App-Key", ""), key):
         return _error(401, "bad app key")
@@ -145,9 +167,17 @@ def ingest(request):
     if path.endswith("/model") and request.method == "GET":
         return _get_model(request)
     if path.endswith("/clips") and request.method == "POST":
+        if _over_limit(install_id, "clips"):
+            return _error(429, "daily clip limit reached; try tomorrow")
         return _post_clip(request, install_id)
     if path.endswith("/labels") and request.method == "POST":
+        if _over_limit(install_id, "labels"):
+            return _error(429, "daily answer limit reached; try tomorrow")
         return _post_label(request, install_id)
+    if path.endswith("/errors") and request.method == "POST":
+        if _over_limit(install_id, "errors"):
+            return _error(429, "daily error report limit reached")
+        return _post_error(request, install_id)
     if path.endswith("/me") and request.method == "DELETE":
         removed = get_backend().delete_install(install_id)
         return jsonify({"deleted": removed}), 200
@@ -243,3 +273,33 @@ def _get_model(request):
     if request.args.get("have") and request.args.get("have") == str(model.get("version")):
         return "", 204
     return jsonify(model), 200
+
+
+def _over_limit(install_id, kind):
+    return get_backend().bump(install_id, kind) > DAILY_LIMITS[kind]
+
+
+def _post_error(request, install_id):
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _error(400, "bad json")
+
+    def text(k, n):
+        v = body.get(k)
+        return v[:n] if isinstance(v, str) else ""
+
+    record = {
+        "installId": install_id,
+        "message": text("message", 1000),
+        "stack": text("stack", 6000),
+        "fatal": bool(body.get("fatal")),
+        "where": text("where", 40),
+        "appVersion": text("appVersion", 40),
+        "platform": text("platform", 20),
+        "osVersion": text("osVersion", 40),
+        "receivedAt": _now(),
+    }
+    if not record["message"]:
+        return _error(400, "missing message")
+    get_backend().save_error(record)
+    return jsonify({"ok": True}), 201

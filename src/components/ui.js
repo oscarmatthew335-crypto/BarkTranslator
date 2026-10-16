@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { View, Text, Pressable, Animated, StyleSheet } from 'react-native';
+import React, { useRef, useEffect, useState } from 'react';
+import { View, Text, Pressable, Animated, StyleSheet, AccessibilityInfo } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { C, F, INK_WIDTH } from '../theme';
 
@@ -66,7 +66,9 @@ export function StickerButton({ label, emoji, onPress, color = C.butter, small, 
         >
           {emoji ? <Text style={{ fontSize: small ? 14 : 17 }}>{emoji}</Text> : null}
           {label ? (
-            <Text style={{ fontFamily: F.semibold, fontSize: small ? 13 : 16, color: textColor }}>{label}</Text>
+            <Text maxFontSizeMultiplier={1.4} style={{ fontFamily: F.semibold, fontSize: small ? 13 : 16, color: textColor }}>
+              {label}
+            </Text>
           ) : null}
         </Animated.View>
       </View>
@@ -77,7 +79,9 @@ export function StickerButton({ label, emoji, onPress, color = C.butter, small, 
 export function ScreenTitle({ title, subtitle }) {
   return (
     <View style={{ marginBottom: 16 }}>
-      <Text style={{ fontFamily: F.bold, fontSize: 30, color: C.ink, lineHeight: 34 }}>{title}</Text>
+      <Text maxFontSizeMultiplier={1.3} style={{ fontFamily: F.bold, fontSize: 30, color: C.ink, lineHeight: 34 }}>
+        {title}
+      </Text>
       {subtitle ? (
         <Text style={{ fontFamily: F.regular, fontSize: 15, color: C.inkSoft, marginTop: 4, lineHeight: 21 }}>
           {subtitle}
@@ -85,4 +89,19 @@ export function ScreenTitle({ title, subtitle }) {
       ) : null}
     </View>
   );
+}
+
+// True when the phone's "reduce motion" accessibility setting is on.
+export function useReduceMotion() {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AccessibilityInfo.isReduceMotionEnabled?.().then((v) => alive && setReduce(Boolean(v))).catch(() => {});
+    const sub = AccessibilityInfo.addEventListener?.('reduceMotionChanged', (v) => setReduce(Boolean(v)));
+    return () => {
+      alive = false;
+      sub?.remove?.();
+    };
+  }, []);
+  return reduce;
 }

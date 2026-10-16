@@ -1,4 +1,4 @@
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import {
   useAudioStream,
   setAudioModeAsync,
@@ -9,30 +9,46 @@ import { File, Paths } from 'expo-file-system';
 import { analyzeBark } from './barkAnalysis';
 import { computeFeatures, encodeWav, resample, windowLevels, SAMPLE_RATE } from './features';
 
-const MIN_HOLD_MS = 300;
-const MAX_CLIP_SECONDS = 15; // listening stops by itself after this
+const MAX_CLIP_SECONDS = 15; // listening always stops by itself after this
+const QUIET_AFTER_SOUND_MS = 1300; // stop this long after the last bark
+const GIVE_UP_MS = 8000; // stop if nothing has been heard for this long
+const SETTLE_MS = 350; // first bit of audio is used to measure background noise
 
-// Listens to the raw microphone signal while the button is held. From it we
-// get the live meter, the bark measurements, the sound fingerprint used for
-// learning, and (only if the owner opted in to sharing) a WAV clip.
-// Nothing is written to disk unless keepClip is set.
-export default function useBarkRecorder() {
+// Tap to listen: the microphone runs until the pet has barked and gone quiet
+// again (or nothing is heard, or 15 seconds pass), then onAutoStop fires.
+// From the raw signal we get the live meter, the bark measurements, the sound
+// fingerprint used for learning, and, only if the owner opted in to sharing,
+// a WAV clip. Nothing is written to disk unless keepClip is set.
+//
+// The live meter is delivered through subscribeMeter() instead of React
+// state, so only the meter redraws while listening (smooth on budget phones).
+export default function useBarkRecorder({ onAutoStop } = {}) {
   const [phase, setPhaseState] = useState('idle'); // idle | starting | recording | analysing
   const phaseRef = useRef('idle');
   const setPhase = (p) => {
     phaseRef.current = p;
     setPhaseState(p);
   };
-  const [levels, setLevels] = useState([]);
-  const [liveMs, setLiveMs] = useState(0);
   const chunksRef = useRef([]);
   const totalRef = useRef(0);
   const rateRef = useRef(SAMPLE_RATE);
   const samplesRef = useRef([]); // { t, db } every 60 ms, for the bark analysis
   const startedAtRef = useRef(0);
-  const releasedRef = useRef(false);
   const cappedRef = useRef(false);
   const streamRef = useRef(null);
+  const autoRef = useRef({ floor: null, settle: [], heard: false, lastLoud: 0, fired: false });
+  const onAutoStopRef = useRef(onAutoStop);
+  onAutoStopRef.current = onAutoStop;
+  const meterListeners = useRef(new Set());
+  const meterRef = useRef({ levels: [], ms: 0, heard: false });
+
+  const emitMeter = () => meterListeners.current.forEach((fn) => fn(meterRef.current));
+
+  const fireAutoStop = () => {
+    if (autoRef.current.fired) return;
+    autoRef.current.fired = true;
+    onAutoStopRef.current?.();
+  };
 
   const onBuffer = useCallback((buf) => {
     if (phaseRef.current !== 'recording' || cappedRef.current) return;
@@ -48,34 +64,70 @@ export default function useBarkRecorder() {
     samplesRef.current.push(...lv);
     chunksRef.current.push(chunk);
     totalRef.current += chunk.length;
-    setLevels((prev) => [...prev, ...lv.map((l) => l.db)].slice(-14));
-    setLiveMs((totalRef.current / rateRef.current) * 1000);
-    if (totalRef.current >= MAX_CLIP_SECONDS * rateRef.current) {
+    const ms = (totalRef.current / rateRef.current) * 1000;
+
+    // Detect barks against the room's background level, then wait for quiet.
+    const a = autoRef.current;
+    for (const { t, db } of lv) {
+      if (a.floor === null) {
+        a.settle.push(db);
+        if (t >= SETTLE_MS) {
+          const sorted = [...a.settle].sort((x, y) => x - y);
+          a.floor = sorted[Math.floor(sorted.length / 2)];
+        }
+        continue;
+      }
+      if (db >= Math.max(a.floor + 12, -42)) {
+        a.heard = true;
+        a.lastLoud = t;
+      }
+    }
+    meterRef.current = { levels: [...meterRef.current.levels, ...lv.map((l) => l.db)].slice(-14), ms, heard: a.heard };
+    emitMeter();
+
+    if (ms >= MAX_CLIP_SECONDS * 1000) {
       cappedRef.current = true;
-      try {
-        streamRef.current?.stop();
-      } catch (_) {}
+      fireAutoStop();
+    } else if (a.heard && ms - a.lastLoud > QUIET_AFTER_SOUND_MS) {
+      fireAutoStop();
+    } else if (!a.heard && ms > GIVE_UP_MS) {
+      fireAutoStop();
     }
   }, []);
 
   const { stream } = useAudioStream({ sampleRate: SAMPLE_RATE, channels: 1, encoding: 'float32', onBuffer });
   streamRef.current = stream;
 
-  const ensurePermission = useCallback(async () => {
-    const current = await getRecordingPermissionsAsync();
-    if (current.granted) return 'granted';
-    if (!current.canAskAgain && current.status === 'denied') return 'blocked';
-    const asked = await requestRecordingPermissionsAsync();
-    // The permission dialog interrupted the press, so ask for a fresh hold.
-    return asked.granted ? 'just-granted' : 'denied';
+  useEffect(
+    () => () => {
+      try {
+        streamRef.current?.stop();
+      } catch (_) {}
+    },
+    []
+  );
+
+  // 'granted' | 'undetermined' | 'denied' | 'blocked'
+  const permissionStatus = useCallback(async () => {
+    const p = await getRecordingPermissionsAsync();
+    if (p.granted) return 'granted';
+    if (p.status === 'undetermined') return 'undetermined';
+    return p.canAskAgain ? 'denied' : 'blocked';
   }, []);
 
+  const requestPermission = useCallback(async () => {
+    const p = await requestRecordingPermissionsAsync();
+    if (p.granted) return 'granted';
+    return p.canAskAgain ? 'denied' : 'blocked';
+  }, []);
+
+  // Starts listening. Never shows the system permission prompt itself: the
+  // app explains why first, then calls requestPermission().
   const start = useCallback(async () => {
     if (phaseRef.current !== 'idle') return { ok: false, reason: 'busy' };
-    releasedRef.current = false;
     setPhase('starting');
     try {
-      const perm = await ensurePermission();
+      const perm = await permissionStatus();
       if (perm !== 'granted') {
         setPhase('idle');
         return { ok: false, reason: perm };
@@ -85,23 +137,24 @@ export default function useBarkRecorder() {
       samplesRef.current = [];
       totalRef.current = 0;
       cappedRef.current = false;
-      setLevels([]);
-      setLiveMs(0);
+      autoRef.current = { floor: null, settle: [], heard: false, lastLoud: 0, fired: false };
+      meterRef.current = { levels: [], ms: 0, heard: false };
+      emitMeter();
       startedAtRef.current = Date.now();
       setPhase('recording');
       await stream.start();
-      return { ok: true, releasedEarly: releasedRef.current };
+      return { ok: true };
     } catch (e) {
       setPhase('idle');
       return { ok: false, reason: 'error', error: e };
     }
-  }, [stream, ensurePermission]);
+  }, [stream, permissionStatus]);
 
   const stop = useCallback(
     async ({ keepClip = false } = {}) => {
-      releasedRef.current = true;
       if (phaseRef.current !== 'recording') return null;
       setPhase('analysing');
+      autoRef.current.fired = true;
       const heldMs = Date.now() - startedAtRef.current;
       try {
         stream.stop();
@@ -120,7 +173,7 @@ export default function useBarkRecorder() {
       chunksRef.current = [];
       const pcm = resample(raw, rateRef.current, SAMPLE_RATE);
 
-      const analysis = heldMs < MIN_HOLD_MS ? null : analyzeBark(samplesRef.current, heldMs);
+      const analysis = analyzeBark(samplesRef.current, heldMs);
       samplesRef.current = [];
       const features = analysis?.heard ? computeFeatures(pcm) : null;
 
@@ -132,19 +185,27 @@ export default function useBarkRecorder() {
           clipUri = f.uri;
         } catch (_) {}
       }
+      meterRef.current = { levels: [], ms: 0, heard: false };
+      emitMeter();
       setPhase('idle');
-      setLiveMs(0);
       return { heldMs, analysis, features, clipUri };
     },
     [stream]
   );
 
+  const subscribeMeter = useCallback((fn) => {
+    meterListeners.current.add(fn);
+    fn(meterRef.current);
+    return () => meterListeners.current.delete(fn);
+  }, []);
+
   return {
     phase,
     isRecording: phase === 'recording',
-    liveMs,
-    levels,
     start,
-    stop
+    stop,
+    permissionStatus,
+    requestPermission,
+    subscribeMeter
   };
 }

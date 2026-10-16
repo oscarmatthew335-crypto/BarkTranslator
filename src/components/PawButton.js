@@ -1,29 +1,39 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, Pressable, Animated, StyleSheet, Easing } from 'react-native';
 import { C, INK_WIDTH } from '../theme';
+import useMeter from '../audio/useMeter';
+import { useReduceMotion } from './ui';
 
 const SIZE = 104;
 
-// Hold-to-record button. While recording, the ring grows with the live mic
-// level, so the owner can see the pet is being heard.
-export default function PawButton({ recording, busy, level, onPressIn, onPressOut, label }) {
+// Tap to start listening; tap again to stop early (it also stops by itself).
+// While listening the ring follows the live mic level, so the owner can see
+// the pet is being heard. Only this component redraws with the meter.
+export default function PawButton({ recorder, onPress, label }) {
+  const listening = recorder.isRecording;
+  const busy = recorder.phase === 'starting' || recorder.phase === 'analysing';
+  const meter = useMeter(recorder);
+  const level = meter.levels[meter.levels.length - 1];
+  const reduceMotion = useReduceMotion();
   const press = useRef(new Animated.Value(0)).current;
   const ring = useRef(new Animated.Value(0)).current;
   const idle = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.spring(press, { toValue: recording ? 1 : 0, useNativeDriver: true, speed: 30, bounciness: 8 }).start();
-  }, [recording, press]);
+    Animated.spring(press, { toValue: listening ? 1 : 0, useNativeDriver: true, speed: 30, bounciness: 8 }).start();
+  }, [listening, press]);
 
-  // Mic level (dBFS, about -60 quiet to 0 loud) drives the ring size.
   useEffect(() => {
-    const v = recording && typeof level === 'number' ? Math.max(0, Math.min(1, (level + 55) / 50)) : 0;
+    const v = listening && typeof level === 'number' ? Math.max(0, Math.min(1, (level + 55) / 50)) : 0;
     Animated.timing(ring, { toValue: v, duration: 90, useNativeDriver: true }).start();
-  }, [level, recording, ring]);
+  }, [level, listening, ring]);
 
-  // A slow breathing glow while idle invites a press.
+  // A slow breathing glow while idle invites a tap (off with reduce motion).
   useEffect(() => {
-    if (recording) return;
+    if (listening || reduceMotion) {
+      idle.setValue(0);
+      return;
+    }
     const loop = Animated.loop(
       Animated.sequence([
         Animated.timing(idle, { toValue: 1, duration: 1400, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
@@ -32,19 +42,20 @@ export default function PawButton({ recording, busy, level, onPressIn, onPressOu
     );
     loop.start();
     return () => loop.stop();
-  }, [recording, idle]);
+  }, [listening, reduceMotion, idle]);
 
-  const ringScale = recording
+  const ringScale = listening
     ? ring.interpolate({ inputRange: [0, 1], outputRange: [1.05, 1.55] })
     : idle.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.12] });
-  const ringOpacity = recording ? 0.55 : idle.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.45] });
+  const ringOpacity = listening ? 0.55 : idle.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.45] });
 
   return (
     <Pressable
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
+      onPress={onPress}
+      disabled={busy}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ busy, selected: listening }}
       hitSlop={16}
     >
       <View style={s.wrap}>
@@ -52,7 +63,7 @@ export default function PawButton({ recording, busy, level, onPressIn, onPressOu
           pointerEvents="none"
           style={[
             s.ring,
-            { backgroundColor: recording ? C.pink : C.butter, opacity: ringOpacity, transform: [{ scale: ringScale }] }
+            { backgroundColor: listening ? C.pink : C.butter, opacity: ringOpacity, transform: [{ scale: ringScale }] }
           ]}
         />
         <View style={s.shadow} />
@@ -60,8 +71,8 @@ export default function PawButton({ recording, busy, level, onPressIn, onPressOu
           style={[
             s.button,
             {
-              backgroundColor: recording ? C.pink : C.butter,
-              opacity: busy && !recording ? 0.7 : 1,
+              backgroundColor: listening ? C.pink : C.butter,
+              opacity: busy ? 0.7 : 1,
               transform: [
                 { translateX: press.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }) },
                 { translateY: press.interpolate({ inputRange: [0, 1], outputRange: [0, 5] }) }
@@ -69,7 +80,7 @@ export default function PawButton({ recording, busy, level, onPressIn, onPressOu
             }
           ]}
         >
-          <Text style={s.paw}>🐾</Text>
+          <Text style={s.paw}>{listening ? '⏹' : '🐾'}</Text>
         </Animated.View>
       </View>
     </Pressable>

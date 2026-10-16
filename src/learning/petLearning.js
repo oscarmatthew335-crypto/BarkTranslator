@@ -4,6 +4,7 @@
 // this pet: Bruno's "feed me" may sound nothing like another dog's.
 //
 // This all stays on the phone. It works whether or not the owner shares clips.
+// Each pet has its own examples, so two dogs in one home don't get mixed up.
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FEATURE_VERSION } from '../audio/features';
@@ -14,37 +15,50 @@ export const MIN_TO_GUESS = 6; // taught barks before the pet's own guesses star
 export const MIN_CONTEXTS = 2; // ...covering at least this many situations
 export const SHOW_CONFIDENCE = 0.55; // only show a guess at least this sure
 
-const key = (species) => `pawlingo:learn:v1:${species}`;
+const HALF_LIFE_DAYS = 180; // older examples count less: pets' sounds change as they grow
+const key = (petId) => `pawlingo:learn:v2:${petId}`;
 const memo = {};
 
-export async function loadExamples(species) {
-  if (memo[species]) return memo[species];
+export async function loadExamples(petId) {
+  if (memo[petId]) return memo[petId];
   try {
-    const raw = await AsyncStorage.getItem(key(species));
+    const raw = await AsyncStorage.getItem(key(petId));
     const list = raw ? JSON.parse(raw) : [];
-    memo[species] = Array.isArray(list) ? list.filter((e) => e.fv === FEATURE_VERSION) : [];
+    memo[petId] = Array.isArray(list) ? list.filter((e) => e.fv === FEATURE_VERSION) : [];
   } catch (_) {
-    memo[species] = [];
+    memo[petId] = [];
   }
-  return memo[species];
+  return memo[petId];
 }
 
-export async function addExample(species, vector, contextId, moods) {
-  if (!vector || !contextId || contextId === 'other') return loadExamples(species);
-  const list = await loadExamples(species);
+// Earlier builds kept one list per species; hand it to the migrated pet.
+export async function migrateSpeciesExamples(species, petId) {
+  try {
+    const oldKey = `pawlingo:learn:v1:${species}`;
+    const raw = await AsyncStorage.getItem(oldKey);
+    if (!raw) return;
+    if (!(await AsyncStorage.getItem(key(petId)))) await AsyncStorage.setItem(key(petId), raw);
+    await AsyncStorage.removeItem(oldKey);
+    delete memo[petId];
+  } catch (_) {}
+}
+
+export async function addExample(petId, vector, contextId, moods) {
+  if (!vector || !contextId || contextId === 'other') return loadExamples(petId);
+  const list = await loadExamples(petId);
   list.push({ v: vector, c: contextId, m: moods || [], at: Date.now(), fv: FEATURE_VERSION });
   while (list.length > MAX_EXAMPLES) list.shift();
-  memo[species] = list;
+  memo[petId] = list;
   try {
-    await AsyncStorage.setItem(key(species), JSON.stringify(list));
+    await AsyncStorage.setItem(key(petId), JSON.stringify(list));
   } catch (_) {}
   return list;
 }
 
-export async function resetExamples(species) {
-  memo[species] = [];
+export async function resetExamples(petId) {
+  memo[petId] = [];
   try {
-    await AsyncStorage.removeItem(key(species));
+    await AsyncStorage.removeItem(key(petId));
   } catch (_) {}
 }
 
@@ -79,12 +93,16 @@ function predictPet(examples, vector, sharedModel) {
   const { mean, std } = scaler(examples, sharedModel);
   const z = (v) => v.map((x, i) => (x - mean[i]) / (std[i] || 1));
   const q = z(vector);
-  const scored = examples.map((e) => ({ c: e.c, s: cosine(q, z(e.v)) })).sort((a, b) => b.s - a.s);
+  const now = Date.now();
+  const recency = (e) => 0.5 ** ((now - (e.at || now)) / (HALF_LIFE_DAYS * 86400000));
+  const scored = examples
+    .map((e) => ({ c: e.c, s: cosine(q, z(e.v)), r: recency(e) }))
+    .sort((a, b) => b.s - a.s);
   const k = Math.min(7, Math.max(3, Math.round(Math.sqrt(examples.length))));
   const votes = {};
   let total = 0;
-  scored.slice(0, k).forEach(({ c, s }) => {
-    const w = Math.max(0.01, (s + 1) / 2) ** 2;
+  scored.slice(0, k).forEach(({ c, s, r }) => {
+    const w = Math.max(0.01, (s + 1) / 2) ** 2 * r;
     votes[c] = (votes[c] || 0) + w;
     total += w;
   });
@@ -95,9 +113,9 @@ function predictPet(examples, vector, sharedModel) {
 // Best guess for a new bark, blending the pet's own examples with the shared
 // model. The more this pet has been taught, the more its own examples count.
 // Returns { contextId, confidence, source, show } or null.
-export async function guessContext(species, vector, sharedModel) {
+export async function guessContext(petId, vector, sharedModel) {
   if (!vector) return null;
-  const examples = await loadExamples(species);
+  const examples = await loadExamples(petId);
   const pet = predictPet(examples, vector, sharedModel);
   const shared = sharedModel ? predictShared(sharedModel, vector) : null;
   if (!pet && !shared) return null;
@@ -116,12 +134,19 @@ export async function guessContext(species, vector, sharedModel) {
     source = pet ? 'pet' : 'shared';
   }
   const [contextId, confidence] = Object.entries(probs).sort((a, b) => b[1] - a[1])[0];
-  return { contextId, confidence: Number(confidence.toFixed(3)), source, show: confidence >= SHOW_CONFIDENCE };
+  return {
+    contextId,
+    confidence: Number(confidence.toFixed(3)),
+    source,
+    show: confidence >= SHOW_CONFIDENCE,
+    // Plain words instead of a percentage, which would read like a precise claim
+    wording: confidence >= 0.75 ? 'Pretty sure' : 'Maybe'
+  };
 }
 
 // How far along this pet's learning is, for the progress card.
-export async function learningProgress(species) {
-  const examples = await loadExamples(species);
+export async function learningProgress(petId) {
+  const examples = await loadExamples(petId);
   const byContext = {};
   examples.forEach((e) => (byContext[e.c] = (byContext[e.c] || 0) + 1));
   const covered = Object.keys(byContext).length;

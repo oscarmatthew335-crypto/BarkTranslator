@@ -1,50 +1,62 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, Pressable, ScrollView, StyleSheet } from 'react-native';
-import * as Speech from 'expo-speech';
+import React, { useEffect, useState } from 'react';
+import { View, Text, TextInput, Pressable, ScrollView, StyleSheet, Keyboard } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { C, F, INK_WIDTH } from '../theme';
+import { C, F } from '../theme';
+import { playSounds, stopSounds, SOUND_FILES } from '../audio/sounds';
 import { Sticker, StickerButton, ScreenTitle } from './ui';
 
 const CARD_COLORS = [C.butter, C.sky, C.pink, C.mint];
 
-// Human → pet: type a message and hear it in pet-speak, or tap a phrase.
+// Turn what the owner typed into a short run of pet sounds: one sound per
+// word (up to five), rising at the end for a question.
+function soundsFor(species, text) {
+  const words = text.trim().split(/\s+/).filter(Boolean).slice(0, 5);
+  const q = text.includes('?');
+  const excited = text.includes('!') || /walk|treat|food|braai|ball|good|park|play|dinner|tuna|fish/i.test(text);
+  if (species.id === 'cat') {
+    const seq = words.map((w, i) => (i % 3 === 2 ? 'cat_unit_mrrp' : 'cat_unit_meow'));
+    if (q) seq[seq.length - 1] = 'cat_unit_question';
+    return seq;
+  }
+  return words.map((w, i) => (excited ? (i % 2 ? 'dog_unit_yip' : 'dog_unit_bark') : w.length > 5 ? 'dog_unit_low' : 'dog_unit_bark'));
+}
+
+// Human -> pet: say something in pet sounds, use training sounds, or tap a phrase.
 export default function SpeakTab({ species, petName }) {
   const [text, setText] = useState('');
   const [custom, setCustom] = useState(null);
   const [active, setActive] = useState(null);
 
-  const say = (words, pitch, rate) => {
-    Speech.stop();
-    Speech.speak(words, { pitch, rate });
-  };
+  useEffect(() => stopSounds, []);
 
   const translate = () => {
     const trimmed = text.trim();
+    Keyboard.dismiss();
     if (!trimmed) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const words = trimmed.split(/\s+/);
+    const seq = soundsFor(species, trimmed);
     const syl = species.syllables;
-    const phonetic = words
-      .slice(0, 6)
-      .map((w, i) => syl[(w.length + i) % syl.length])
-      .join('-');
-    const isQ = trimmed.includes('?');
-    const excited = trimmed.includes('!') || /walk|treat|food|braai|ball|good|park|play|dinner|tuna|fish/i.test(trimmed);
-    const pitch = excited ? 1.45 : isQ ? 1.3 : 0.95;
-    const rate = excited ? 1.18 : 0.95;
-    const result = {
-      phonetic: `${phonetic}${isQ ? '?' : '!'}`,
+    const phonetic = seq.map((_, i) => syl[(trimmed.length + i) % syl.length]).join('-');
+    const excited = trimmed.includes('!');
+    setCustom({
+      phonetic: `${phonetic}${trimmed.includes('?') ? '?' : '!'}`,
       posture: excited
         ? `Use a bright, upbeat voice so ${petName} picks up the excitement.`
         : `Keep it calm and slow, and soften your eyes at ${petName}.`
-    };
-    setCustom(result);
-    say(`${phonetic.replace(/-/g, '! ')}! ${petName}, ${trimmed}`, pitch, rate);
+    });
+    playSounds(seq, species.id === 'cat' ? 120 : 110);
   };
 
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-      <ScreenTitle title={species.speakTab} subtitle={`Say something to ${petName} in their language.`} />
+    <ScrollView
+      style={s.container}
+      contentContainerStyle={s.content}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+    >
+      <Pressable onPress={Keyboard.dismiss} accessible={false}>
+        <ScreenTitle title={species.speakTab} subtitle={`Say something to ${petName} in their language.`} />
+      </Pressable>
 
       <Sticker radius={24} innerStyle={s.card} style={{ marginBottom: 18 }}>
         <TextInput
@@ -54,7 +66,9 @@ export default function SpeakTab({ species, petName }) {
           value={text}
           onChangeText={setText}
           onSubmitEditing={translate}
-          returnKeyType="send"
+          returnKeyType="done"
+          submitBehavior="blurAndSubmit"
+          maxLength={120}
         />
         <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
           <StickerButton label={`Say it in ${species.label}`} emoji="🔊" onPress={translate} small />
@@ -73,15 +87,18 @@ export default function SpeakTab({ species, petName }) {
             key={t.id}
             style={{ flex: 1 }}
             onPress={() => {
+              Keyboard.dismiss();
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              say(t.say.replace('{name}', petName), t.pitch, t.rate);
+              playSounds(`tool_${t.id}`);
             }}
             accessibilityRole="button"
-            accessibilityLabel={t.label}
+            accessibilityLabel={`Play ${t.label}`}
           >
             <Sticker color={CARD_COLORS[(i + 1) % CARD_COLORS.length]} radius={20} offset={3} innerStyle={s.tool}>
               <Text style={s.toolEmoji}>{t.emoji}</Text>
-              <Text style={s.toolLabel}>{t.label}</Text>
+              <Text style={s.toolLabel} maxFontSizeMultiplier={1.3}>
+                {t.label}
+              </Text>
             </Sticker>
           </Pressable>
         ))}
@@ -97,26 +114,25 @@ export default function SpeakTab({ species, petName }) {
       <View style={s.grid}>
         {species.phrases.map((p, i) => {
           const on = active?.id === p.id;
+          const sound = `${species.id}_${p.id}`;
           return (
             <Pressable
               key={p.id}
               style={s.gridItem}
               onPress={() => {
+                Keyboard.dismiss();
                 Haptics.selectionAsync().catch(() => {});
                 setActive(p);
-                say(p.cadence, p.pitch, p.rate);
+                if (SOUND_FILES[sound]) playSounds(sound);
               }}
               accessibilityRole="button"
-              accessibilityLabel={p.human}
+              accessibilityLabel={`Play: ${p.human}`}
             >
-              <Sticker
-                color={on ? CARD_COLORS[i % CARD_COLORS.length] : C.paper}
-                radius={20}
-                offset={3}
-                innerStyle={s.phrase}
-              >
+              <Sticker color={on ? CARD_COLORS[i % CARD_COLORS.length] : C.paper} radius={20} offset={3} innerStyle={s.phrase}>
                 <Text style={s.phraseEmoji}>{p.emoji}</Text>
-                <Text style={s.phraseHuman}>{p.human}</Text>
+                <Text style={s.phraseHuman} maxFontSizeMultiplier={1.3}>
+                  {p.human}
+                </Text>
               </Sticker>
             </Pressable>
           );

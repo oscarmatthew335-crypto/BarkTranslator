@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, ScrollView, Image, StyleSheet, Alert } from 'react-native';
 import { C, F } from '../theme';
 import { getSpecies } from '../species';
@@ -12,10 +12,15 @@ function formatDate(iso) {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function JournalTab({ history, onReplay, onShare, onClear, onGoScan, onTeach, species, progress, petName }) {
-  const rated = history.filter((h) => h.rating);
-  const thumbsUp = rated.length ? `${Math.round((rated.filter((h) => h.rating === 'up').length / rated.length) * 100)}%` : '–';
-  const totalSounds = history.reduce((sum, h) => sum + (h.soundCount ?? h.barkCount ?? 0), 0);
+export default function JournalTab({ history, pets, pet, onReplay, onShare, onClear, onGoScan, onTeach, species, progress }) {
+  const [filter, setFilter] = useState('pet'); // 'pet' (the selected pet) or 'all'
+  const shown = filter === 'all' || pets.length < 2 ? history : history.filter((h) => !h.petId || h.petId === pet.id);
+  // How often Pawlingo's guesses were confirmed by the owner
+  const judged = shown.filter((h) => h.guess && h.labelled && h.taughtContextId);
+  const rightPct = judged.length
+    ? `${Math.round((judged.filter((h) => h.taughtContextId === h.guess.contextId).length / judged.length) * 100)}%`
+    : '–';
+  const totalSounds = shown.reduce((sum, h) => sum + (h.soundCount ?? h.barkCount ?? 0), 0);
 
   const confirmClear = () =>
     Alert.alert('Clear the journal?', 'This deletes every saved translation on this phone.', [
@@ -27,25 +32,44 @@ export default function JournalTab({ history, onReplay, onShare, onClear, onGoSc
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title="Journal" subtitle="Every translation, saved on this phone." />
 
-      <LearningCard progress={progress} species={species} petName={petName} />
+      <LearningCard progress={progress} species={species} petName={pet.name} />
+
+      {pets.length > 1 && (
+        <View style={s.filters}>
+          {[
+            ['pet', pet.name],
+            ['all', 'All pets']
+          ].map(([id, label]) => (
+            <Pressable
+              key={id}
+              onPress={() => setFilter(id)}
+              style={[s.filter, filter === id && s.filterOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: filter === id }}
+            >
+              <Text style={s.filterText}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       <View style={s.stats}>
-        <Stat value={history.length} label="Translations" color={C.butter} />
+        <Stat value={shown.length} label="Translations" color={C.butter} />
         <Stat value={totalSounds} label="Sounds heard" color={C.sky} />
-        <Stat value={thumbsUp} label="Spot on" color={C.mint} />
+        <Stat value={rightPct} label="Guessed right" color={C.mint} />
       </View>
 
-      {history.length === 0 ? (
+      {shown.length === 0 ? (
         <Sticker radius={24} innerStyle={s.empty}>
           <Text style={s.emptyEmoji}>{species.emoji}</Text>
           <Text style={s.emptyTitle}>Nothing here yet</Text>
-          <Text style={s.emptySub}>Translate your first {species.sound} and it will show up here.</Text>
+          <Text style={s.emptySub}>Translate {pet.name}'s first {species.sound} and it will show up here.</Text>
           <View style={{ marginTop: 14 }}>
             <StickerButton label="Start translating" emoji="🐾" onPress={onGoScan} small />
           </View>
         </Sticker>
       ) : (
-        history.map((item) => {
+        shown.map((item) => {
           const sp = getSpecies(item.species || 'dog');
           const name = item.petName || item.dogName;
           const count = item.soundCount ?? item.barkCount;
@@ -75,7 +99,7 @@ export default function JournalTab({ history, onReplay, onShare, onClear, onGoSc
               <View style={s.actions}>
                 <StickerButton label="Replay" emoji="🔊" small color={C.paper} onPress={() => onReplay(item)} />
                 <StickerButton label="Share" emoji="📤" small onPress={() => onShare(item)} />
-                {item.features && !item.labelled && (
+                {item.features && !item.labelled && (!item.petId || pets.some((p) => p.id === item.petId)) && (
                   <StickerButton label="Teach" emoji="🧠" small color={C.pink} onPress={() => onTeach(item)} />
                 )}
               </View>
@@ -105,6 +129,10 @@ function Stat({ value, label, color }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { padding: 18, paddingBottom: 36 },
+  filters: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  filter: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 999, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper },
+  filterOn: { backgroundColor: C.butter },
+  filterText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
   stats: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   stat: { paddingVertical: 12, alignItems: 'center' },
   statValue: { fontFamily: F.bold, fontSize: 24, color: C.ink },

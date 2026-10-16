@@ -19,6 +19,15 @@ class FakeBackend:
         self.docs = {}
         self.blobs = {}
         self.models = {}
+        self.counts = {}
+        self.errors = []
+
+    def bump(self, install_id, kind):
+        self.counts[(install_id, kind)] = self.counts.get((install_id, kind), 0) + 1
+        return self.counts[(install_id, kind)]
+
+    def save_error(self, record):
+        self.errors.append(record)
 
     def clip_exists(self, doc_id):
         return doc_id in self.docs
@@ -160,3 +169,26 @@ def test_model_endpoint(client):
     assert r.status_code == 200 and r.get_json()["version"] == "v7"
     assert client.get("/model?species=dog&fv=f1&have=v7", headers=HEADERS).status_code == 204
     assert client.get("/model?species=fish&fv=f1", headers=HEADERS).status_code == 400
+
+
+def test_privacy_page_needs_no_key(client):
+    r = client.get("/privacy")
+    assert r.status_code == 200 and b"privacy policy" in r.data.lower()
+    assert r.headers["Content-Type"].startswith("text/html")
+
+
+def test_error_reports(client):
+    r = client.post("/errors", json={"message": "boom", "stack": "x" * 9000, "fatal": True, "platform": "android"}, headers=HEADERS)
+    assert r.status_code == 201
+    rec = client.fake.errors[0]
+    assert rec["message"] == "boom" and len(rec["stack"]) == 6000 and rec["fatal"] is True
+    assert client.post("/errors", json={"stack": "no message"}, headers=HEADERS).status_code == 400
+
+
+def test_daily_limits(client):
+    main.DAILY_LIMITS["errors"] = 2
+    try:
+        codes = [client.post("/errors", json={"message": "m"}, headers=HEADERS).status_code for _ in range(3)]
+        assert codes == [201, 201, 429]
+    finally:
+        main.DAILY_LIMITS["errors"] = 50
