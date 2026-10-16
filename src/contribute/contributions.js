@@ -25,6 +25,32 @@ const APP_VERSION = appJson?.expo?.version || 'unknown';
 
 export const uploadsConfigured = Boolean(API);
 
+// Last upload outcome, shown in pet settings so problems are visible.
+let lastResult = { at: null, ok: null, detail: null };
+const listeners = new Set();
+function setResult(ok, detail) {
+  lastResult = { at: new Date().toISOString(), ok, detail };
+  listeners.forEach((fn) => fn());
+}
+export function onStatusChange(fn) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+// What the settings screen shows: is a server set up, what is waiting, and
+// how the last upload went.
+export async function getStatus() {
+  const box = await readOutbox();
+  return {
+    configured: Boolean(API),
+    server: API ? API.replace(/^https?:\/\//, '').split('.')[0] : null,
+    hasKey: Boolean(KEY),
+    waitingClips: box.filter((o) => o.type === 'clip').length,
+    waitingLabels: box.filter((o) => o.type === 'label').length,
+    last: lastResult
+  };
+}
+
 let installIdPromise = null;
 export function getInstallId() {
   if (!installIdPromise) {
@@ -155,9 +181,19 @@ export function flush() {
       let res;
       try {
         if (op.type === 'clip') {
+          const file = new File(op.uri);
+          if (!file.exists) {
+            // The recording is gone (e.g. app data cleared); nothing to send.
+            setResult(false, 'Dropped one clip: recording file missing');
+            await writeOutbox(dropFirstMatch(await readOutbox(), op));
+            box = await readOutbox();
+            continue;
+          }
+          // Expo's fetch needs a real file object here (it reads its bytes);
+          // the old React Native { uri, name, type } shape is rejected.
           const form = new FormData();
           form.append('meta', JSON.stringify(op.meta));
-          form.append('clip', { uri: op.uri, name: `${op.clipId}.m4a`, type: 'audio/mp4' });
+          form.append('clip', file);
           res = await fetch(`${API}/clips`, {
             method: 'POST',
             headers: { 'X-App-Key': KEY, 'X-Install-Id': installId },
@@ -170,10 +206,17 @@ export function flush() {
             body: JSON.stringify({ clipId: op.clipId, ...op.label })
           });
         }
-      } catch (_) {
+      } catch (e) {
+        setResult(false, `Couldn't send (${e?.message || 'network error'})`);
         break; // offline: try later
       }
-      if (res.status >= 500 || res.status === 429) break; // server trouble: try later
+      if (res.status >= 500 || res.status === 429 || res.status === 401) {
+        // Server trouble or a wrong app key in this build: keep it and retry.
+        setResult(false, `Server said ${res.status}${await errorText(res)}`);
+        break;
+      }
+      if (res.ok) setResult(true, op.type === 'clip' ? 'Clip uploaded' : 'Answer uploaded');
+      else setResult(false, `Dropped one ${op.type}: server said ${res.status}${await errorText(res)}`);
       // 2xx is done; any other 4xx will never succeed, so drop it.
       if (op.type === 'clip') deleteFile(op.uri);
       // Re-read in case something was queued while this upload ran.
@@ -184,6 +227,15 @@ export function flush() {
     flushing = null;
   });
   return flushing;
+}
+
+async function errorText(res) {
+  try {
+    const body = await res.json();
+    return body?.error ? ` (${body.error})` : '';
+  } catch (_) {
+    return '';
+  }
 }
 
 function dropFirstMatch(list, op) {

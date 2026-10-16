@@ -32,6 +32,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Check upload settings
+        run: |
+          if [ -n "$EXPO_PUBLIC_PAWLINGO_API" ]; then echo "PAWLINGO_API is set"; else echo "::warning::PAWLINGO_API variable is not set; clips will wait on the phone"; fi
+          if [ -n "$EXPO_PUBLIC_PAWLINGO_KEY" ]; then echo "PAWLINGO_KEY is set"; else echo "::warning::PAWLINGO_KEY secret is not set"; fi
+
       - name: Install dependencies
         run: npm install
 
@@ -45,6 +50,6 @@ jobs:
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Pawlingo-APK
+          name: Pawlingo-APK${{ (env.EXPO_PUBLIC_PAWLINGO_API == '' && '-no-server') || '' }}${{ (env.EXPO_PUBLIC_PAWLINGO_KEY == '' && '-no-key') || '' }}
           path: android/app/build/outputs/apk/release/app-release.apk
 

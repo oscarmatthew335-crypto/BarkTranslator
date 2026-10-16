@@ -108,3 +108,17 @@ def test_delete_me(client):
     r = client.delete("/me", headers=HEADERS)
     assert r.get_json()["deleted"] == 2
     assert client.fake.docs == {} and client.fake.blobs == {}
+
+
+def test_accepts_expo_fetch_multipart(client):
+    """Same bytes Expo's fetch builds from FormData with an expo-file-system File."""
+    b = "----ExpoFetchFormBoundary0123456789abcdef"
+    meta = json.dumps({"clipId": "dog-1760000000002", "species": "dog"})
+    body = (
+        f"--{b}\r\ncontent-disposition: form-data; name=\"meta\"\r\n\r\n{meta}\r\n"
+        f"--{b}\r\ncontent-disposition: form-data; name=\"clip\"; filename=\"dog-1760000000002.m4a\"\r\n"
+        f"content-type: audio/mp4\r\n\r\n"
+    ).encode() + b"x" * 4000 + f"\r\n--{b}--\r\n".encode()
+    r = client.post("/clips", data=body, headers={**HEADERS, "Content-Type": f"multipart/form-data; boundary={b}"})
+    assert r.status_code == 201
+    assert f"clips/dog/{INSTALL}/dog-1760000000002.m4a" in client.fake.blobs
