@@ -2,7 +2,7 @@
   "expo": {
     "name": "BarkTranslator",
     "slug": "BarkTranslator",
-    "version": "2.0.0",
+    "version": "2.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -22,15 +22,27 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.VIBRATE"
+      ],
+      "versionCode": 2,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow BarkTranslator to access your camera",
-          "microphonePermission": "Allow BarkTranslator to access your microphone",
-          "recordAudioAndroid": true
+          "cameraPermission": "Allow BarkTranslator to use your camera as the scanner background",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": false
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow BarkTranslator to listen to your dog's barks",
+          "enableBackgroundPlayback": false
         }
       ]
     ],
@@ -39,4 +51,3 @@
     }
   }
 }
-

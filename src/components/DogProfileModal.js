@@ -16,7 +16,7 @@ export default function DogProfileModal({ visible, dogName, setDogName, selected
             placeholder="e.g. Bruno, Bella, Rex..."
             placeholderTextColor="#777"
           />
-          <Text style={s.modalLabel}>Select Breed / Vocal Size (tunes AI voice pitch):</Text>
+          <Text style={s.modalLabel}>Select Breed / Vocal Size (tunes the voice pitch):</Text>
           <ScrollView style={{ maxHeight: 240 }}>
             {DOG_BREEDS.map((b) => (
               <TouchableOpacity

@@ -11,12 +11,14 @@ export default function ScannerHud({
   setFacing,
   torch,
   setTorch,
-  cameraEnabled,
-  setCameraEnabled,
+  cameraOn,
+  onToggleCamera,
   isRecording,
+  isBusy,
   liveMs,
-  waveBars,
+  levels,
   currentResult,
+  notice,
   onReplay,
   onShare,
   onRate,
@@ -35,36 +37,52 @@ export default function ScannerHud({
           <Text style={s.dogProfileSub}>Tap to customize breed & voice ✎</Text>
         </TouchableOpacity>
         <View style={s.camTools}>
-          <TouchableOpacity style={s.iconBtn} onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}>
-            <Text style={s.iconBtnText}>🔄</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.iconBtn, torch && s.iconBtnActive]} onPress={() => setTorch(!torch)}>
-            <Text style={s.iconBtnText}>🔦</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[s.iconBtn, !cameraEnabled && s.iconBtnActive]} onPress={() => setCameraEnabled(!cameraEnabled)}>
-            <Text style={s.iconBtnText}>{cameraEnabled ? '📷' : '🌙'}</Text>
+          {cameraOn && (
+            <TouchableOpacity style={s.iconBtn} onPress={() => setFacing(facing === 'back' ? 'front' : 'back')}>
+              <Text style={s.iconBtnText}>🔄</Text>
+            </TouchableOpacity>
+          )}
+          {cameraOn && (
+            <TouchableOpacity style={[s.iconBtn, torch && s.iconBtnActive]} onPress={() => setTorch(!torch)}>
+              <Text style={s.iconBtnText}>🔦</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[s.iconBtn, !cameraOn && s.iconBtnActive]} onPress={onToggleCamera}>
+            <Text style={s.iconBtnText}>{cameraOn ? '📷' : '🌙'}</Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <View style={s.centerStage}>
+        {notice && !isRecording && (
+          <View style={s.noticeBox}>
+            <Text style={s.noticeText}>{notice.text}</Text>
+            {notice.action && (
+              <TouchableOpacity style={s.noticeAction} onPress={notice.action.onPress}>
+                <Text style={s.noticeActionText}>{notice.action.label}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
         {isRecording ? (
           <View style={s.liveRadarBox}>
-            <Text style={s.liveListeningTag}>🔴 ANALYZING CANINE ACOUSTICS... {(liveMs / 1000).toFixed(1)}s</Text>
+            <Text style={s.liveListeningTag}>🔴 LISTENING... {(liveMs / 1000).toFixed(1)}s</Text>
             <View style={s.waveRow}>
-              {waveBars.map((h, i) => (
-                <View key={i} style={[s.waveBar, { height: Math.max(12, h * 0.68) }]} />
-              ))}
+              {Array.from({ length: 12 }, (_, i) => {
+                const db = levels[levels.length - 12 + i];
+                const h = typeof db === 'number' ? Math.max(0, Math.min(1, (db + 60) / 55)) : 0;
+                return <View key={i} style={[s.waveBar, { height: 8 + h * 56 }]} />;
+              })}
             </View>
-            <Text style={s.liveSubHint}>
-              {liveMs >= 1600 ? '🐺 Extended Rant / Howl Detected!' : '⚡ Hold longer for intense bark...'}
-            </Text>
+            <Text style={s.liveSubHint}>Keep holding while {dogName} barks, then let go</Text>
           </View>
         ) : currentResult ? (
           <View style={s.subtitleBox}>
             <View style={s.resultTopRow}>
-              <Text style={s.audioStatText}>{currentResult.intensity} • {currentResult.duration}s • {currentResult.peakHz}Hz</Text>
-              <Text style={s.confBadge}>{currentResult.confidence}% AI Match</Text>
+              <Text style={s.audioStatText}>
+                {currentResult.intensity} • {currentResult.barkCount} bark{currentResult.barkCount === 1 ? '' : 's'} • {currentResult.duration}s
+              </Text>
+              <Text style={s.confBadge}>🔊 {currentResult.loudness}/100</Text>
             </View>
             <Text style={s.dogSpeakerTag}>{currentResult.dogName} ({currentResult.personalityName}):</Text>
             <Text style={s.subtitleText}>"{currentResult.text}"</Text>
@@ -100,8 +118,8 @@ export default function ScannerHud({
         ) : (
           <View style={s.idleReticle}>
             <Text style={s.reticleEmoji}>🎯</Text>
-            <Text style={s.reticleTitle}>Point at {dogName} & Hold Record</Text>
-            <Text style={s.reticleSub}>Short hold = Alert Bark • Long hold (1.6s+) = Full Rant</Text>
+            <Text style={s.reticleTitle}>Hold the button while {dogName} barks</Text>
+            <Text style={s.reticleSub}>Real bark count, length & loudness pick the line. Just for fun!</Text>
           </View>
         )}
       </View>
@@ -115,7 +133,7 @@ export default function ScannerHud({
           ))}
         </ScrollView>
 
-        <Text style={s.sectionLabel}>2. AI VOICE PERSONALITY (ALL UNLOCKED 🔓)</Text>
+        <Text style={s.sectionLabel}>2. VOICE PERSONALITY</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.horizScroll}>
           {Object.keys(PERSONALITY_PACKS).map((key) => {
             const p = PERSONALITY_PACKS[key];
@@ -130,12 +148,12 @@ export default function ScannerHud({
 
         <TouchableOpacity
           activeOpacity={0.85}
-          style={[s.recordButton, isRecording && s.recordButtonActive]}
+          style={[s.recordButton, isRecording && s.recordButtonActive, isBusy && !isRecording && s.recordButtonBusy]}
           onPressIn={onStartListening}
           onPressOut={onStopListening}
         >
           <Text style={s.recordButtonText}>
-            {isRecording ? '🔴 LISTENING... RELEASE TO DECODE' : `🎙️ HOLD TO TRANSLATE ${dogName.toUpperCase()}'S BARK`}
+            {isRecording ? '🔴 LISTENING... RELEASE TO TRANSLATE' : `🎙️ HOLD TO TRANSLATE ${dogName.toUpperCase()}'S BARK`}
           </Text>
         </TouchableOpacity>
       </View>
@@ -144,7 +162,7 @@ export default function ScannerHud({
 }
 const s = StyleSheet.create({
   scannerOverlay: { flex: 1, justifyContent: 'space-between' },
-  topHud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingTop: 38 },
+  topHud: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 14, paddingTop: 12 },
   dogProfileBtn: { backgroundColor: 'rgba(11,15,23,0.85)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 14, borderWidth: 1, borderColor: '#FF6B00' },
   dogProfileText: { color: '#FFF', fontWeight: '800', fontSize: 13 },
   dogProfileSub: { color: '#FFB800', fontSize: 10, marginTop: 1 },
@@ -190,6 +208,11 @@ const s = StyleSheet.create({
   pillText: { color: '#FFF', fontSize: 12, fontWeight: '700' },
   recordButton: { backgroundColor: '#E53935', paddingVertical: 16, borderRadius: 26, alignItems: 'center', marginTop: 6 },
   recordButtonActive: { backgroundColor: '#10B981' },
+  recordButtonBusy: { opacity: 0.7 },
+  noticeBox: { backgroundColor: 'rgba(11,15,23,0.92)', borderRadius: 14, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#FFB800', flexDirection: 'row', alignItems: 'center', gap: 10 },
+  noticeText: { color: '#FFF', fontSize: 13, fontWeight: '700', flex: 1, lineHeight: 18 },
+  noticeAction: { backgroundColor: '#FF6B00', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
+  noticeActionText: { color: '#FFF', fontSize: 12, fontWeight: '800' },
   recordButtonText: { color: '#FFF', fontWeight: '900', fontSize: 14, letterSpacing: 0.4 }
 });
 

@@ -10,7 +10,7 @@ export const PERSONALITY_PACKS = {
       door: {
         short: [
           "Aweh! Check who's by the gate, bru! Looking proper dodgy!",
-          "Hectic! That Checkers Sixty60 bike just revved past MY pavement!",
+          "Hectic! That delivery scooter just revved past MY pavement!",
           "Oi! Tell the ous at the gate the intercom isn't a toy, my bru!"
         ],
         long: [
@@ -27,7 +27,7 @@ export const PERSONALITY_PACKS = {
         ],
         long: [
           "Listen here china, drop a piece of boerewors right now or we're gonna have serious union negotiations in this kitchen!",
-          "How are you eating Nando's right in front of me while I get dry pellets? That's unconstitutional, my bru!",
+          "How are you eating peri-peri chicken right in front of me while I get dry pellets? That's unconstitutional, my bru!",
           "I've been sitting by this braai grid like a good boy for twenty minutes! Pay the meat tax immediately!"
         ]
       },
@@ -150,7 +150,7 @@ export const PERSONALITY_PACKS = {
       door: {
         short: [
           "Ugh, paparazzi at the gate again. Tell them no photos today!",
-          "Unless that's an Uber Eats delivery for me, tell them to leave.",
+          "Unless that's a food delivery for me, tell them to leave.",
           "Excuse me, why is a stranger breathing near my property?"
         ],
         long: [
