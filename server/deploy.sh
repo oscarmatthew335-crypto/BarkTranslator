@@ -5,6 +5,9 @@
 set -euo pipefail
 PROJECT=${PROJECT:-pawlingo-a14f2d}
 REGION=${REGION:-africa-south1}
+# Cloud Scheduler is not offered in africa-south1; it only holds the timer and
+# starts the job in $REGION, so the data stays in South Africa.
+SCHED_REGION=${SCHED_REGION:-europe-west1}
 BUCKET=$PROJECT-clips
 SA=pawlingo-fn@$PROJECT.iam.gserviceaccount.com
 gcloud config set project $PROJECT >/dev/null
@@ -33,10 +36,10 @@ gcloud projects add-iam-policy-binding $PROJECT --member=serviceAccount:$SA \
 RUN_URI="https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs/pawlingo-train:run"
 SCHED_ARGS=(--schedule="0 3 * * 1" --time-zone="Africa/Johannesburg" --uri="$RUN_URI"
   --http-method=POST --oauth-service-account-email=$SA)
-if gcloud scheduler jobs describe pawlingo-train-weekly --location=$REGION >/dev/null 2>&1; then
-  gcloud scheduler jobs update http pawlingo-train-weekly --location=$REGION "${SCHED_ARGS[@]}" >/dev/null
+if gcloud scheduler jobs describe pawlingo-train-weekly --location=$SCHED_REGION >/dev/null 2>&1; then
+  gcloud scheduler jobs update http pawlingo-train-weekly --location=$SCHED_REGION "${SCHED_ARGS[@]}" >/dev/null
 else
-  gcloud scheduler jobs create http pawlingo-train-weekly --location=$REGION "${SCHED_ARGS[@]}" >/dev/null
+  gcloud scheduler jobs create http pawlingo-train-weekly --location=$SCHED_REGION "${SCHED_ARGS[@]}" >/dev/null
 fi
 
 echo ">> First training run (expect 'no labelled data yet' or 'need ... phones')"
