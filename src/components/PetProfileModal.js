@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView, Modal, StyleSheet, Switch } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
 import { SPECIES, APP_NAME } from '../species';
 import { StickerButton } from './ui';
+import { getStatus, onStatusChange, flush } from '../contribute/contributions';
 
 export default function PetProfileModal({
   visible,
@@ -28,6 +29,16 @@ export default function PetProfileModal({
   }, [visible, speciesId, petName, breedId]);
 
   const species = SPECIES[sp];
+
+  const [status, setStatus] = useState(null);
+  const refresh = useCallback(() => {
+    getStatus().then(setStatus);
+  }, []);
+  useEffect(() => {
+    if (!visible) return;
+    refresh();
+    return onStatusChange(refresh);
+  }, [visible, refresh]);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -103,6 +114,29 @@ export default function PetProfileModal({
                 accessibilityLabel={`Help ${APP_NAME} learn`}
               />
             </View>
+            {shareClips && status && (
+              <View style={s.statusBox}>
+                <Text style={s.statusText}>
+                  {status.configured
+                    ? `Server: ${status.server}${status.hasKey ? '' : ' (no app key in this build)'}`
+                    : 'Server: not set up in this build, clips wait on the phone'}
+                </Text>
+                <Text style={s.statusText}>
+                  Waiting to send: {status.waitingClips} clip{status.waitingClips === 1 ? '' : 's'}, {status.waitingLabels}{' '}
+                  answer{status.waitingLabels === 1 ? '' : 's'}
+                </Text>
+                {status.last.at && (
+                  <Text style={[s.statusText, { color: status.last.ok ? C.mint : C.tomato }]}>
+                    Last try: {status.last.detail}
+                  </Text>
+                )}
+                {status.configured && status.waitingClips + status.waitingLabels > 0 && (
+                  <Pressable onPress={() => flush().then(refresh)} accessibilityRole="button" style={{ paddingTop: 4 }}>
+                    <Text style={s.sendNow}>Send now</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
             <Pressable onPress={onDeleteData} accessibilityRole="button" style={{ paddingTop: 8 }}>
               <Text style={s.deleteText}>Delete everything I've shared</Text>
             </Pressable>
@@ -164,6 +198,9 @@ const s = StyleSheet.create({
   shareRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   shareTitle: { fontFamily: F.semibold, fontSize: 16, color: C.ink },
   shareSub: { fontFamily: F.regular, fontSize: 13, lineHeight: 18, color: C.inkSoft, marginTop: 2 },
+  statusBox: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(36,22,74,0.15)', gap: 2 },
+  statusText: { fontFamily: F.regular, fontSize: 12, lineHeight: 17, color: C.inkSoft },
+  sendNow: { fontFamily: F.semibold, fontSize: 13, color: C.ink, textDecorationLine: 'underline' },
   deleteText: { fontFamily: F.semibold, fontSize: 13, color: C.tomato },
   breedRow: { padding: 12, borderRadius: 16, backgroundColor: C.paper, borderWidth: INK_WIDTH, borderColor: 'rgba(36,22,74,0.15)' },
   breedRowActive: { borderColor: C.ink, backgroundColor: C.butter },
