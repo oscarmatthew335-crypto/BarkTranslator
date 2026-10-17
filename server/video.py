@@ -251,7 +251,14 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-"]
     if wav_path:
-        cmd += ["-i", wav_path, "-filter_complex", f"[1:a]adelay={int(audio_start * 1000)}:all=1,apad,aresample=44100[a]"]
+        # Phone recordings from across the room are quiet: bring the loudest
+        # moment up to about -3 dB (at most +24 dB) so the pet is heard.
+        peak = max((abs(v) for v in samples), default=0.0)
+        gain_db = 0.0 if peak <= 0 else max(0.0, min(24.0, -3.0 - 20 * math.log10(peak)))
+        cmd += [
+            "-i", wav_path, "-filter_complex",
+            f"[1:a]volume={gain_db:.1f}dB,adelay={int(audio_start * 1000)}:all=1,apad,aresample=44100[a]",
+        ]
     else:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-filter_complex", "[1:a]anull[a]"]
     cmd += [
