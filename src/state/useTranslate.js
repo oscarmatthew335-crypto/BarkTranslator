@@ -7,6 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 
 import useBarkRecorder from '../audio/useBarkRecorder';
 import { pickLinePool, moodScores } from '../audio/barkAnalysis';
+import { pickLine, activeContext } from '../lines';
 import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
@@ -164,10 +165,16 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     const guessCtx = guess?.show ? species.contexts.find((c) => c.id === guess.contextId) : null;
 
     const pack = species.packs[pet.personality] || species.packs[species.defaultPersonality];
-    const ctx = guessCtx || species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
-    const contextLines = pack.lines[ctx.id] || Object.values(pack.lines)[0];
-    const pool = contextLines[pickLinePool(analysis.pattern)] || contextLines.short;
-    const text = pool[Math.floor(Math.random() * pool.length)];
+    const pickedId = activeContext(pet);
+    const ctx = guessCtx || species.contexts.find((c) => c.id === pickedId) || species.contexts[0];
+    const recent = data.history.filter((h) => h.petId === pet.id).slice(0, 8).map((h) => h.text);
+    const text = pickLine({
+      pool: pack.lines[ctx.id] || pack.lines.chat,
+      size: pickLinePool(analysis.pattern),
+      home: pet.home,
+      contextId: ctx.id,
+      recent
+    });
     const now = new Date();
     const id = String(now.getTime());
     let tempPhoto = null;
@@ -205,7 +212,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       audioUri,
       videoUri,
       contextId: ctx.id,
-      pickedContextId: pet.contextId,
+      pickedContextId: pickedId,
       guess: guessCtx
         ? { contextId: guess.contextId, label: guessCtx.label, confidence: guess.confidence, wording: guess.wording, source: guess.source }
         : null,
@@ -227,7 +234,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
         petId: pet.id,
         species: species.id,
         breedId: breed?.id,
-        contextId: pet.contextId,
+        contextId: pickedId,
         analysis,
         features: out.features,
         guess

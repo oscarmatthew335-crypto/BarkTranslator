@@ -117,7 +117,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
             {mode === 'add' && (
               <PetForm
                 title="Add a pet"
-                initial={{ name: '', species: null, breedId: null }}
+                initial={{ name: '', species: null, breedId: null, home: null }}
                 onCancel={() => setMode('list')}
                 onSave={(fields) => {
                   onAdd(fields);
@@ -136,6 +136,7 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
   const [species, setSpecies] = useState(initial.species);
   const [name, setName] = useState(initial.name);
   const [breedId, setBreedId] = useState(initial.breedId);
+  const [home, setHome] = useState(initial.home);
   const sp = species ? SPECIES[species] : null;
 
   return (
@@ -177,6 +178,34 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
         onSubmitEditing={Keyboard.dismiss}
       />
 
+      {sp && (
+        <>
+          <Text style={s.label}>Where does {name.trim() || sp.defaultName} hang out?</Text>
+          <View style={[s.segment, { marginBottom: 8 }]}>
+            {[
+              { id: 'indoor', label: '🏠 Indoors' },
+              { id: 'garden', label: '🌳 Has a garden' }
+            ].map((opt) => {
+              const on = (home || sp.defaultHome) === opt.id;
+              return (
+                <Pressable
+                  key={opt.id}
+                  style={[s.segBtn, on && { backgroundColor: C.mint }]}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setHome(opt.id);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: on }}
+                >
+                  <Text style={s.segText}>{opt.label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </>
+      )}
+
       {sp?.breeds && (
         <>
           <Text style={s.label}>Breed (changes the voice)</Text>
@@ -211,7 +240,12 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
           style={{ flex: 1 }}
           onPress={() => {
             Keyboard.dismiss();
-            onSave({ species, name: name.trim() || SPECIES[species].defaultName, breedId: SPECIES[species].breeds ? breedId : null });
+            onSave({
+              species,
+              name: name.trim() || SPECIES[species].defaultName,
+              breedId: SPECIES[species].breeds ? breedId : null,
+              home: home || SPECIES[species].defaultHome
+            });
           }}
         />
         <StickerButton label="Cancel" color={C.paper} onPress={onCancel} />

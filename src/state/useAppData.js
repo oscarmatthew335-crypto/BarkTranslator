@@ -19,7 +19,8 @@ export default function useAppData() {
     loadState().then(async (saved) => {
       if (saved) {
         if (saved.migratedFrom === 'v1') await migrateSpeciesExamples(saved.migratedSpecies, saved.pets[0].id);
-        setPets(saved.pets);
+        // Pets saved before "home" existed get their species' usual answer.
+        setPets(saved.pets.map((p) => (p.home ? p : { ...p, home: getSpecies(p.species).defaultHome })));
         setActivePetId(saved.pets.some((p) => p.id === saved.activePetId) ? saved.activePetId : saved.pets[0].id);
         setHistory(Array.isArray(saved.history) ? saved.history : []);
         setShareClips(typeof saved.shareClips === 'boolean' ? saved.shareClips : null);
@@ -52,6 +53,7 @@ export default function useAppData() {
           const sp = getSpecies(changes.species);
           next.personality = sp.defaultPersonality;
           next.contextId = sp.defaultContext;
+          next.home = changes.home || sp.defaultHome;
           next.breedId = sp.breeds ? next.breedId : null;
         }
         return next;

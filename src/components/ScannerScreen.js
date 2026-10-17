@@ -9,6 +9,7 @@ import { Sticker } from './ui';
 import PawButton from './PawButton';
 import ProgressRing from './ProgressRing';
 import { bondLevel } from '../learning/petLearning';
+import { activeContext } from '../lines';
 import SpeechBubble from './SpeechBubble';
 import ContextSheet from './ContextSheet';
 
@@ -55,7 +56,8 @@ export default function ScannerScreen(props) {
   const [contextOpen, setContextOpen] = useState(false);
   const [idleH, setIdleH] = useState(0);
   const petSize = Math.max(60, Math.min(170, Math.round((idleH - 70) * 0.7)));
-  const context = species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
+  const activeId = activeContext(pet);
+  const context = species.contexts.find((c) => c.id === activeId) || species.contexts[0];
   const listening = recorder.isRecording;
   const result = currentResult && !listening && currentResult.petId === pet.id ? currentResult : null;
 
@@ -239,7 +241,7 @@ export default function ScannerScreen(props) {
       <ContextSheet
         visible={contextOpen}
         contexts={species.contexts}
-        selected={pet.contextId}
+        selected={activeId}
         petName={pet.name}
         onSelect={(id) => {
           onChangeContext(id);

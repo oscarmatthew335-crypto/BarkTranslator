@@ -1,5 +1,5 @@
 // Everything Pawlingo keeps on the phone, in one saved object:
-//   pets         [{ id, name, species, breedId, personality, contextId, createdAt }]
+//   pets         [{ id, name, species, breedId, personality, contextId, contextSetAt, home: 'indoor'|'garden', createdAt }]
 //   activePetId  which pet the Translate screen is for
 //   history      the journal (newest first, capped)
 //   shareClips   true / false / null (not asked yet)
@@ -24,7 +24,7 @@ export function newPetId() {
   return 'p' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export function makePet({ name, species, breedId = null }) {
+export function makePet({ name, species, breedId = null, home = null }) {
   const sp = getSpecies(species);
   return {
     id: newPetId(),
@@ -33,6 +33,8 @@ export function makePet({ name, species, breedId = null }) {
     breedId: sp.breeds ? breedId : null,
     personality: sp.defaultPersonality,
     contextId: sp.defaultContext,
+    contextSetAt: 0,
+    home: home || sp.defaultHome,
     createdAt: new Date().toISOString()
   };
 }
