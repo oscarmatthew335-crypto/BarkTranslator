@@ -10,7 +10,8 @@ import { pickLinePool, moodScores } from '../audio/barkAnalysis';
 import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
-import { keepPhoto, keepAudio, fileExists } from '../storage/photos';
+import { keepPhoto, keepAudio, keepVideo, fileExists } from '../storage/photos';
+import { getThumbnailAsync } from 'expo-video-thumbnails';
 import { playFile, playSounds, stopSounds } from '../audio/sounds';
 import { makeVideo, videoAvailable } from '../share/videoShare';
 import { File } from 'expo-file-system';
@@ -30,6 +31,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
   const [shareItem, setShareItem] = useState(null);
   const noticeTimer = useRef(null);
   const finishRef = useRef(null);
+  const videoRec = useRef(null); // the camera clip being recorded while listening
 
   const bark = useBarkRecorder({ onAutoStop: () => finishRef.current?.() });
 
@@ -85,6 +87,15 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     const res = await bark.start();
     if (res.ok) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // With the camera on, film the pet while listening (no sound: the
+      // microphone is busy; the share video uses the clean recording).
+      if (cameraOn && cameraRef.current) {
+        try {
+          videoRec.current = cameraRef.current.recordAsync({ maxDuration: 16 }).catch(() => null);
+        } catch (_) {
+          videoRec.current = null;
+        }
+      }
       return;
     }
     if (res.reason === 'undetermined') setMicPrimer(true);
@@ -99,7 +110,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
         onPress: () => Linking.openSettings()
       });
     else if (res.reason === 'error') showNotice("Couldn't start the microphone. Try again.");
-  }, [bark, pet, showNotice]);
+  }, [bark, pet, showNotice, cameraOn, cameraRef]);
 
   const allowMic = useCallback(async () => {
     setMicPrimer(false);
@@ -113,23 +124,31 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     else showNotice(`${APP_NAME} can't hear ${pet.name} without the microphone.`);
   }, [bark, pet, startListening, showNotice]);
 
-  const snapPhoto = async () => {
-    if (!cameraOn || !cameraRef.current) return null;
+  const stopVideo = async () => {
+    const rec = videoRec.current;
+    videoRec.current = null;
+    if (!rec) return null;
     try {
-      const pic = await cameraRef.current.takePictureAsync({ quality: 0.6, shutterSound: false });
-      return pic?.uri || null;
-    } catch (_) {
-      return null;
-    }
+      cameraRef.current?.stopRecording();
+    } catch (_) {}
+    const r = await rec;
+    return r?.uri || null;
+  };
+
+  const discard = (uri) => {
+    try {
+      if (uri) new File(uri).delete();
+    } catch (_) {}
   };
 
   const finishListening = async () => {
     if (!bark.isRecording) return;
-    const photoPromise = snapPhoto();
+    const videoPromise = stopVideo();
     // Always keep the recording: it goes in share videos, and (only if the
     // owner opted in) to the server for training.
     const out = await bark.stop({ keepClip: true });
-    const tempPhoto = await photoPromise;
+    const tempVideo = await videoPromise;
+    if (!out || !out.analysis?.heard) discard(tempVideo);
     if (!out) return;
     const { analysis, heldMs } = out;
     if (!analysis?.heard) {
@@ -151,7 +170,15 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     const text = pool[Math.floor(Math.random() * pool.length)];
     const now = new Date();
     const id = String(now.getTime());
+    let tempPhoto = null;
+    if (tempVideo) {
+      try {
+        const thumb = await getThumbnailAsync(tempVideo, { time: Math.min(3000, Math.max(300, heldMs / 2)), quality: 0.7 });
+        tempPhoto = thumb?.uri || null;
+      } catch (_) {}
+    }
     const photoUri = await keepPhoto(tempPhoto, id);
+    const videoUri = await keepVideo(tempVideo, id);
     const audioUri = await keepAudio(out.clipUri, id);
     const uploadClip = shareClips === true && Boolean(out.clipUri);
 
@@ -176,6 +203,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       emotions: moodScores(analysis, ctx.id, pet.personality),
       photoUri,
       audioUri,
+      videoUri,
       contextId: ctx.id,
       pickedContextId: pet.contextId,
       guess: guessCtx

@@ -9,7 +9,8 @@ Google Cloud Functions (2nd gen, Python 3.12), one HTTP function, three routes:
                    (written by train/train.py), or 204 if none / unchanged
   POST   /errors   JSON crash report: {message, stack, fatal, where, appVersion, platform, osVersion}
   POST   /video    multipart: "meta" (JSON {text, petName, label, species}) +
-                   optional "photo" (JPEG) and "clip" (WAV): returns a short MP4
+                   optional "video" (the phone's silent camera clip, MP4) or
+                   "photo" (JPEG), and "clip" (WAV sound): returns a short MP4
                    share video. Nothing is stored; inputs are deleted at once.
   GET    /privacy  the public privacy policy page (no key needed)
 
@@ -46,6 +47,7 @@ META_WORDS = ("breedId", "chosenContext", "pattern", "platform", "format", "feat
 MAX_FEATURES = 128
 DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40}
 MAX_PHOTO_BYTES = 4_000_000
+MAX_VIDEO_BYTES = 15_000_000
 PRIVACY_PAGE = os.path.join(os.path.dirname(__file__), "privacy.html")
 
 
@@ -315,7 +317,7 @@ def _post_error(request, install_id):
 
 
 def _post_video(request):
-    if request.content_length and request.content_length > MAX_PHOTO_BYTES + MAX_CLIP_BYTES + 50_000:
+    if request.content_length and request.content_length > MAX_VIDEO_BYTES + MAX_CLIP_BYTES + 50_000:
         return _error(413, "too large")
     try:
         raw = json.loads(request.form.get("meta", ""))
@@ -336,6 +338,7 @@ def _post_video(request):
     try:
         photo = field("photo", MAX_PHOTO_BYTES)
         clip = field("clip", MAX_CLIP_BYTES)
+        movie = field("video", MAX_VIDEO_BYTES)
     except ValueError:
         return _error(413, "file too large")
     if clip is not None and not (clip[:4] == b"RIFF" and clip[8:12] == b"WAVE"):
@@ -346,9 +349,15 @@ def _post_video(request):
     species = raw.get("species") if raw.get("species") in ("dog", "cat") else "dog"
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "pawlingo.mp4")
+        movie_path = None
+        if movie is not None and movie[4:8] == b"ftyp":  # an MP4 from the phone's camera
+            movie_path = os.path.join(tmp, "camera.mp4")
+            with open(movie_path, "wb") as f:
+                f.write(movie)
         try:
             video.render(
                 out,
+                video_path=movie_path,
                 photo_bytes=photo,
                 wav_bytes=clip,
                 text=str(raw.get("text"))[:200],

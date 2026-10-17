@@ -68,7 +68,16 @@ export default function ScannerScreen(props) {
     <View style={s.container}>
       {/* Backdrop: the pet through the camera, or a big pet on lilac paper */}
       {cameraOn ? (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={torch} mute />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          enableTorch={torch}
+          mode="video"
+          videoQuality="720p"
+          videoBitrate={2_000_000}
+          mute
+        />
       ) : (
         <View style={[StyleSheet.absoluteFill, s.paperBg]} />
       )}
@@ -105,7 +114,7 @@ export default function ScannerScreen(props) {
       {/* Middle: live listening, the speech bubble, or a message */}
       <View style={s.middle} pointerEvents="box-none">
         {listening ? (
-          <ListeningCard recorder={recorder} pet={pet} species={species} />
+          <ListeningCard recorder={recorder} pet={pet} species={species} filming={cameraOn} />
         ) : result ? (
           <SpeechBubble
             name={result.petName}
@@ -138,7 +147,7 @@ export default function ScannerScreen(props) {
                 {!notice && (
                   <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
                     <Text style={s.camHintText} maxFontSizeMultiplier={1.3}>
-                      📸 Show {pet.name} on camera
+                      🎥 Film {pet.name} for a share video
                     </Text>
                   </Pressable>
                 )}
@@ -243,11 +252,12 @@ export default function ScannerScreen(props) {
 }
 
 // Live meter while listening. Only this card redraws with the audio.
-function ListeningCard({ recorder, pet, species }) {
+function ListeningCard({ recorder, pet, species, filming }) {
   const meter = useMeter(recorder);
   return (
     <Sticker color={C.paper} radius={24} innerStyle={s.listenBox}>
       <Text style={s.listenTitle} maxFontSizeMultiplier={1.3}>
+        {filming ? '🔴 ' : ''}
         {meter.heard ? `Hearing ${pet.name}…` : `Listening for ${pet.name}…`} {(meter.ms / 1000).toFixed(1)}s
       </Text>
       <View style={s.meterRow} accessible={false}>
