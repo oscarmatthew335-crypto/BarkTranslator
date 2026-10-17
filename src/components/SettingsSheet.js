@@ -115,6 +115,16 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
               </Pressable>
             </View>
 
+            <Text style={s.section}>Sound</Text>
+            <View style={s.box}>
+              <Row
+                title="Read translations aloud"
+                sub={`Off: you see the words, and Replay plays ${pet.name}'s real sound. On: the phone's voice also reads them.`}
+                value={settings.readAloud === true}
+                onChange={(v) => updateSettings({ readAloud: v })}
+              />
+            </View>
+
             <Text style={s.section}>{pet.name}</Text>
             <View style={s.box}>
               <Pressable onPress={confirmReset} accessibilityRole="button" style={s.linkRow}>

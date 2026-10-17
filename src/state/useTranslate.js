@@ -10,7 +10,8 @@ import { pickLinePool, moodScores } from '../audio/barkAnalysis';
 import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
-import { keepPhoto, keepAudio } from '../storage/photos';
+import { keepPhoto, keepAudio, fileExists } from '../storage/photos';
+import { playFile, playSounds, stopSounds } from '../audio/sounds';
 import { makeVideo, videoAvailable } from '../share/videoShare';
 import { File } from 'expo-file-system';
 import { getSpecies, APP_NAME, STORE_URL } from '../species';
@@ -55,13 +56,31 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     if (shareClips) flush();
   }, [shareClips]);
 
-  const speak = useCallback((item) => {
-    Speech.stop();
-    Speech.speak(item.text, { pitch: item.pitch, rate: item.rate });
-  }, []);
+  // Replay plays the pet's real recorded sound. Reading the words aloud with
+  // the phone's voice is optional (Settings), and off by default.
+  const readAloud = data.settings?.readAloud === true;
+  const speak = useCallback(
+    (item, { auto = false } = {}) => {
+      Speech.stop();
+      stopSounds();
+      let delay = 0;
+      if (!auto) {
+        if (fileExists(item.audioUri)) {
+          playFile(item.audioUri);
+          delay = Math.min(15000, Number(item.duration || 1.5) * 1000) + 300;
+        } else {
+          playSounds(item.species === 'cat' ? 'cat_unit_meow' : 'dog_unit_bark');
+          delay = 900;
+        }
+      }
+      if (readAloud) setTimeout(() => Speech.speak(item.text, { pitch: item.pitch, rate: item.rate }), delay);
+    },
+    [readAloud]
+  );
 
   const startListening = useCallback(async () => {
     Speech.stop();
+    stopSounds();
     setNotice(null);
     const res = await bark.start();
     if (res.ok) {
@@ -188,7 +207,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     }
     setCurrentResult(entry);
     addEntry(entry);
-    speak(entry);
+    speak(entry, { auto: true });
   };
   finishRef.current = finishListening;
 
