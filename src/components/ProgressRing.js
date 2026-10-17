@@ -10,7 +10,7 @@ const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 // A ring around the paw that fills as the owner teaches Pawlingo, with a
 // badge counting down to the next bond level. It sweeps and flashes when it
 // moves, and bursts when a level is reached.
-export default function ProgressRing({ bond, size = 136, stroke = 9, children }) {
+export default function ProgressRing({ bond, size = 128, stroke = 8, children }) {
   const reduceMotion = useReduceMotion();
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
