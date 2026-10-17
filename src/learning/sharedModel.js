@@ -75,16 +75,76 @@ function isValid(m) {
 }
 
 // Probabilities for each context the model knows, e.g. { door: 0.6, food: 0.3 }.
-export function predictShared(model, vector) {
+// When breedId is provided and the model has a cohort for that breed, blends
+// the breed cohort's prediction (or breed acoustic normalisation) with the
+// species-wide model.
+export function predictShared(model, vector, breedId = null) {
   if (!model || !vector || vector.length !== model.mean.length) return null;
-  const z = vector.map((x, i) => (x - model.mean[i]) / (model.std[i] || 1));
-  const logits = model.W.map((row, k) => row.reduce((s, w, i) => s + w * z[i], model.b[k] || 0));
+  const base = runSoftmax(model, vector, model.mean, model.std);
+  if (!breedId || !model.breeds || !model.breeds[breedId]) return base;
+
+  const cohort = model.breeds[breedId];
+  const hasScaler =
+    Array.isArray(cohort.mean) &&
+    cohort.mean.length === vector.length &&
+    Array.isArray(cohort.std) &&
+    cohort.std.length === vector.length;
+
+  // If the breed has its own trained classifier, blend it with the species model
+  // according to how saturated the breed cohort is.
+  if (
+    hasScaler &&
+    Array.isArray(cohort.contexts) &&
+    Array.isArray(cohort.W) &&
+    cohort.W.length === cohort.contexts.length
+  ) {
+    const breedProbs = runSoftmax(cohort, vector, cohort.mean, cohort.std);
+    const n = cohort.metrics?.examples || 30;
+    const w = Math.min(0.75, n / (n + 60));
+    const out = {};
+    new Set([...Object.keys(base), ...Object.keys(breedProbs)]).forEach((c) => {
+      out[c] = w * (breedProbs[c] || 0) + (1 - w) * (base[c] || 0);
+    });
+    const sum = Object.values(out).reduce((a, b) => a + b, 0) || 1;
+    Object.keys(out).forEach((c) => (out[c] /= sum));
+    return out;
+  }
+
+  // Otherwise, use the breed's acoustic baseline (pitch/formant mean & std)
+  // to normalise the sound before running the species classifier.
+  if (hasScaler) {
+    const normProbs = runSoftmax(model, vector, cohort.mean, cohort.std);
+    const out = {};
+    model.contexts.forEach((c) => {
+      out[c] = 0.5 * (normProbs[c] || 0) + 0.5 * (base[c] || 0);
+    });
+    return out;
+  }
+  return base;
+}
+
+function runSoftmax(m, vector, mean, std) {
+  const z = vector.map((x, i) => (x - mean[i]) / (std[i] || 1));
+  const logits = m.W.map((row, k) => row.reduce((s, w, i) => s + w * z[i], m.b?.[k] || 0));
   const max = Math.max(...logits);
   const exps = logits.map((l) => Math.exp(l - max));
-  const sum = exps.reduce((a, b) => a + b, 0);
+  const sum = exps.reduce((a, b) => a + b, 0) || 1;
   const out = {};
-  model.contexts.forEach((c, k) => {
+  m.contexts.forEach((c, k) => {
     out[c] = exps[k] / sum;
   });
   return out;
 }
+
+// Returns how many community recordings back a predicted context for this breed/species.
+export function sharedEvidence(model, contextId, breedId = null) {
+  if (!model || !contextId) return null;
+  const cohort = breedId && model.breeds ? model.breeds[breedId] : null;
+  const breedCount = cohort?.metrics?.countsByContext?.[contextId] || 0;
+  const breedTotal = cohort?.metrics?.examples || 0;
+  const speciesCount = model.metrics?.countsByContext?.[contextId] || 0;
+  const phones = model.metrics?.phones || 0;
+  if (!breedCount && !speciesCount) return null;
+  return { breedCount, breedTotal, speciesCount, phones };
+}
+

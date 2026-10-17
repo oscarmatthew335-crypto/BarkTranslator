@@ -38,11 +38,51 @@ test('guess wording', async () => {
   assert.ok(['Pretty sure', 'Maybe'].includes(g.wording));
 });
 
-test('shared model maths', () => {
-  const m = { featureVersion: 'f1', contexts: ['a', 'b'], mean: [0, 0], std: [1, 1], W: [[1, 0], [-1, 0]], b: [0, 0] };
+test('shared model maths and breed cohort blending', async () => {
+  const m = {
+    featureVersion: 'f1',
+    contexts: ['a', 'b'],
+    mean: [0, 0],
+    std: [1, 1],
+    W: [[1, 0], [-1, 0]],
+    b: [0, 0],
+    metrics: { phones: 20, examples: 120, countsByContext: { a: 60, b: 60 } },
+    breeds: {
+      boerboel: {
+        contexts: ['a', 'b'],
+        mean: [0, 0],
+        std: [1, 1],
+        W: [[-2, 0], [2, 0]],
+        b: [0, 0],
+        metrics: { phones: 10, examples: 180, countsByContext: { a: 40, b: 140 } }
+      }
+    }
+  };
   const p = predictShared(m, [2, 0]);
   assert.ok(p.a > 0.9 && Math.abs(p.a + p.b - 1) < 1e-9);
   assert.equal(predictShared(m, [1, 2, 3]), null);
+
+  // With breedId='boerboel', the saturated breed cohort shifts the prediction toward 'b'
+  const pb = predictShared(m, [1, 0], 'boerboel');
+  assert.ok(pb.b > p.b, 'breed cohort shifts probability');
+
+  // Evidence string combines personal taught barks + breed cohort clips
+  const g = await guessContext('petA', fp('food'), {
+    ...m,
+    contexts: ['door', 'food', 'play'],
+    mean: new Array(62).fill(0),
+    std: new Array(62).fill(1),
+    W: [new Array(62).fill(0), new Array(62).fill(0.1), new Array(62).fill(0)],
+    b: [0, 1, 0],
+    breeds: {
+      boerboel: {
+        mean: new Array(62).fill(0),
+        std: new Array(62).fill(1),
+        metrics: { phones: 8, examples: 95, countsByContext: { food: 48 } }
+      }
+    }
+  }, { breedId: 'boerboel', breedName: '🐕 Boerboel / Mastiff', petName: 'Spot' });
+  assert.ok(g.evidence && g.evidence.includes("Spot's taught sounds") && g.evidence.includes('48 Boerboel clips'));
 });
 
 test('bond levels count down to the next target', async () => {

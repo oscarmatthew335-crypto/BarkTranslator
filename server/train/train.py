@@ -35,6 +35,95 @@ MIN_CONTEXTS = 2
 MARGIN_OVER_CHANCE = 0.10  # must beat random guessing by this much
 MARGIN_OVER_CURRENT = 0.01
 
+MIN_BREED_PHONES = 5  # households needed before a breed gets its own baseline/cohort
+MIN_BREED_ROWS = 20  # minimum clips for breed acoustic normalisation (mean/std)
+MIN_BREED_PER_CONTEXT = 15  # labelled clips per situation for breed-specific weights
+
+
+def _train_breed_cohort(b_rows, dim):
+    """Build per-breed normalisation stats, plus breed weights if enough contexts are saturated."""
+    b_rows = [r for r in b_rows if len(r.get("features") or []) == dim]
+    phones = sorted({r["installId"] for r in b_rows})
+    if len(b_rows) < MIN_BREED_ROWS or len(phones) < MIN_BREED_PHONES:
+        return None
+    XAll = np.array([r["features"] for r in b_rows], dtype=float)
+    mean = XAll.mean(axis=0)
+    std = XAll.std(axis=0)
+    std[std == 0] = 1.0
+    counts = {}
+    for r in b_rows:
+        counts[r["context"]] = counts.get(r["context"], 0) + 1
+
+    cohort = {
+        "mean": [round(float(v), 6) for v in mean],
+        "std": [round(float(v), 6) for v in std],
+        "metrics": {
+            "phones": len(phones),
+            "examples": len(b_rows),
+            "countsByContext": counts,
+        },
+    }
+
+    keep = sorted(c for c, n in counts.items() if n >= MIN_BREED_PER_CONTEXT)
+    sub = [r for r in b_rows if r["context"] in keep]
+    sub_phones = sorted({r["installId"] for r in sub})
+    if len(keep) < MIN_CONTEXTS or len(sub_phones) < MIN_BREED_PHONES:
+        return cohort
+
+    X = np.array([r["features"] for r in sub], dtype=float)
+    y = np.array([r["context"] for r in sub])
+    groups = np.array([r["installId"] for r in sub])
+    s_mean = X.mean(axis=0)
+    s_std = X.std(axis=0)
+    s_std[s_std == 0] = 1.0
+
+    def fit(Xtr, ytr, C):
+        z = (Xtr - s_mean) / s_std
+        m = LogisticRegression(C=C, max_iter=2000, class_weight="balanced")
+        m.fit(z, ytr)
+        return m
+
+    folds = GroupKFold(n_splits=min(5, len(sub_phones)))
+    best = None
+    for C in (0.05, 0.2, 0.5):
+        preds = np.empty_like(y)
+        valid_fold = True
+        for tr, te in folds.split(X, y, groups):
+            if len(set(y[tr])) < len(keep):
+                valid_fold = False
+                break
+            m = fit(X[tr], y[tr], C)
+            preds[te] = m.predict((X[te] - s_mean) / s_std)
+        if not valid_fold:
+            continue
+        score = balanced_accuracy_score(y, preds)
+        if best is None or score > best[1]:
+            best = (C, score)
+
+    chance = 1.0 / len(keep)
+    if best is None or best[1] < chance + MARGIN_OVER_CHANCE:
+        return cohort
+
+    C, score = best
+    final = fit(X, y, C)
+    classes = list(final.classes_)
+    coef = final.coef_
+    intercept = final.intercept_
+    if len(classes) == 2:
+        coef = np.vstack([-coef[0] / 2, coef[0] / 2])
+        intercept = np.array([-intercept[0] / 2, intercept[0] / 2])
+
+    cohort.update({
+        "contexts": classes,
+        "mean": [round(float(v), 6) for v in s_mean],
+        "std": [round(float(v), 6) for v in s_std],
+        "W": [[round(float(v), 6) for v in row] for row in coef],
+        "b": [round(float(v), 6) for v in intercept],
+    })
+    cohort["metrics"]["heldOutBalancedAccuracy"] = round(float(score), 4)
+    return cohort
+
+
 
 def train_species(rows, species, current_metric=None, fv=FEATURE_VERSION):
     """rows: [{installId, features[], context}]. Returns (model or None, report)."""
@@ -123,6 +212,19 @@ def train_species(rows, species, current_metric=None, fv=FEATURE_VERSION):
             "countsByContext": {c: counts[c] for c in classes},
         },
     }
+    by_breed = {}
+    for r in rows:
+        b = r.get("breedId")
+        if b and isinstance(b, str):
+            by_breed.setdefault(b, []).append(r)
+    breeds_out = {}
+    for b_id, b_rows in sorted(by_breed.items()):
+        cohort = _train_breed_cohort(b_rows, dim)
+        if cohort:
+            breeds_out[b_id] = cohort
+    if breeds_out:
+        model["breeds"] = breeds_out
+        report["breedsPublished"] = sorted(breeds_out.keys())
     report["decision"] = f"publish {version}"
     return model, report
 
@@ -137,7 +239,12 @@ def load_rows(fs, species, fv):
         feats = meta.get("features")
         if meta.get("featureVersion") != fv or not feats or not label or label == "other":
             continue
-        rows.append({"installId": d.get("installId"), "features": feats, "context": label})
+        rows.append({
+            "installId": d.get("installId"),
+            "breedId": meta.get("breedId"),
+            "features": feats,
+            "context": label,
+        })
     return rows
 
 

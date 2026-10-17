@@ -8,7 +8,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FEATURE_VERSION } from '../audio/features';
-import { predictShared } from './sharedModel';
+import { predictShared, sharedEvidence } from './sharedModel';
 
 const MAX_EXAMPLES = 300;
 export const MIN_TO_GUESS = 6; // taught barks before the pet's own guesses start
@@ -63,8 +63,17 @@ export async function resetExamples(petId) {
 }
 
 // Scale each number so no single one dominates the comparison.
-function scaler(examples, sharedModel) {
-  if (sharedModel?.mean) return { mean: sharedModel.mean, std: sharedModel.std };
+// Once a pet has enough of its own taught examples (12+), its own vocal baseline
+// scales its personal comparisons; otherwise we use the breed cohort baseline
+// (if available) or the species baseline.
+function scaler(examples, sharedModel, breedId = null) {
+  if (examples.length < 12) {
+    const cohort = breedId && sharedModel?.breeds?.[breedId];
+    if (cohort?.mean?.length === examples[0]?.v?.length) {
+      return { mean: cohort.mean, std: cohort.std };
+    }
+    if (sharedModel?.mean) return { mean: sharedModel.mean, std: sharedModel.std };
+  }
   const n = examples.length;
   const dim = examples[0].v.length;
   const mean = new Array(dim).fill(0);
@@ -86,17 +95,29 @@ function cosine(a, b) {
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
 }
 
+// Gentle circadian habit boost: if a pet usually barks for food at 17:30 or
+// walkies at 07:00, examples taught near the same time of day get a slight edge
+// (1.0 when recorded within ~2h, down to 0.90 at 12h apart). If all examples were
+// added at the same moment (e.g. unit tests), every example gets 1.0.
+function circadianWeight(exampleAt, nowMs) {
+  if (!exampleAt || !nowMs || Math.abs(nowMs - exampleAt) < 10 * 60 * 1000) return 1.0;
+  const hNow = new Date(nowMs).getHours() + new Date(nowMs).getMinutes() / 60;
+  const hEx = new Date(exampleAt).getHours() + new Date(exampleAt).getMinutes() / 60;
+  const diff = Math.abs(hNow - hEx);
+  const circHours = Math.min(diff, 24 - diff); // 0..12
+  return 0.9 + 0.2 * Math.cos((circHours / 12) * Math.PI); // 1.10 at same hour, 0.90 opposite
+}
+
 // Nearest taught barks vote for their situation.
-function predictPet(examples, vector, sharedModel) {
+function predictPet(examples, vector, sharedModel, breedId = null, nowMs = Date.now()) {
   const contexts = new Set(examples.map((e) => e.c));
   if (examples.length < MIN_TO_GUESS || contexts.size < MIN_CONTEXTS) return null;
-  const { mean, std } = scaler(examples, sharedModel);
+  const { mean, std } = scaler(examples, sharedModel, breedId);
   const z = (v) => v.map((x, i) => (x - mean[i]) / (std[i] || 1));
   const q = z(vector);
-  const now = Date.now();
-  const recency = (e) => 0.5 ** ((now - (e.at || now)) / (HALF_LIFE_DAYS * 86400000));
+  const recency = (e) => 0.5 ** ((nowMs - (e.at || nowMs)) / (HALF_LIFE_DAYS * 86400000));
   const scored = examples
-    .map((e) => ({ c: e.c, s: cosine(q, z(e.v)), r: recency(e) }))
+    .map((e) => ({ c: e.c, s: cosine(q, z(e.v)), r: recency(e) * circadianWeight(e.at, nowMs) }))
     .sort((a, b) => b.s - a.s);
   const k = Math.min(7, Math.max(3, Math.round(Math.sqrt(examples.length))));
   const votes = {};
@@ -110,14 +131,16 @@ function predictPet(examples, vector, sharedModel) {
   return votes;
 }
 
-// Best guess for a new bark, blending the pet's own examples with the shared
-// model. The more this pet has been taught, the more its own examples count.
-// Returns { contextId, confidence, source, show } or null.
-export async function guessContext(petId, vector, sharedModel) {
+// Best guess for a new bark, blending the pet's own examples with the breed
+// cohort and shared species model. The more this pet has been taught, the more
+// its own examples count.
+// Returns { contextId, confidence, source, show, wording, evidence } or null.
+export async function guessContext(petId, vector, sharedModel, opts = {}) {
   if (!vector) return null;
+  const { breedId = null, breedName = null, petName = null, now = Date.now() } = opts || {};
   const examples = await loadExamples(petId);
-  const pet = predictPet(examples, vector, sharedModel);
-  const shared = sharedModel ? predictShared(sharedModel, vector) : null;
+  const pet = predictPet(examples, vector, sharedModel, breedId, now);
+  const shared = sharedModel ? predictShared(sharedModel, vector, breedId) : null;
   if (!pet && !shared) return null;
 
   let probs;
@@ -134,14 +157,37 @@ export async function guessContext(petId, vector, sharedModel) {
     source = pet ? 'pet' : 'shared';
   }
   const [contextId, confidence] = Object.entries(probs).sort((a, b) => b[1] - a[1])[0];
+  const petMatches = examples.filter((e) => e.c === contextId).length;
+  const comm = sharedEvidence(sharedModel, contextId, breedId);
+  const evidence = formatEvidence({ petMatches, petName, comm, breedName });
+
   return {
     contextId,
     confidence: Number(confidence.toFixed(3)),
     source,
     show: confidence >= SHOW_CONFIDENCE,
     // Plain words instead of a percentage, which would read like a precise claim
-    wording: confidence >= 0.75 ? 'Pretty sure' : 'Maybe'
+    wording: confidence >= 0.75 ? 'Pretty sure' : 'Maybe',
+    petMatches,
+    breedMatches: comm?.breedCount || 0,
+    speciesMatches: comm?.speciesCount || 0,
+    evidence
   };
+}
+
+function formatEvidence({ petMatches, petName, comm, breedName }) {
+  const parts = [];
+  if (petMatches > 0) {
+    const who = petName ? `${petName}'s` : 'past';
+    parts.push(`${petMatches} of ${who} taught sounds`);
+  }
+  if (comm?.breedCount > 0) {
+    const cleanBreed = breedName ? breedName.replace(/^\S+\s/, '').split('/')[0].trim() : 'similar breed';
+    parts.push(`${comm.breedCount} ${cleanBreed} clips`);
+  } else if (comm?.speciesCount > 0) {
+    parts.push(`${comm.speciesCount} community clips`);
+  }
+  return parts.length ? `Matches ${parts.join(' + ')}` : null;
 }
 
 // How far along this pet's learning is, for the progress card.

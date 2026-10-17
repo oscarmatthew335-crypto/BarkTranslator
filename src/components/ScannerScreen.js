@@ -285,6 +285,11 @@ function ResultFooter({ result, species, onReplay, onShare, onDismiss, onTeach, 
           <Text style={s.guessText} maxFontSizeMultiplier={1.3}>
             🧠 {result.guess.wording || 'Maybe'}: {result.guess.label}
           </Text>
+          {result.guess.evidence ? (
+            <Text style={s.guessSub} maxFontSizeMultiplier={1.2}>
+              {result.guess.evidence}
+            </Text>
+          ) : null}
         </View>
       )}
       <View style={s.statRow}>
@@ -411,6 +416,7 @@ const s = StyleSheet.create({
     paddingVertical: 5
   },
   guessText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
+  guessSub: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 1 },
   statRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 },
   tag: { borderRadius: 999, borderWidth: 2, borderColor: C.ink, paddingHorizontal: 9, paddingVertical: 3 },
   tagText: { fontFamily: F.medium, fontSize: 12, color: C.ink },

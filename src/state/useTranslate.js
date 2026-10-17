@@ -158,10 +158,14 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     }
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 
-    // Pawlingo's guess from this pet's taught sounds plus the shared model.
+    // Pawlingo's guess from this pet's taught sounds plus the breed & shared model.
     // Used only when it's confident; otherwise the owner's pick decides.
     const sharedModel = await loadSharedModel(species.id);
-    const guess = await guessContext(pet.id, out.features?.vector, sharedModel);
+    const guess = await guessContext(pet.id, out.features?.vector, sharedModel, {
+      breedId: breed?.id,
+      breedName: breed?.name,
+      petName: pet.name
+    });
     const guessCtx = guess?.show ? species.contexts.find((c) => c.id === guess.contextId) : null;
 
     const pack = species.packs[pet.personality] || species.packs[species.defaultPersonality];
@@ -214,7 +218,14 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       contextId: ctx.id,
       pickedContextId: pickedId,
       guess: guessCtx
-        ? { contextId: guess.contextId, label: guessCtx.label, confidence: guess.confidence, wording: guess.wording, source: guess.source }
+        ? {
+            contextId: guess.contextId,
+            label: guessCtx.label,
+            confidence: guess.confidence,
+            wording: guess.wording,
+            source: guess.source,
+            evidence: guess.evidence || null
+          }
         : null,
       features: out.features?.vector || null,
       clipId: uploadClip ? `${species.id}-${now.getTime()}` : null,

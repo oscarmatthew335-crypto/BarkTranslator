@@ -55,3 +55,17 @@ def test_model_works_like_the_app():
     z = (x - np.array(model["mean"])) / np.array(model["std"])
     logits = np.array(model["W"]) @ z + np.array(model["b"])
     assert model["contexts"][int(np.argmax(logits))] == "play"
+
+
+def test_trains_breed_cohorts_when_saturated():
+    rows = make_rows(phones=18, per_phone=12)
+    for i, r in enumerate(rows):
+        r["breedId"] = "boerboel" if i % 2 == 0 else "chihuahua"
+    model, report = train.train_species(rows, "dog")
+    assert model is not None
+    assert "breeds" in model
+    assert "boerboel" in model["breeds"] and "chihuahua" in model["breeds"]
+    cohort = model["breeds"]["boerboel"]
+    assert cohort["metrics"]["examples"] >= 20
+    assert "W" in cohort and len(cohort["W"]) == 3
+
