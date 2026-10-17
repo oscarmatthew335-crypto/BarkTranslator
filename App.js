@@ -21,6 +21,7 @@ import SettingsSheet from './src/components/SettingsSheet';
 import LabelSheet from './src/components/LabelSheet';
 import MicPrimer from './src/components/MicPrimer';
 import ShareCard from './src/components/ShareCard';
+import ShareSheet from './src/components/ShareSheet';
 import TabBar from './src/components/TabBar';
 import { getSpecies } from './src/species';
 
@@ -174,6 +175,15 @@ function PetApp() {
 
       <MicPrimer visible={t.micPrimer} petName={pet.name} species={species} onAllow={t.allowMic} onClose={t.dismissMicPrimer} />
 
+      <ShareSheet
+        job={t.shareJob}
+        onVideo={t.shareVideo}
+        onPicture={(item) => {
+          t.closeShare();
+          t.sharePicture(item);
+        }}
+        onClose={t.closeShare}
+      />
       {t.shareItem && <ShareCard ref={shareCardRef} item={t.shareItem} />}
     </SafeAreaView>
   );

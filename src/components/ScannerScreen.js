@@ -53,6 +53,8 @@ export default function ScannerScreen(props) {
   const bond = progress ? bondLevel(progress) : null;
 
   const [contextOpen, setContextOpen] = useState(false);
+  const [idleH, setIdleH] = useState(0);
+  const petSize = Math.max(60, Math.min(170, Math.round((idleH - 70) * 0.7)));
   const context = species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
   const listening = recorder.isRecording;
   const result = currentResult && !listening && currentResult.petId === pet.id ? currentResult : null;
@@ -68,14 +70,7 @@ export default function ScannerScreen(props) {
       {cameraOn ? (
         <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={torch} mute />
       ) : (
-        <View style={[StyleSheet.absoluteFill, s.paperBg]}>
-          <Text style={s.bigPet}>{species.emoji}</Text>
-          {!result && !listening && !notice && (
-            <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
-              <Text style={s.camHintText}>📸 Show {pet.name} on camera</Text>
-            </Pressable>
-          )}
-        </View>
+        <View style={[StyleSheet.absoluteFill, s.paperBg]} />
       )}
 
       {/* Top row: pet switcher, camera tools, settings */}
@@ -129,16 +124,38 @@ export default function ScannerScreen(props) {
               />
             }
           />
-        ) : notice ? (
-          <Sticker color={C.butter} radius={20} innerStyle={s.noticeBox}>
-            <Text style={s.noticeText}>{notice.text}</Text>
-            {notice.action && (
-              <Pressable style={s.noticeAction} onPress={notice.action.onPress} accessibilityRole="button">
-                <Text style={s.noticeActionText}>{notice.action.label}</Text>
-              </Pressable>
+        ) : (
+          <>
+            {/* The big pet sits in the space left above the panel, so the
+                panel can grow (large text, small phones) without covering it. */}
+            {!cameraOn && (
+              <View style={s.idle} onLayout={(e) => setIdleH(e.nativeEvent.layout.height)}>
+                {idleH > 90 && (
+                  <Text style={[s.bigPet, { fontSize: petSize, lineHeight: petSize * 1.15 }]} maxFontSizeMultiplier={1}>
+                    {species.emoji}
+                  </Text>
+                )}
+                {!notice && (
+                  <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
+                    <Text style={s.camHintText} maxFontSizeMultiplier={1.3}>
+                      📸 Show {pet.name} on camera
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
             )}
-          </Sticker>
-        ) : null}
+            {notice && (
+              <Sticker color={C.butter} radius={20} innerStyle={s.noticeBox}>
+                <Text style={s.noticeText}>{notice.text}</Text>
+                {notice.action && (
+                  <Pressable style={s.noticeAction} onPress={notice.action.onPress} accessibilityRole="button">
+                    <Text style={s.noticeActionText}>{notice.action.label}</Text>
+                  </Pressable>
+                )}
+              </Sticker>
+            )}
+          </>
+        )}
       </View>
 
       {/* Bottom panel */}
@@ -341,10 +358,12 @@ function Action({ emoji, label, onPress, primary }) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  paperBg: { backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center', paddingBottom: 190 },
-  bigPet: { fontSize: 170, opacity: 0.9 },
+  paperBg: { backgroundColor: C.bg },
+  idle: { flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 60 },
+  bigPet: { fontSize: 170, opacity: 0.9, textAlign: 'center' },
   camHint: {
-    marginTop: 14,
+    marginTop: 8,
+    marginBottom: 6,
     backgroundColor: C.paper,
     borderRadius: 999,
     borderWidth: 2,
@@ -475,7 +494,7 @@ const s = StyleSheet.create({
   faceEmoji: { fontSize: 26 },
   faceLabel: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, marginTop: 6 },
   faceLabelActive: { fontFamily: F.bold, color: C.ink },
-  pawRow: { alignItems: 'center', paddingTop: 8 },
+  pawRow: { alignItems: 'center', paddingTop: 6 },
   pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
   hintWrap: { position: 'absolute', bottom: 150, left: 16, right: 16, zIndex: 5 },
   hintBox: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },

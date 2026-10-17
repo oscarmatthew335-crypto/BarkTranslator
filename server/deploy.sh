@@ -17,7 +17,7 @@ APP_KEY=$(gcloud functions describe pawlingo-ingest --gen2 --region=$REGION \
   --format='value(serviceConfig.environmentVariables.APP_KEY)')
 gcloud functions deploy pawlingo-ingest --gen2 --runtime=python312 --region=$REGION \
   --source=server --entry-point=ingest --trigger-http --allow-unauthenticated \
-  --service-account=$SA --memory=256Mi --max-instances=5 \
+  --service-account=$SA --memory=1Gi --cpu=1 --timeout=120 --max-instances=5 \
   --set-env-vars=BUCKET=$BUCKET,APP_KEY=$APP_KEY --quiet >/dev/null
 URL=$(gcloud functions describe pawlingo-ingest --gen2 --region=$REGION --format='value(serviceConfig.uri)')
 echo -n "   model check (should say 204, no model yet): "

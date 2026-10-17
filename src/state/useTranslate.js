@@ -10,7 +10,10 @@ import { pickLinePool, moodScores } from '../audio/barkAnalysis';
 import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
-import { keepPhoto } from '../storage/photos';
+import { keepPhoto, keepAudio, fileExists } from '../storage/photos';
+import { playFile, playSounds, stopSounds } from '../audio/sounds';
+import { makeVideo, videoAvailable } from '../share/videoShare';
+import { File } from 'expo-file-system';
 import { getSpecies, APP_NAME, STORE_URL } from '../species';
 
 const MILESTONE_PER_CONTEXT = 3;
@@ -53,13 +56,31 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     if (shareClips) flush();
   }, [shareClips]);
 
-  const speak = useCallback((item) => {
-    Speech.stop();
-    Speech.speak(item.text, { pitch: item.pitch, rate: item.rate });
-  }, []);
+  // Replay plays the pet's real recorded sound. Reading the words aloud with
+  // the phone's voice is optional (Settings), and off by default.
+  const readAloud = data.settings?.readAloud === true;
+  const speak = useCallback(
+    (item, { auto = false } = {}) => {
+      Speech.stop();
+      stopSounds();
+      let delay = 0;
+      if (!auto) {
+        if (fileExists(item.audioUri)) {
+          playFile(item.audioUri);
+          delay = Math.min(15000, Number(item.duration || 1.5) * 1000) + 300;
+        } else {
+          playSounds(item.species === 'cat' ? 'cat_unit_meow' : 'dog_unit_bark');
+          delay = 900;
+        }
+      }
+      if (readAloud) setTimeout(() => Speech.speak(item.text, { pitch: item.pitch, rate: item.rate }), delay);
+    },
+    [readAloud]
+  );
 
   const startListening = useCallback(async () => {
     Speech.stop();
+    stopSounds();
     setNotice(null);
     const res = await bark.start();
     if (res.ok) {
@@ -105,7 +126,9 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
   const finishListening = async () => {
     if (!bark.isRecording) return;
     const photoPromise = snapPhoto();
-    const out = await bark.stop({ keepClip: shareClips === true });
+    // Always keep the recording: it goes in share videos, and (only if the
+    // owner opted in) to the server for training.
+    const out = await bark.stop({ keepClip: true });
     const tempPhoto = await photoPromise;
     if (!out) return;
     const { analysis, heldMs } = out;
@@ -129,6 +152,8 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     const now = new Date();
     const id = String(now.getTime());
     const photoUri = await keepPhoto(tempPhoto, id);
+    const audioUri = await keepAudio(out.clipUri, id);
+    const uploadClip = shareClips === true && Boolean(out.clipUri);
 
     const entry = {
       id,
@@ -150,18 +175,24 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       rate: Math.max(0.6, Math.min(1.5, pack.rate + (breed?.rateMod || 0))),
       emotions: moodScores(analysis, ctx.id, pet.personality),
       photoUri,
+      audioUri,
       contextId: ctx.id,
       pickedContextId: pet.contextId,
       guess: guessCtx
         ? { contextId: guess.contextId, label: guessCtx.label, confidence: guess.confidence, wording: guess.wording, source: guess.source }
         : null,
       features: out.features?.vector || null,
-      clipId: out.clipUri ? `${species.id}-${now.getTime()}` : null,
+      clipId: uploadClip ? `${species.id}-${now.getTime()}` : null,
       labelled: false,
       date: now.toISOString()
     };
 
-    if (out.clipUri) {
+    if (!uploadClip && out.clipUri) {
+      try {
+        new File(out.clipUri).delete();
+      } catch (_) {}
+    }
+    if (uploadClip) {
       queueClip({
         clipId: entry.clipId,
         tempUri: out.clipUri,
@@ -176,7 +207,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     }
     setCurrentResult(entry);
     addEntry(entry);
-    speak(entry);
+    speak(entry, { auto: true });
   };
   finishRef.current = finishListening;
 
@@ -241,7 +272,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
   );
 
   // Share a picture card (photo + speech bubble + app link); fall back to text.
-  const shareResult = useCallback(
+  const sharePicture = useCallback(
     async (item) => {
       setShareItem(item);
       await new Promise((r) => setTimeout(r, 250)); // let the card render
@@ -258,6 +289,41 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     },
     [shareCardRef]
   );
+
+  // Share: ask "video or picture?" when videos can be made, else a picture.
+  // shareJob drives the share sheet: { item, step: 'choose' | 'making' | 'error', message }
+  const [shareJob, setShareJob] = useState(null);
+  const videoAbort = useRef(null);
+
+  const shareResult = useCallback(
+    (item) => {
+      if (videoAvailable) setShareJob({ item, step: 'choose' });
+      else sharePicture(item);
+    },
+    [sharePicture]
+  );
+
+  const shareVideo = useCallback(async (item) => {
+    const controller = new AbortController();
+    videoAbort.current = controller;
+    setShareJob({ item, step: 'making' });
+    try {
+      const uri = await makeVideo(item, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      setShareJob(null);
+      await Sharing.shareAsync(uri, { mimeType: 'video/mp4', dialogTitle: `Share ${item.petName}'s video` });
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      setShareJob({ item, step: 'error', message: e?.message || "The video couldn't be made." });
+    } finally {
+      if (videoAbort.current === controller) videoAbort.current = null;
+    }
+  }, []);
+
+  const closeShare = useCallback(() => {
+    videoAbort.current?.abort();
+    setShareJob(null);
+  }, []);
 
   return {
     bark,
@@ -278,6 +344,10 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     refreshProgress,
     speak,
     shareResult,
+    sharePicture,
+    shareVideo,
+    shareJob,
+    closeShare,
     shareItem
   };
 }

@@ -79,3 +79,15 @@ export async function playSounds(names, gapMs = 90) {
   timers.push(setTimeout(stopSounds, at + 300));
   return at;
 }
+
+// Plays a recording from a file (the pet's own sound from a translation).
+export async function playFile(uri) {
+  stopSounds();
+  try {
+    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
+  } catch (_) {}
+  try {
+    current = createAudioPlayer({ uri });
+    current.play();
+  } catch (_) {}
+}

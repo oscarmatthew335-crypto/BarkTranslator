@@ -8,6 +8,9 @@ Google Cloud Functions (2nd gen, Python 3.12), one HTTP function, three routes:
   GET    /model    ?species=dog&fv=f1&have=<version>: the current shared model
                    (written by train/train.py), or 204 if none / unchanged
   POST   /errors   JSON crash report: {message, stack, fatal, where, appVersion, platform, osVersion}
+  POST   /video    multipart: "meta" (JSON {text, petName, label, species}) +
+                   optional "photo" (JPEG) and "clip" (WAV): returns a short MP4
+                   share video. Nothing is stored; inputs are deleted at once.
   GET    /privacy  the public privacy policy page (no key needed)
 
 Each phone (install ID) is limited per day: DAILY_LIMITS below. Over the
@@ -27,6 +30,7 @@ import hmac
 import json
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 
 import functions_framework
@@ -40,7 +44,8 @@ WORD_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 META_NUMBERS = ("soundCount", "loudness", "clarity", "durationMs", "activeMs", "longestMs", "peakDb", "noiseFloorDb")
 META_WORDS = ("breedId", "chosenContext", "pattern", "platform", "format", "featureVersion")
 MAX_FEATURES = 128
-DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50}
+DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40}
+MAX_PHOTO_BYTES = 4_000_000
 PRIVACY_PAGE = os.path.join(os.path.dirname(__file__), "privacy.html")
 
 
@@ -178,6 +183,10 @@ def ingest(request):
         if _over_limit(install_id, "errors"):
             return _error(429, "daily error report limit reached")
         return _post_error(request, install_id)
+    if path.endswith("/video") and request.method == "POST":
+        if _over_limit(install_id, "videos"):
+            return _error(429, "daily video limit reached; try tomorrow")
+        return _post_video(request)
     if path.endswith("/me") and request.method == "DELETE":
         removed = get_backend().delete_install(install_id)
         return jsonify({"deleted": removed}), 200
@@ -303,3 +312,53 @@ def _post_error(request, install_id):
         return _error(400, "missing message")
     get_backend().save_error(record)
     return jsonify({"ok": True}), 201
+
+
+def _post_video(request):
+    if request.content_length and request.content_length > MAX_PHOTO_BYTES + MAX_CLIP_BYTES + 50_000:
+        return _error(413, "too large")
+    try:
+        raw = json.loads(request.form.get("meta", ""))
+    except (ValueError, TypeError):
+        return _error(400, "bad meta")
+    if not isinstance(raw, dict) or not isinstance(raw.get("text"), str) or not raw["text"].strip():
+        return _error(400, "bad meta")
+
+    def field(name, limit):
+        f = request.files.get(name)
+        if not f:
+            return None
+        data = f.read(limit + 1)
+        if len(data) > limit:
+            raise ValueError(name)
+        return data or None
+
+    try:
+        photo = field("photo", MAX_PHOTO_BYTES)
+        clip = field("clip", MAX_CLIP_BYTES)
+    except ValueError:
+        return _error(413, "file too large")
+    if clip is not None and not (clip[:4] == b"RIFF" and clip[8:12] == b"WAVE"):
+        clip = None  # only WAV can be mixed in; make the video without sound
+
+    import video  # Pillow and ffmpeg load only when someone shares a video
+
+    species = raw.get("species") if raw.get("species") in ("dog", "cat") else "dog"
+    with tempfile.TemporaryDirectory() as tmp:
+        out = os.path.join(tmp, "pawlingo.mp4")
+        try:
+            video.render(
+                out,
+                photo_bytes=photo,
+                wav_bytes=clip,
+                text=str(raw.get("text"))[:200],
+                name=str(raw.get("petName") or "")[:40],
+                label=str(raw.get("label") or "")[:60],
+                species=species,
+            )
+        except Exception as e:  # report and fail cleanly; the app falls back to a picture
+            print(json.dumps({"severity": "ERROR", "message": f"video render failed: {e}"}))
+            return _error(500, "could not make the video")
+        with open(out, "rb") as f:
+            data = f.read()
+    return data, 200, {"Content-Type": "video/mp4", "Cache-Control": "no-store"}

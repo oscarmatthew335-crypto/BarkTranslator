@@ -15,7 +15,7 @@ const KEY = 'pawlingo:state:v2';
 const OLD_KEY = 'barktranslator:state:v1';
 export const MAX_HISTORY = 100;
 
-export const DEFAULT_SETTINGS = { mobileData: false, ageConfirmed: false, seen: {} };
+export const DEFAULT_SETTINGS = { mobileData: false, ageConfirmed: false, readAloud: false, seen: {} };
 
 export function newPetId() {
   const bytes = new Uint8Array(8);
