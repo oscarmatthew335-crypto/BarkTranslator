@@ -9,6 +9,7 @@ import { Sticker } from './ui';
 import PawButton from './PawButton';
 import ProgressRing from './ProgressRing';
 import { bondLevel } from '../learning/petLearning';
+import { activeContext } from '../lines';
 import SpeechBubble from './SpeechBubble';
 import ContextSheet from './ContextSheet';
 
@@ -55,7 +56,8 @@ export default function ScannerScreen(props) {
   const [contextOpen, setContextOpen] = useState(false);
   const [idleH, setIdleH] = useState(0);
   const petSize = Math.max(60, Math.min(170, Math.round((idleH - 70) * 0.7)));
-  const context = species.contexts.find((c) => c.id === pet.contextId) || species.contexts[0];
+  const activeId = activeContext(pet);
+  const context = species.contexts.find((c) => c.id === activeId) || species.contexts[0];
   const listening = recorder.isRecording;
   const result = currentResult && !listening && currentResult.petId === pet.id ? currentResult : null;
 
@@ -68,7 +70,16 @@ export default function ScannerScreen(props) {
     <View style={s.container}>
       {/* Backdrop: the pet through the camera, or a big pet on lilac paper */}
       {cameraOn ? (
-        <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing={facing} enableTorch={torch} mute />
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          enableTorch={torch}
+          mode="video"
+          videoQuality="720p"
+          videoBitrate={2_000_000}
+          mute
+        />
       ) : (
         <View style={[StyleSheet.absoluteFill, s.paperBg]} />
       )}
@@ -105,7 +116,7 @@ export default function ScannerScreen(props) {
       {/* Middle: live listening, the speech bubble, or a message */}
       <View style={s.middle} pointerEvents="box-none">
         {listening ? (
-          <ListeningCard recorder={recorder} pet={pet} species={species} />
+          <ListeningCard recorder={recorder} pet={pet} species={species} filming={cameraOn} />
         ) : result ? (
           <SpeechBubble
             name={result.petName}
@@ -138,7 +149,7 @@ export default function ScannerScreen(props) {
                 {!notice && (
                   <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
                     <Text style={s.camHintText} maxFontSizeMultiplier={1.3}>
-                      📸 Show {pet.name} on camera
+                      🎥 Film {pet.name} for a share video
                     </Text>
                   </Pressable>
                 )}
@@ -230,7 +241,7 @@ export default function ScannerScreen(props) {
       <ContextSheet
         visible={contextOpen}
         contexts={species.contexts}
-        selected={pet.contextId}
+        selected={activeId}
         petName={pet.name}
         onSelect={(id) => {
           onChangeContext(id);
@@ -243,11 +254,12 @@ export default function ScannerScreen(props) {
 }
 
 // Live meter while listening. Only this card redraws with the audio.
-function ListeningCard({ recorder, pet, species }) {
+function ListeningCard({ recorder, pet, species, filming }) {
   const meter = useMeter(recorder);
   return (
     <Sticker color={C.paper} radius={24} innerStyle={s.listenBox}>
       <Text style={s.listenTitle} maxFontSizeMultiplier={1.3}>
+        {filming ? '🔴 ' : ''}
         {meter.heard ? `Hearing ${pet.name}…` : `Listening for ${pet.name}…`} {(meter.ms / 1000).toFixed(1)}s
       </Text>
       <View style={s.meterRow} accessible={false}>

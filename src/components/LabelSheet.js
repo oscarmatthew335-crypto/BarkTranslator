@@ -55,7 +55,7 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
 
               <View style={s.chips}>
                 {species.contexts
-                  .filter((c) => c.id !== wrongId)
+                  .filter((c) => c.id !== wrongId && c.id !== 'chat')
                   .map((c) => (
                     <Chip key={c.id} text={c.label} on={contextId === c.id} onPress={() => setContextId(c.id)} color={C.sky} />
                   ))}

@@ -6,6 +6,17 @@ import { HUMAN_TO_DOG_PHRASES, DECODER_GUIDE as DOG_DECODER } from './data/speak
 import { CAT_CONTEXTS } from './data/cat/contexts';
 import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 import { HUMAN_TO_CAT_PHRASES, CAT_DECODER_GUIDE } from './data/cat/speakAndDecoder';
+import { DOG_CHAT_LINES, CAT_CHAT_LINES } from './data/chatLines';
+
+// "Just chatting" comes first: the default, with lines that fit anywhere.
+const CHAT = {
+  id: 'chat',
+  label: '💬 Just chatting',
+  shortLabel: 'Chatting',
+  tip: 'Tip: Pick what is going on (food, door, play) for a few minutes and the translations follow. It goes back to chatting by itself.'
+};
+const withChat = (packs, chat) =>
+  Object.fromEntries(Object.entries(packs).map(([id, p]) => [id, { ...p, lines: { chat: chat[id], ...p.lines } }]));
 
 export const APP_NAME = 'Pawlingo';
 export const STORE_URL = 'https://play.google.com/store/apps/details?id=com.pawlingo.app';
@@ -21,13 +32,14 @@ export const SPECIES = {
     sound: 'bark',
     sounds: 'barks',
     speakTab: 'Speak Dog',
-    contexts: DOG_CONTEXTS,
-    packs: DOG_PACKS,
+    contexts: [CHAT, ...DOG_CONTEXTS],
+    packs: withChat(DOG_PACKS, DOG_CHAT_LINES),
     breeds: DOG_BREEDS,
     phrases: HUMAN_TO_DOG_PHRASES,
     decoder: DOG_DECODER,
     defaultPersonality: 'boet',
-    defaultContext: 'door',
+    defaultContext: 'chat',
+    defaultHome: 'garden',
     patternLabels: {
       sharp: '⚡ Sharp alert bark',
       rapid: '🔁 Rapid-fire barking',
@@ -58,13 +70,14 @@ export const SPECIES = {
     sound: 'meow',
     sounds: 'meows',
     speakTab: 'Speak Cat',
-    contexts: CAT_CONTEXTS,
-    packs: CAT_PERSONALITY_PACKS,
+    contexts: [CHAT, ...CAT_CONTEXTS],
+    packs: withChat(CAT_PERSONALITY_PACKS, CAT_CHAT_LINES),
     breeds: null,
     phrases: HUMAN_TO_CAT_PHRASES,
     decoder: CAT_DECODER_GUIDE,
     defaultPersonality: 'boet',
-    defaultContext: 'food',
+    defaultContext: 'chat',
+    defaultHome: 'indoor',
     patternLabels: {
       sharp: '😼 Sharp meow',
       rapid: '🐦 Chatter run',

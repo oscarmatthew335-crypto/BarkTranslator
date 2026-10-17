@@ -239,3 +239,26 @@ def test_video_without_photo_or_sound(client):
 
 def test_video_needs_text(client):
     assert post_video(client, {"petName": "Rex"}).status_code == 400
+
+
+def _camera_clip(seconds=3):
+    import subprocess
+    import tempfile
+
+    import imageio_ffmpeg
+
+    with tempfile.TemporaryDirectory() as d:
+        out = os.path.join(d, "cam.mp4")
+        subprocess.run(
+            [imageio_ffmpeg.get_ffmpeg_exe(), "-loglevel", "error", "-f", "lavfi", "-i", f"testsrc=size=720x1280:rate=30:duration={seconds}",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", out],
+            check=True,
+        )
+        return open(out, "rb").read()
+
+
+def test_video_from_camera_clip(client):
+    meta = {"text": "Tuna. Now.", "petName": "TumTum", "species": "cat"}
+    r = post_video(client, meta, video=(_camera_clip(), "cam.mp4", "video/mp4"), clip=(_wav(1.0), "c.wav", "audio/wav"))
+    assert r.status_code == 200, r.data[:200]
+    assert r.data[4:8] == b"ftyp"

@@ -10,7 +10,7 @@ import { fileExists } from '../storage/photos';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 const KEY = process.env.EXPO_PUBLIC_PAWLINGO_KEY || '';
-const TIMEOUT_MS = 60000;
+const TIMEOUT_MS = 90000;
 
 export const videoAvailable = Boolean(API && KEY);
 
@@ -41,7 +41,9 @@ export async function makeVideo(entry, { signal } = {}) {
       species: entry.species
     })
   );
-  if (fileExists(entry.photoUri)) {
+  if (fileExists(entry.videoUri)) {
+    form.append('video', new File(entry.videoUri));
+  } else if (fileExists(entry.photoUri)) {
     const small = await smallPhoto(entry.photoUri);
     if (small) form.append('photo', new File(small));
   }

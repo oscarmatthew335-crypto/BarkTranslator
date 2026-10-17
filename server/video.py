@@ -1,4 +1,4 @@
-"""Makes the short share video: the pet's photo, the speech bubble popping up
+"""Makes the short share video: the pet's camera clip (or photo), the speech bubble popping up
 and typing out in time with the recorded bark, then a Pawlingo end card.
 
 Nothing here is stored. The caller passes bytes in and gets an MP4 path back
@@ -92,6 +92,45 @@ def _wrap(draw, text, font, width):
     if line:
         lines.append(line)
     return lines
+
+
+class ClipFrames:
+    """Frames of the pet's camera clip, cropped to fill the 4:5 frame, read
+    one at a time from ffmpeg. After the clip ends the last frame holds."""
+
+    def __init__(self, path):
+        ff = imageio_ffmpeg.get_ffmpeg_exe()
+        self.seconds = probe_seconds(path)
+        self.proc = subprocess.Popen(
+            [ff, "-loglevel", "error", "-i", path, "-an",
+             "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS}",
+             "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        self.last = None
+
+    def next(self):
+        if self.proc is not None:
+            raw = self.proc.stdout.read(W * H * 3)
+            if len(raw) == W * H * 3:
+                self.last = Image.frombytes("RGB", (W, H), raw)
+            else:
+                self.close()
+        return self.last.copy() if self.last is not None else Image.new("RGB", (W, H), BG)
+
+    def close(self):
+        if self.proc is not None:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+            self.proc = None
+
+
+def probe_seconds(path):
+    out = subprocess.run([imageio_ffmpeg.get_ffmpeg_exe(), "-i", path], capture_output=True, text=True).stderr
+    m = re.search(r"Duration: (\d+):(\d+):([\d.]+)", out)
+    return int(m[1]) * 3600 + int(m[2]) * 60 + float(m[3]) if m else 0.0
 
 
 class Card:
@@ -217,7 +256,7 @@ class Card:
         return frame
 
 
-def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="", species="dog"):
+def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="", species="dog", video_path=None):
     photo = None
     if photo_bytes:
         try:
@@ -230,11 +269,19 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
     audio = read_wav(wav_bytes) if wav_bytes else None
     samples, rate = audio if audio else ([], 16000)
     audio_s = len(samples) / rate if samples else 0.0
-    audio_start = 0.5
+    clip = ClipFrames(video_path) if video_path else None
+    if clip is not None and clip.seconds <= 0.2:
+        clip.close()
+        clip = None
+    # With a real clip the sound plays in sync with the picture; with a photo
+    # it starts just as the bubble pops up.
+    audio_start = 0.0 if clip else 0.5
     type_start = 0.6
     type_s = min(6.0, max(1.6, audio_s or len(card.text) / 18))
     hold_s = 1.8
     main_s = type_start + type_s + hold_s
+    if clip:
+        main_s = max(main_s, min(clip.seconds, 15.0))
     end_s = 2.0
     total = main_s + end_s
     frames = int(total * FPS)
@@ -251,7 +298,14 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     cmd = [ff, "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-"]
     if wav_path:
-        cmd += ["-i", wav_path, "-filter_complex", f"[1:a]adelay={int(audio_start * 1000)}:all=1,apad,aresample=44100[a]"]
+        # Phone recordings from across the room are quiet: bring the loudest
+        # moment up to about -3 dB (at most +24 dB) so the pet is heard.
+        peak = max((abs(v) for v in samples), default=0.0)
+        gain_db = 0.0 if peak <= 0 else max(0.0, min(24.0, -3.0 - 20 * math.log10(peak)))
+        cmd += [
+            "-i", wav_path, "-filter_complex",
+            f"[1:a]volume={gain_db:.1f}dB,adelay={int(audio_start * 1000)}:all=1,apad,aresample=44100[a]",
+        ]
     else:
         cmd += ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono", "-filter_complex", "[1:a]anull[a]"]
     cmd += [
@@ -268,7 +322,7 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
                 if t - main_s < 0.25:  # quick fade from the main card
                     frame = Image.blend(last, frame, (t - main_s) / 0.25)
             else:
-                frame = card._background(t, main_s)
+                frame = clip.next() if clip else card._background(t, main_s)
                 if t >= 0.35:
                     k = 1.0 if t >= type_start + type_s else max(0.0, (t - type_start) / type_s)
                     shown = int(round(card.total_chars * _ease_in_out(k))) if k < 1 else card.total_chars
@@ -294,4 +348,6 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
     finally:
         if proc.poll() is None:
             proc.kill()
+        if clip:
+            clip.close()
     return {"seconds": round(total, 2), "frames": frames}
