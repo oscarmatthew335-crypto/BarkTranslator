@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { computeFeatures } from '../src/audio/features.js';
-import { addExample, guessContext, learningProgress, resetExamples } from '../src/learning/petLearning.js';
+import { addExample, circadianWeight, guessContext, learningProgress, resetExamples } from '../src/learning/petLearning.js';
 import { predictShared } from '../src/learning/sharedModel.js';
 import { synth } from './synth.mjs';
 
@@ -82,7 +82,29 @@ test('shared model maths and breed cohort blending', async () => {
       }
     }
   }, { breedId: 'boerboel', breedName: '🐕 Boerboel / Mastiff', petName: 'Spot' });
-  assert.ok(g.evidence && g.evidence.includes("Spot's taught sounds") && g.evidence.includes('48 Boerboel clips'));
+  assert.equal(g.evidence, "Based on 3 of Spot's taught sounds + 48 Boerboel clips");
+
+  const gComm = await guessContext('untaughtPet', fp('food'), {
+    ...m,
+    contexts: ['door', 'food', 'play'],
+    mean: new Array(62).fill(0),
+    std: new Array(62).fill(1),
+    W: [new Array(62).fill(0), new Array(62).fill(0), new Array(62).fill(0)],
+    b: [0, 5, 0],
+    metrics: { phones: 20, examples: 120, countsByContext: { food: 60 } },
+    breeds: {}
+  });
+  assert.equal(gComm.evidence, 'Based on 60 community clips');
+});
+
+test('circadianWeight ranges from 0.90 to 1.10 and gives 1.0 within 10 minutes', () => {
+  const hour = 3600 * 1000;
+  const now = new Date(2026, 9, 17, 12, 0, 0).getTime();
+  assert.ok(Math.abs(circadianWeight(now - 24 * hour, now) - 1.10) < 1e-9, '0h apart (yesterday same hour) is 1.10');
+  assert.ok(Math.abs(circadianWeight(now - 6 * hour, now) - 1.00) < 1e-9, '6h apart is 1.00');
+  assert.ok(Math.abs(circadianWeight(now - 12 * hour, now) - 0.90) < 1e-9, '12h apart is 0.90');
+  assert.equal(circadianWeight(now - 5 * 60 * 1000, now), 1.0, 'within 10 minutes of now is 1.0');
+  assert.equal(circadianWeight(now, now), 1.0);
 });
 
 test('bond levels count down to the next target', async () => {

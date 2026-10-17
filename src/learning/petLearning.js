@@ -97,15 +97,15 @@ function cosine(a, b) {
 
 // Gentle circadian habit boost: if a pet usually barks for food at 17:30 or
 // walkies at 07:00, examples taught near the same time of day get a slight edge
-// (1.0 when recorded within ~2h, down to 0.90 at 12h apart). If all examples were
-// added at the same moment (e.g. unit tests), every example gets 1.0.
-function circadianWeight(exampleAt, nowMs) {
+// (1.10 at the same hour, 1.00 at 6h apart, down to 0.90 at 12h apart). Examples
+// taught within 10 minutes of now (e.g. unit tests) get 1.0.
+export function circadianWeight(exampleAt, nowMs) {
   if (!exampleAt || !nowMs || Math.abs(nowMs - exampleAt) < 10 * 60 * 1000) return 1.0;
   const hNow = new Date(nowMs).getHours() + new Date(nowMs).getMinutes() / 60;
   const hEx = new Date(exampleAt).getHours() + new Date(exampleAt).getMinutes() / 60;
   const diff = Math.abs(hNow - hEx);
   const circHours = Math.min(diff, 24 - diff); // 0..12
-  return 0.9 + 0.2 * Math.cos((circHours / 12) * Math.PI); // 1.10 at same hour, 0.90 opposite
+  return 1.0 + 0.1 * Math.cos((circHours / 12) * Math.PI); // 1.10 at same hour, 0.90 opposite
 }
 
 // Nearest taught barks vote for their situation.
@@ -187,7 +187,7 @@ function formatEvidence({ petMatches, petName, comm, breedName }) {
   } else if (comm?.speciesCount > 0) {
     parts.push(`${comm.speciesCount} community clips`);
   }
-  return parts.length ? `Matches ${parts.join(' + ')}` : null;
+  return parts.length ? `Based on ${parts.join(' + ')}` : null;
 }
 
 // How far along this pet's learning is, for the progress card.
