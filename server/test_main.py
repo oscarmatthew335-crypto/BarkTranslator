@@ -262,3 +262,71 @@ def test_video_from_camera_clip(client):
     r = post_video(client, meta, video=(_camera_clip(), "cam.mp4", "video/mp4"), clip=(_wav(1.0), "c.wav", "audio/wav"))
     assert r.status_code == 200, r.data[:200]
     assert r.data[4:8] == b"ftyp"
+
+
+
+# ------------------------------------------------------------------ picked clips (/extract)
+def _media(seconds=2.0, video=False, sound=True, fmt="mp4"):
+    import subprocess
+    import tempfile
+
+    import imageio_ffmpeg
+
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    with tempfile.TemporaryDirectory() as tmp:
+        out = os.path.join(tmp, f"m.{fmt}")
+        args = [ff, "-hide_banner", "-loglevel", "error", "-y"]
+        if video:
+            args += ["-f", "lavfi", "-i", f"color=c=black:s=64x64:d={seconds}"]
+        if sound:
+            args += ["-f", "lavfi", "-i", f"sine=frequency=600:duration={seconds}"]
+        args += ["-metadata", "creation_time=2026-10-17T07:02:00Z", "-t", str(seconds)]
+        if video:
+            args += ["-c:v", "libx264", "-pix_fmt", "yuv420p"] if sound else ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-an"]
+        if sound:
+            args += ["-c:a", "aac"] if fmt in ("mp4", "m4a") else []
+        subprocess.run(args + [out], check=True)
+        return open(out, "rb").read()
+
+
+def post_extract(client, data, **form):
+    return client.post("/extract", data={"media": (io.BytesIO(data), "clip.bin", "application/octet-stream"), **form},
+                       headers=HEADERS, content_type="multipart/form-data")
+
+
+def test_extract_video_returns_16k_mono_wav_and_recording_time(client):
+    r = post_extract(client, _media(2.0, video=True))
+    assert r.status_code == 200, r.data[:200]
+    assert r.data[:4] == b"RIFF" and r.data[8:12] == b"WAVE"
+    import struct
+    channels, rate = struct.unpack("<HI", r.data[22:28])
+    assert channels == 1 and rate == 16000
+    assert r.headers.get("X-Recorded-At") == "2026-10-17T07:02:00Z"
+    assert r.headers.get("Cache-Control") == "no-store"
+
+
+def test_extract_voice_note_and_trim(client):
+    r = post_extract(client, _media(6.0, fmt="m4a"), start="1", seconds="2")
+    assert r.status_code == 200
+    samples = (len(r.data) - 44) // 2
+    assert 1.8 * 16000 <= samples <= 2.2 * 16000
+
+
+def test_extract_caps_length_at_30_seconds(client):
+    r = post_extract(client, _media(1.0, fmt="m4a"), seconds="999")
+    assert r.status_code == 200      # asking for more than 30 s is clamped, not an error
+
+
+def test_extract_rejects_silent_video_garbage_and_huge(client):
+    assert post_extract(client, _media(1.0, video=True, sound=False)).status_code == 422
+    assert post_extract(client, b"not a media file at all " * 20).status_code == 422
+    assert post_extract(client, b"x" * 10).status_code == 400
+    big = b"x" * (main.MAX_MEDIA_BYTES + 10)
+    assert post_extract(client, big).status_code == 413
+    assert client.post("/extract", headers=HEADERS).status_code == 400
+
+
+def test_extract_is_rate_limited(client, monkeypatch):
+    monkeypatch.setitem(main.DAILY_LIMITS, "extracts", 1)
+    assert post_extract(client, _media(0.5, fmt="m4a")).status_code == 200
+    assert post_extract(client, _media(0.5, fmt="m4a")).status_code == 429
