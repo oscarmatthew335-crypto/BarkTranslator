@@ -2,7 +2,10 @@
 // (garden, braai, street) or a time of day, so they fit an indoor cat at
 // 3 PM as well as a dog in the yard at night.
 
-export const DOG_CHAT_LINES = {
+import { EXTRA_DOG_LINES } from './extraDogLines';
+import { EXTRA_CAT_LINES } from './cat/extraCatLines';
+
+const RAW_DOG_CHAT_LINES = {
   boet: {
     short: [
       "Howzit bru. Just checking you're still my human.",
@@ -77,7 +80,7 @@ export const DOG_CHAT_LINES = {
   }
 };
 
-export const CAT_CHAT_LINES = {
+const RAW_CAT_CHAT_LINES = {
   boet: {
     short: [
       'Howzit chommie. Just saying hi, nothing serious.',
@@ -151,3 +154,19 @@ export const CAT_CHAT_LINES = {
     ]
   }
 };
+
+function mergeChat(base, extra) {
+  const out = {};
+  for (const [k, v] of Object.entries(base)) {
+    const ex = extra[k]?.chat || {};
+    out[k] = {
+      short: [...v.short, ...(ex.short || [])],
+      long: [...v.long, ...(ex.long || [])]
+    };
+  }
+  return out;
+}
+
+export const DOG_CHAT_LINES = mergeChat(RAW_DOG_CHAT_LINES, EXTRA_DOG_LINES);
+export const CAT_CHAT_LINES = mergeChat(RAW_CAT_CHAT_LINES, EXTRA_CAT_LINES);
+
