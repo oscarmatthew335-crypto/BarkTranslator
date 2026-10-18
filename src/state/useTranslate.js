@@ -87,7 +87,6 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     setNotice(null);
     const res = await bark.start();
     if (res.ok) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // With the camera on, film the pet while listening (no sound: the
       // microphone is busy; the share video uses the clean recording).
       if (cameraOn && cameraRef.current) {

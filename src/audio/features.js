@@ -112,7 +112,7 @@ function powerSpectrum(frame, t) {
 }
 
 // Pitch by autocorrelation, 80-1500 Hz. Returns [f0Hz, strength 0..1].
-function pitch(frame) {
+export function pitch(frame) {
   const minLag = Math.floor(SAMPLE_RATE / 1500);
   const maxLag = Math.min(FRAME - 1, Math.floor(SAMPLE_RATE / 80));
   let energy = 0;

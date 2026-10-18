@@ -6,13 +6,12 @@ import {
   requestRecordingPermissionsAsync
 } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
-import { analyzeBark } from './barkAnalysis';
+import { analyzeBark, SETTLE_MS } from './barkAnalysis';
 import { computeFeatures, encodeWav, resample, windowLevels, SAMPLE_RATE } from './features';
 
 const MAX_CLIP_SECONDS = 15; // listening always stops by itself after this
 const QUIET_AFTER_SOUND_MS = 1300; // stop this long after the last bark
 const GIVE_UP_MS = 8000; // stop if nothing has been heard for this long
-const SETTLE_MS = 350; // first bit of audio is used to measure background noise
 
 // Tap to listen: the microphone runs until the pet has barked and gone quiet
 // again (or nothing is heard, or 15 seconds pass), then onAutoStop fires.
@@ -173,7 +172,10 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       chunksRef.current = [];
       const pcm = resample(raw, rateRef.current, SAMPLE_RATE);
 
-      const analysis = analyzeBark(samplesRef.current, heldMs);
+      const analysis = analyzeBark(samplesRef.current, heldMs, {
+        pcm,
+        liveHeard: autoRef.current.heard
+      });
       samplesRef.current = [];
       const features = analysis?.heard ? computeFeatures(pcm) : null;
 
