@@ -71,8 +71,11 @@ function PetApp() {
   if (!pet)
     return (
       <Onboarding
-        onDone={({ species: sp, name }) => {
-          data.addPet({ species: sp, name });
+        onDone={({ species: sp, name, breedId = null, home = null, contextId = null }) => {
+          const created = data.addPet({ species: sp || 'dog', name, breedId, home });
+          if (contextId && created?.id) {
+            data.updatePet(created.id, { contextId, contextSetAt: Date.now() });
+          }
           data.updateSettings({ ageConfirmed: true });
         }}
       />
