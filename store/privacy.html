@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pawlingo Privacy Policy</title>
+<style>
+  :root { --ink:#24164A; --soft:#6B5F8F; --bg:#EEE7FF; --paper:#fff; --butter:#FFD43B; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.6 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 28px 18px 60px; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 28px 0 6px; }
+  .meta { color: var(--soft); margin: 0 0 20px; }
+  .card { background: var(--paper); border: 2.5px solid var(--ink); border-radius: 18px; padding: 16px 18px; box-shadow: 4px 4px 0 var(--ink); }
+  ul { padding-left: 20px; }
+  a { color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+<h1>Pawlingo Privacy Policy</h1>
+<p class="meta">Last updated: 18 October 2026 &middot; Published by ZDNS (Pty) Ltd, South Africa (registration 2026/796623/07)</p>
+
+<div class="card">
+<p><strong>In short:</strong> Pawlingo (<code>com.pawlingo.app</code>) works without an account. Your pets, journal and personal sound learning stay on your phone. Recordings are only shared for training if you choose "Yes, I'll help", and you can switch that off or delete what you shared at any time in Settings.</p>
+</div>
+
+<h2>1. What stays on your phone</h2>
+<ul>
+  <li><strong>Pet profiles &amp; settings:</strong> Names, species (dog or cat), breeds, indoor/garden setting, chosen personality, and preferences.</li>
+  <li><strong>Translation journal:</strong> Past translations, timestamps, and the newest photos, silent camera clips and recorded pet sounds kept locally so you can replay or share them.</li>
+  <li><strong>On-device sound fingerprints:</strong> 62-number acoustic vectors (<code>featureVersion: f1</code>) describing pitch, mel-band tone and rhythm, plus the answers you teach Pawlingo on your phone.</li>
+</ul>
+
+<h2>2. What we receive if you opt in to training-data sharing</h2>
+<p>Only if you tap <strong>"Yes, I'll help"</strong> on the consent screen (or enable <em>Share clips and answers</em> in Settings):</p>
+<ul>
+  <li><strong>Short audio clips (<code>WAV</code> or <code>M4A</code>, up to 15s, 16 kHz mono):</strong> Recorded while translating. Avoid translating during private conversations.</li>
+  <li><strong>Acoustic features &amp; measurements:</strong> The 62-number fingerprint (<code>features</code>), <code>soundCount</code>, <code>loudness</code>, <code>clarity</code>, <code>durationMs</code>, <code>activeMs</code>, <code>longestMs</code>, <code>peakDb</code>, <code>noiseFloorDb</code>, detected <code>pattern</code>, and context guess.</li>
+  <li><strong>Your labels:</strong> Taught situation (<code>context</code>), <code>moods</code>, optional comment (up to 280 chars), and guess <code>rating</code>.</li>
+  <li><strong>Anonymous technical IDs:</strong> Species, <code>breedId</code>, random <code>petId</code>, random 32-hex install ID (<code>X-Install-Id</code>), <code>appVersion</code>, and <code>platform</code>. No name, email, phone number, contacts or location is collected.</li>
+</ul>
+
+<h2>3. Video sharing (<code>POST /video</code>)</h2>
+<p>When you tap <strong>Share video</strong>, the translation's silent camera clip or photo, its recorded sound clip and speech-bubble text are sent to our server only to render the MP4 video, and deleted immediately after the video is returned.</p>
+
+<h2>4. Technical crash reports (<code>POST /errors</code>)</h2>
+<p>Unexpected JS errors send a rate-limited diagnostic report (<code>message</code>, <code>stack</code>, <code>fatal</code>, <code>where</code>, <code>appVersion</code>, <code>platform</code>, <code>osVersion</code>, and random <code>X-Install-Id</code>) containing no audio, photos or pet details.</p>
+
+<h2>5. Storage, retention &amp; deleting your data</h2>
+<p>Opted-in clips and labels are stored on Google Cloud in South Africa (<code>africa-south1</code>), encrypted in transit and at rest. Delete everything linked to your install at any time via <strong>Settings &rarr; Delete everything I've shared</strong> (<code>DELETE /me</code>) or by emailing <a href="mailto:support@zdns.co.za">support@zdns.co.za</a> with the Install ID shown in Settings.</p>
+
+<h2>6. Children &amp; Your rights</h2>
+<p>Pawlingo is for users aged 13+ (confirmed on first launch). Under POPIA and GDPR where applicable, contact ZDNS (Pty) Ltd, First Floor, Liberty Life Building, 21 Aurora Drive, Umhlanga Ridge, Durban, or <a href="mailto:support@zdns.co.za">support@zdns.co.za</a>.</p>
+</main>
+</body>
+</html>
