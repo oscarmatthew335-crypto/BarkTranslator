@@ -2,6 +2,7 @@
   "expo": {
     "name": "Pawlingo",
     "slug": "pawlingo",
+    "scheme": "pawlingo",
     "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -52,6 +53,19 @@
           "imageWidth": 180,
           "resizeMode": "contain",
           "backgroundColor": "#EEE7FF"
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1,
+            "NSExtensionActivationSupportsFileWithMaxCount": 1
+          },
+          "androidIntentFilters": [
+            "video/*",
+            "audio/*"
+          ]
         }
       ]
     ],

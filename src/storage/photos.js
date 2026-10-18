@@ -37,12 +37,13 @@ export async function keepAudio(tempUri, id) {
   }
 }
 
-// Keep the camera clip filmed while listening (moved, not copied).
-export async function keepVideo(tempUri, id) {
+// Keep the camera clip filmed while listening (moved, or copied when picked from gallery).
+export async function keepVideo(tempUri, id, { copy = false } = {}) {
   if (!tempUri) return null;
   try {
     const dest = new File(dir('videos'), `${id}.mp4`);
-    await new File(tempUri).move(dest);
+    if (copy) await new File(tempUri).copy(dest);
+    else await new File(tempUri).move(dest);
     return dest.uri;
   } catch (_) {
     return null;

@@ -20,10 +20,12 @@ import PetsSheet from './src/components/PetsSheet';
 import SettingsSheet from './src/components/SettingsSheet';
 import LabelSheet from './src/components/LabelSheet';
 import MicPrimer from './src/components/MicPrimer';
+import ClipPickerSheet from './src/components/ClipPickerSheet';
 import ShareCard from './src/components/ShareCard';
 import ShareSheet from './src/components/ShareSheet';
 import TabBar from './src/components/TabBar';
 import { getSpecies } from './src/species';
+import useIncomingShareClip from './src/share/incomingShare';
 
 installCrashReporting();
 
@@ -50,8 +52,14 @@ function PetApp() {
   const shareCardRef = useRef(null);
 
   const cameraOn = Boolean(camPerm?.granted && cameraWanted);
-  const t = useTranslate({ data, cameraRef, cameraOn, shareCardRef });
+  const t = useTranslate({ data, cameraRef, cameraOn, shareCardRef, scannerOpen: activeTab === 'scanner' });
   const { pet, species } = data;
+
+  useIncomingShareClip((clip) => {
+    if (!pet) return;
+    setActiveTab('scanner');
+    t.importClip({ ...clip, needsTrimCheck: true });
+  });
 
   const toggleCamera = async () => {
     if (camPerm?.granted) {
@@ -80,7 +88,7 @@ function PetApp() {
   if (!data.settings.ageConfirmed) return <AgeCheck onConfirm={() => data.updateSettings({ ageConfirmed: true })} />;
   if (data.shareClips === null) return <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />;
 
-  const listening = t.bark.phase !== 'idle';
+  const listening = t.bark.phase !== 'idle' || t.importingClip;
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -114,6 +122,8 @@ function PetApp() {
             onChangeContext={(id) => data.updatePet(pet.id, { contextId: id, contextSetAt: Date.now() })}
             onChangePersonality={(id) => data.updatePet(pet.id, { personality: id })}
             progress={t.progress}
+            importingClip={t.importingClip}
+            onOpenClipPicker={t.openClipPicker}
           />
         )}
         {activeTab === 'speak' && <SpeakTab species={species} petName={pet.name} />}
@@ -174,6 +184,15 @@ function PetApp() {
       />
 
       <MicPrimer visible={t.micPrimer} petName={pet.name} species={species} onAllow={t.allowMic} onClose={t.dismissMicPrimer} />
+
+      <ClipPickerSheet
+        visible={t.clipPickerOpen}
+        petName={pet.name}
+        pendingClip={t.pendingClip}
+        onSubmitClip={t.importClip}
+        onClose={t.closeClipPicker}
+        onShowNotice={t.showNotice}
+      />
 
       <ShareSheet
         job={t.shareJob}

@@ -118,12 +118,22 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
             <Text style={s.section}>Sound</Text>
             <View style={s.box}>
               <Row
+                title="Catch sounds I just missed"
+                sub={`Keeps the last 10 seconds in memory while the scanner is open so tapping the paw right after ${pet.name} makes a sound still catches it. Never saved or sent.`}
+                value={settings.catchMissed !== false}
+                onChange={(v) => updateSettings({ catchMissed: v })}
+              />
+              <Row
                 title="Read translations aloud"
                 sub={`Off: you see the words, and Replay plays ${pet.name}'s real sound. On: the phone's voice also reads them.`}
                 value={settings.readAloud === true}
                 onChange={(v) => updateSettings({ readAloud: v })}
+                divider
               />
             </View>
+            <Text style={s.privacyNote}>
+              If you pick a clip from your phone, it is sent to our server only to read the sound, and deleted straight away.
+            </Text>
 
             <Text style={s.section}>{pet.name}</Text>
             <View style={s.box}>
@@ -197,6 +207,7 @@ const s = StyleSheet.create({
   rowSub: { fontFamily: F.regular, fontSize: 13, lineHeight: 18, color: C.inkSoft, marginTop: 2 },
   statusBox: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(36,22,74,0.15)', gap: 2 },
   statusText: { fontFamily: F.regular, fontSize: 12, lineHeight: 17, color: C.inkSoft },
+  privacyNote: { fontFamily: F.regular, fontSize: 12, lineHeight: 17, color: C.inkSoft, marginTop: 8 },
   linkRow: { paddingTop: 10 },
   link: { fontFamily: F.semibold, fontSize: 14, color: C.ink, textDecorationLine: 'underline' },
   version: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 12 }

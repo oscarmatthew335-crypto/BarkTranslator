@@ -6,23 +6,24 @@ import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 
 import useBarkRecorder from '../audio/useBarkRecorder';
-import { pickLinePool, moodScores } from '../audio/barkAnalysis';
-import { pickLine, activeContext } from '../lines';
-import { guessContext, addExample, learningProgress, bondLevel } from '../learning/petLearning';
-import { loadSharedModel, refreshSharedModel } from '../learning/sharedModel';
+import { runTranslationPipeline } from '../audio/pipeline';
+import { addExample, learningProgress, bondLevel } from '../learning/petLearning';
+import { refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
 import { keepPhoto, keepAudio, keepVideo, fileExists } from '../storage/photos';
 import { getThumbnailAsync } from 'expo-video-thumbnails';
 import { playFile, playSounds, stopSounds } from '../audio/sounds';
 import { makeVideo, videoAvailable } from '../share/videoShare';
+import { extractClipAudio, canUseForShareVideo, MAX_EXTRACT_SECONDS } from '../share/extractClip';
 import { File } from 'expo-file-system';
 import { getSpecies, APP_NAME, STORE_URL } from '../species';
 
 const MILESTONE_PER_CONTEXT = 3;
 
-// The Translate flow: tap the paw, listen until the pet stops, measure,
-// guess, pick a line, and let the owner teach Pawlingo what it really meant.
-export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }) {
+// The Translate flow: tap the paw, listen until the pet stops (or catch a
+// sound from the 10s rolling buffer, or import a clip), measure, guess, pick
+// a line, and let the owner teach Pawlingo what it really meant.
+export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, scannerOpen = true }) {
   const { pet, species, breed, shareClips, addEntry, updateEntry } = data;
   const [currentResult, setCurrentResult] = useState(null);
   const [notice, setNotice] = useState(null);
@@ -30,11 +31,15 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
   const [labelEntry, setLabelEntry] = useState(null);
   const [progress, setProgress] = useState(null);
   const [shareItem, setShareItem] = useState(null);
+  const [importingClip, setImportingClip] = useState(false);
+  const [clipPickerOpen, setClipPickerOpen] = useState(false);
+  const [pendingClip, setPendingClip] = useState(null);
   const noticeTimer = useRef(null);
   const finishRef = useRef(null);
   const videoRec = useRef(null); // the camera clip being recorded while listening
 
-  const bark = useBarkRecorder({ onAutoStop: () => finishRef.current?.() });
+  const watchEnabled = Boolean(scannerOpen && !importingClip && data.settings?.catchMissed !== false);
+  const bark = useBarkRecorder({ onAutoStop: () => finishRef.current?.(), watchEnabled });
 
   const showNotice = useCallback((text, action, ms = 5000) => {
     setNotice({ text, action });
@@ -141,6 +146,81 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     } catch (_) {}
   };
 
+  const completeTranslation = async ({
+    pcm,
+    liveHeard = true,
+    clipUri = null,
+    videoSourceUri = null,
+    copyVideo = false,
+    thumbTimeMs = null,
+    recordedAt = null,
+    notHeardMsg = null
+  }) => {
+    const res = await runTranslationPipeline({
+      pcm,
+      liveHeard,
+      pet,
+      species,
+      breed,
+      history: data.history,
+      recordedAt
+    });
+    if (!res.heard) {
+      if (!copyVideo) discard(videoSourceUri);
+      discard(clipUri);
+      showNotice(
+        notHeardMsg ||
+          `Didn't hear ${pet.name}. Get a bit closer and tap the paw when ${pet.name} is about to ${species.sound}.`
+      );
+      return false;
+    }
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+
+    const { entry, analysis, features, guess, pickedId, durationMs } = res;
+    const id = entry.id;
+    let tempPhoto = null;
+    if (videoSourceUri) {
+      try {
+        const atMs = thumbTimeMs ?? Math.min(3000, Math.max(300, durationMs / 2));
+        const thumb = await getThumbnailAsync(videoSourceUri, { time: atMs, quality: 0.7 });
+        tempPhoto = thumb?.uri || null;
+      } catch (_) {}
+    }
+    const photoUri = await keepPhoto(tempPhoto, id);
+    const keepVidOk = videoSourceUri && (!copyVideo || canUseForShareVideo(videoSourceUri));
+    const videoUri = keepVidOk ? await keepVideo(videoSourceUri, id, { copy: copyVideo }) : null;
+    if (!copyVideo && !keepVidOk) discard(videoSourceUri);
+    const audioUri = await keepAudio(clipUri, id);
+    const uploadClip = shareClips === true && Boolean(clipUri);
+
+    const finalEntry = {
+      ...entry,
+      photoUri,
+      audioUri,
+      videoUri,
+      clipId: uploadClip ? `${species.id}-${id}` : null
+    };
+
+    if (!uploadClip && clipUri) discard(clipUri);
+    if (uploadClip) {
+      queueClip({
+        clipId: finalEntry.clipId,
+        tempUri: clipUri,
+        petId: pet.id,
+        species: species.id,
+        breedId: breed?.id,
+        contextId: pickedId,
+        analysis,
+        features: finalEntry.features,
+        guess
+      });
+    }
+    setCurrentResult(finalEntry);
+    addEntry(finalEntry);
+    speak(finalEntry, { auto: true });
+    return true;
+  };
+
   const finishListening = async () => {
     if (!bark.isRecording) return;
     const videoPromise = stopVideo();
@@ -148,118 +228,78 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     // owner opted in) to the server for training.
     const out = await bark.stop({ keepClip: true });
     const tempVideo = await videoPromise;
-    if (!out || !out.analysis?.heard) discard(tempVideo);
-    if (!out) return;
-    const { analysis, heldMs } = out;
-    if (!analysis?.heard) {
-      showNotice(`Didn't hear ${pet.name}. Get a bit closer and tap the paw when ${pet.name} is about to ${species.sound}.`);
+    if (!out) {
+      discard(tempVideo);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-
-    // Pawlingo's guess from this pet's taught sounds plus the breed & shared model.
-    // Used only when it's confident; otherwise the owner's pick decides.
-    const sharedModel = await loadSharedModel(species.id);
-    const guess = await guessContext(pet.id, out.features?.vector, sharedModel, {
-      breedId: breed?.id,
-      breedName: breed?.name,
-      petName: pet.name
+    await completeTranslation({
+      pcm: out.pcm,
+      liveHeard: out.liveHeard,
+      clipUri: out.clipUri,
+      videoSourceUri: tempVideo,
+      copyVideo: false
     });
-    const guessCtx = guess?.show ? species.contexts.find((c) => c.id === guess.contextId) : null;
-
-    const pack = species.packs[pet.personality] || species.packs[species.defaultPersonality];
-    const pickedId = activeContext(pet);
-    const ctx = guessCtx || species.contexts.find((c) => c.id === pickedId) || species.contexts[0];
-    const recent = data.history.filter((h) => h.petId === pet.id).slice(0, 8).map((h) => h.text);
-    const text = pickLine({
-      pool: pack.lines[ctx.id] || pack.lines.chat,
-      size: pickLinePool(analysis.pattern),
-      home: pet.home,
-      contextId: ctx.id,
-      recent
-    });
-    const now = new Date();
-    const id = String(now.getTime());
-    let tempPhoto = null;
-    if (tempVideo) {
-      try {
-        const thumb = await getThumbnailAsync(tempVideo, { time: Math.min(3000, Math.max(300, heldMs / 2)), quality: 0.7 });
-        tempPhoto = thumb?.uri || null;
-      } catch (_) {}
-    }
-    const photoUri = await keepPhoto(tempPhoto, id);
-    const videoUri = await keepVideo(tempVideo, id);
-    const audioUri = await keepAudio(out.clipUri, id);
-    const uploadClip = shareClips === true && Boolean(out.clipUri);
-
-    const entry = {
-      id,
-      petId: pet.id,
-      species: species.id,
-      petName: pet.name,
-      breedName: breed?.name || null,
-      personalityName: pack.name,
-      personalityFace: pack.face,
-      contextLabel: ctx.label,
-      tip: ctx.tip,
-      text,
-      duration: (heldMs / 1000).toFixed(1),
-      patternLabel: species.patternLabels[analysis.pattern],
-      pattern: analysis.pattern,
-      soundCount: analysis.barkCount,
-      loudness: analysis.loudness,
-      pitch: Math.max(0.5, Math.min(1.8, pack.pitch + (breed?.pitchMod || 0))),
-      rate: Math.max(0.6, Math.min(1.5, pack.rate + (breed?.rateMod || 0))),
-      emotions: moodScores(analysis, ctx.id, pet.personality),
-      photoUri,
-      audioUri,
-      videoUri,
-      contextId: ctx.id,
-      pickedContextId: pickedId,
-      guess: guessCtx
-        ? {
-            contextId: guess.contextId,
-            label: guessCtx.label,
-            confidence: guess.confidence,
-            wording: guess.wording,
-            source: guess.source,
-            evidence: guess.evidence || null
-          }
-        : null,
-      features: out.features?.vector || null,
-      clipId: uploadClip ? `${species.id}-${now.getTime()}` : null,
-      labelled: false,
-      date: now.toISOString()
-    };
-
-    if (!uploadClip && out.clipUri) {
-      try {
-        new File(out.clipUri).delete();
-      } catch (_) {}
-    }
-    if (uploadClip) {
-      queueClip({
-        clipId: entry.clipId,
-        tempUri: out.clipUri,
-        petId: pet.id,
-        species: species.id,
-        breedId: breed?.id,
-        contextId: pickedId,
-        analysis,
-        features: out.features,
-        guess
-      });
-    }
-    setCurrentResult(entry);
-    addEntry(entry);
-    speak(entry, { auto: true });
   };
   finishRef.current = finishListening;
 
   const onPawPress = useCallback(() => {
-    if (bark.isRecording) finishRef.current?.();
-    else if (bark.phase === 'idle') startListening();
-  }, [bark.isRecording, bark.phase, startListening]);
+    if (bark.isRecording) {
+      finishRef.current?.();
+      return;
+    }
+    if (bark.phase !== 'idle' || importingClip) return;
+    // Feature 2 ("I just missed it"): if the rolling 10s buffer caught a
+    // sound right before the owner tapped the paw, translate it immediately.
+    const missed = bark.consumeMissed({ keepClip: true });
+    if (missed) {
+      completeTranslation({
+        pcm: missed.pcm,
+        liveHeard: missed.liveHeard,
+        clipUri: missed.clipUri
+      });
+      return;
+    }
+    startListening();
+  }, [bark, importingClip, startListening]);
+
+  // Feature 1 ("Use a clip I already have" or shared into Pawlingo).
+  const importClip = useCallback(
+    async ({ uri, isVideo = false, startSec = 0, durationSec = 0, fallbackDate = null, needsTrimCheck = false }) => {
+      if (!uri || importingClip) return;
+      if (needsTrimCheck && durationSec > MAX_EXTRACT_SECONDS) {
+        setPendingClip({ uri, isVideo, durationSec, fallbackDate });
+        setClipPickerOpen(true);
+        return;
+      }
+      Speech.stop();
+      stopSounds();
+      setNotice(null);
+      setImportingClip(true);
+      try {
+        const extracted = await extractClipAudio({
+          uri,
+          start: startSec,
+          seconds: MAX_EXTRACT_SECONDS,
+          fallbackDate
+        });
+        await completeTranslation({
+          pcm: extracted.pcm,
+          liveHeard: true,
+          clipUri: extracted.clipUri,
+          videoSourceUri: isVideo ? uri : null,
+          copyVideo: true,
+          thumbTimeMs: Math.round((startSec || 0) * 1000 + 800),
+          recordedAt: extracted.recordedAt,
+          notHeardMsg: `Couldn't hear ${pet.name} in that clip.`
+        });
+      } catch (e) {
+        showNotice(e?.message || 'Could not read that clip.');
+      } finally {
+        setImportingClip(false);
+      }
+    },
+    [importingClip, pet, species, breed, data.history, shareClips, showNotice]
+  );
 
   // Save what the owner says the sound meant: on this phone for this pet,
   // and (if sharing is on) to the server for the shared model.
@@ -268,7 +308,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
       if (!entry) return;
       const petId = entry.petId || pet.id;
       const before = await learningProgress(petId);
-      await addExample(petId, entry.features, contextId, moods);
+      await addExample(petId, entry.features, contextId, moods, entry.recordedAt || entry.date);
       const after = await learningProgress(petId);
       if (entry.clipId) {
         queueLabel({
@@ -393,6 +433,18 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef }
     shareVideo,
     shareJob,
     closeShare,
-    shareItem
+    shareItem,
+    importingClip,
+    clipPickerOpen,
+    pendingClip,
+    openClipPicker: () => {
+      setPendingClip(null);
+      setClipPickerOpen(true);
+    },
+    closeClipPicker: () => {
+      setPendingClip(null);
+      setClipPickerOpen(false);
+    },
+    importClip
   };
 }
