@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { C, F } from '../theme';
 import { playSounds, stopSounds, SOUND_FILES } from '../audio/sounds';
 import { Sticker, StickerButton, ScreenTitle } from './ui';
+import { useI18n } from '../i18n';
 
 const CARD_COLORS = [C.butter, C.sky, C.pink, C.mint];
 
@@ -23,6 +24,7 @@ function soundsFor(species, text) {
 
 // Human -> pet: say something in pet sounds, use training sounds, or tap a phrase.
 export default function SpeakTab({ species, petName }) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   const [custom, setCustom] = useState(null);
   const [active, setActive] = useState(null);
@@ -55,13 +57,13 @@ export default function SpeakTab({ species, petName }) {
       keyboardDismissMode="on-drag"
     >
       <Pressable onPress={Keyboard.dismiss} accessible={false}>
-        <ScreenTitle title={species.speakTab} subtitle={`Say something to ${petName} in their language.`} />
+        <ScreenTitle title={species.speakTab} subtitle={t('speak.subtitle', { petName })} />
       </Pressable>
 
       <Sticker radius={24} innerStyle={s.card} style={{ marginBottom: 18 }}>
         <TextInput
           style={s.input}
-          placeholder={`Type something for ${petName}…`}
+          placeholder={t('speak.placeholder', { petName })}
           placeholderTextColor={C.inkSoft}
           value={text}
           onChangeText={setText}
@@ -71,7 +73,7 @@ export default function SpeakTab({ species, petName }) {
           maxLength={120}
         />
         <View style={{ marginTop: 12, alignSelf: 'flex-start' }}>
-          <StickerButton label={`Say it in ${species.label}`} emoji="🔊" onPress={translate} small />
+          <StickerButton label={t('speak.sayIt', { species: species.label })} emoji="🔊" onPress={translate} small />
         </View>
         {custom && (
           <View style={s.result}>
@@ -104,7 +106,7 @@ export default function SpeakTab({ species, petName }) {
         ))}
       </View>
 
-      <Text style={s.section}>Quick phrases</Text>
+      <Text style={s.section}>{t('speak.quickPhrases')}</Text>
       {active && (
         <Sticker color={C.paper} radius={20} style={{ marginBottom: 14 }} innerStyle={s.activeBox}>
           <Text style={s.activePhonetic}>{active.petPhonetic}</Text>

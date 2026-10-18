@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { reportError } from '../crash';
 import { C, F, INK_WIDTH } from '../theme';
+import { translate } from '../i18n';
 
 // If a screen crashes, show a calm recovery screen instead of a blank app,
 // and report what happened.
@@ -27,10 +28,10 @@ export default class ErrorBoundary extends React.Component {
     return (
       <View style={s.wrap}>
         <Text style={s.emoji}>🐾</Text>
-        <Text style={s.title}>Something went wrong</Text>
-        <Text style={s.body}>Your pets and journal are safe. Tap below to go back.</Text>
+        <Text style={s.title}>{translate('error.crashTitle')}</Text>
+        <Text style={s.body}>{translate('error.crashBody')}</Text>
         <Pressable style={s.btn} onPress={() => this.setState({ failed: false })} accessibilityRole="button">
-          <Text style={s.btnText}>Try again</Text>
+          <Text style={s.btnText}>{translate('error.tryAgain')}</Text>
         </Pressable>
       </View>
     );

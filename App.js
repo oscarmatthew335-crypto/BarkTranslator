@@ -26,6 +26,7 @@ import ShareSheet from './src/components/ShareSheet';
 import TabBar from './src/components/TabBar';
 import { getSpecies } from './src/species';
 import useIncomingShareClip from './src/share/incomingShare';
+import { I18nProvider, translate } from './src/i18n';
 
 installCrashReporting();
 
@@ -69,8 +70,8 @@ function PetApp() {
     const res = await requestCamPerm();
     if (res?.granted) setCameraWanted(true);
     else if (res && !res.canAskAgain)
-      t.showNotice(`The camera is switched off. You can still translate without it.`, {
-        label: 'Open Settings',
+      t.showNotice(translate('error.cameraOff'), {
+        label: translate('error.openSettings'),
         onPress: () => Linking.openSettings()
       });
   };
@@ -78,22 +79,38 @@ function PetApp() {
   if (!data.loaded) return <View style={styles.blank} />;
   if (!pet)
     return (
-      <Onboarding
-        onDone={({ species: sp, name, breedId = null, home = null, contextId = null }) => {
-          const created = data.addPet({ species: sp || 'dog', name, breedId, home });
-          if (contextId && created?.id) {
-            data.updatePet(created.id, { contextId, contextSetAt: Date.now() });
-          }
-          data.updateSettings({ ageConfirmed: true });
-        }}
-      />
+  if (!pet)
+    return (
+      <I18nProvider language={data.settings.language}>
+        <Onboarding
+          onDone={({ species: sp, name, breedId = null, home = null, contextId = null }) => {
+            const created = data.addPet({ species: sp || 'dog', name, breedId, home });
+            if (contextId && created?.id) {
+              data.updatePet(created.id, { contextId, contextSetAt: Date.now() });
+            }
+            data.updateSettings({ ageConfirmed: true });
+          }}
+        />
+      </I18nProvider>
     );
-  if (!data.settings.ageConfirmed) return <AgeCheck onConfirm={() => data.updateSettings({ ageConfirmed: true })} />;
-  if (data.shareClips === null) return <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />;
+  if (!data.settings.ageConfirmed)
+    return (
+      <I18nProvider language={data.settings.language}>
+        <AgeCheck onConfirm={() => data.updateSettings({ ageConfirmed: true })} />
+      </I18nProvider>
+    );
+  if (data.shareClips === null)
+    return (
+      <I18nProvider language={data.settings.language}>
+        <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />
+      </I18nProvider>
+    );
+    );
 
   const listening = t.bark.phase !== 'idle' || t.importingClip;
 
   return (
+    <I18nProvider language={data.settings.language}>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.main}>
         {activeTab === 'scanner' && (
@@ -208,6 +225,7 @@ function PetApp() {
       />
       {t.shareItem && <ShareCard ref={shareCardRef} item={t.shareItem} />}
     </SafeAreaView>
+    </I18nProvider>
   );
 }
 

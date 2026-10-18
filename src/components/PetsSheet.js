@@ -15,10 +15,12 @@ import {
 import { C, F, INK_WIDTH } from '../theme';
 import { SPECIES, getSpecies, APP_NAME } from '../species';
 import { StickerButton } from './ui';
+import { useI18n } from '../i18n';
 
 // Your pets: switch between them, add one, edit or remove.
 // Each pet keeps its own learning and journal entries.
 export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd, onUpdate, onRemove, onClose }) {
+  const { t } = useI18n();
   const [mode, setMode] = useState('list'); // list | edit | add
   const [editId, setEditId] = useState(null);
 
@@ -38,7 +40,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
           <Pressable style={s.sheet} onPress={Keyboard.dismiss}>
             {mode === 'list' && (
               <ScrollView keyboardShouldPersistTaps="handled">
-                <Text style={s.title}>Your pets</Text>
+                <Text style={s.title}>{t('pets.title')}</Text>
                 {pets.map((p) => {
                   const sp = getSpecies(p.species);
                   const active = p.id === activePetId;
@@ -49,7 +51,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
                         style={s.petMain}
                         onPress={() => onSelect(p.id)}
                         accessibilityRole="button"
-                        accessibilityLabel={`${p.name}${active ? ', selected' : ''}`}
+                        accessibilityLabel={`${p.name}${active ? t('pets.selected') : ''}`}
                       >
                         <Text style={s.petEmoji}>{sp.emoji}</Text>
                         <View style={{ flex: 1 }}>
@@ -58,7 +60,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
                           </Text>
                           <Text style={s.petSub} numberOfLines={1}>
                             {breed ? breed.name.replace(/^\S+\s/, '') : sp.label}
-                            {active ? ' (selected)' : ''}
+                            {active ? t('pets.selected') : ''}
                           </Text>
                         </View>
                       </Pressable>
@@ -69,16 +71,16 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
                         }}
                         style={s.editBtn}
                         accessibilityRole="button"
-                        accessibilityLabel={`Edit ${p.name}`}
+                        accessibilityLabel={`${t('pets.edit')} ${p.name}`}
                         hitSlop={6}
                       >
-                        <Text style={s.editText}>Edit</Text>
+                        <Text style={s.editText}>{t('pets.edit')}</Text>
                       </Pressable>
                     </View>
                   );
                 })}
                 <View style={{ marginTop: 12 }}>
-                  <StickerButton label="Add a pet" emoji="➕" color={C.paper} onPress={() => setMode('add')} />
+                  <StickerButton label={t('pets.add')} emoji="➕" color={C.paper} onPress={() => setMode('add')} />
                 </View>
               </ScrollView>
             )}

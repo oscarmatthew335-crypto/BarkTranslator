@@ -4,6 +4,7 @@ import { prunePhotos } from '../storage/photos';
 import { migrateSpeciesExamples, resetExamples } from '../learning/petLearning';
 import { getSpecies } from '../species';
 import { setAllowMobileData } from '../contribute/contributions';
+import { setAppLanguage } from '../i18n';
 
 // Pets, journal and settings: loading, migrating, saving, and the actions
 // that change them.
@@ -39,6 +40,10 @@ export default function useAppData() {
   useEffect(() => {
     setAllowMobileData(settings.mobileData);
   }, [settings.mobileData]);
+
+  useEffect(() => {
+    setAppLanguage(settings.language || 'system');
+  }, [settings.language]);
 
   const pet = pets.find((p) => p.id === activePetId) || pets[0] || null;
   const species = getSpecies(pet?.species || 'dog');

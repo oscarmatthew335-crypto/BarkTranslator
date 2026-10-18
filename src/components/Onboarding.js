@@ -16,6 +16,7 @@ import { C, F, INK_WIDTH } from '../theme';
 import { SPECIES, APP_NAME, MIN_AGE } from '../species';
 import { Sticker, StickerButton } from './ui';
 import { Checkbox } from './Checkbox';
+import { useI18n } from '../i18n';
 
 // Short 3-step first-launch welcome:
 //   Step 1: Add your pet (pick dog or cat, name, age check)
@@ -23,6 +24,7 @@ import { Checkbox } from './Checkbox';
 //   Step 3: Teach your first sound (how learning works + pick first situation)
 // Shown once when no pet exists yet; skippable; does not affect existing users.
 export default function Onboarding({ onDone }) {
+  const { t } = useI18n();
   const [step, setStep] = useState(1); // 1 | 2 | 3
   const [speciesId, setSpeciesId] = useState('dog');
   const [name, setName] = useState('');
@@ -54,7 +56,7 @@ export default function Onboarding({ onDone }) {
         <View style={s.topBar}>
           {step > 1 ? (
             <Pressable onPress={() => setStep((v) => v - 1)} accessibilityRole="button" hitSlop={8}>
-              <Text style={s.navLink}>← Back</Text>
+              <Text style={s.navLink}>{t('onboarding.back')}</Text>
             </Pressable>
           ) : (
             <View style={{ width: 54 }} />
@@ -66,7 +68,7 @@ export default function Onboarding({ onDone }) {
           </View>
           {ageOk ? (
             <Pressable onPress={() => finish()} accessibilityRole="button" hitSlop={8}>
-              <Text style={s.navLink}>Skip</Text>
+              <Text style={s.navLink}>{t('onboarding.skip')}</Text>
             </Pressable>
           ) : (
             <View style={{ width: 54 }} />
@@ -81,10 +83,10 @@ export default function Onboarding({ onDone }) {
           {step === 1 && (
             <Pressable onPress={Keyboard.dismiss} accessible={false}>
               <Text style={s.title} maxFontSizeMultiplier={1.3}>
-                Who's doing the talking?
+                {t('onboarding.title')}
               </Text>
               <Text style={s.sub}>
-                Add your pet. {APP_NAME} learns their language as you go and gets better the more you use it.
+                {t('onboarding.sub', { appName: APP_NAME })}
               </Text>
 
               <View style={s.choices}>
@@ -120,7 +122,7 @@ export default function Onboarding({ onDone }) {
               </View>
 
               <View style={{ marginTop: 24 }}>
-                <Text style={s.label}>What's your {sp.label.toLowerCase()} called?</Text>
+                <Text style={s.label}>{t('onboarding.petNameLabel', { species: sp.label.toLowerCase() })}</Text>
                 <TextInput
                   style={s.input}
                   value={name}
@@ -136,7 +138,7 @@ export default function Onboarding({ onDone }) {
               </View>
 
               <View style={{ marginTop: 20 }}>
-                <Checkbox checked={ageOk} onToggle={() => setAgeOk((v) => !v)} label={`I'm ${MIN_AGE} or older`} />
+                <Checkbox checked={ageOk} onToggle={() => setAgeOk((v) => !v)} label={t('onboarding.ageLabel', { minAge: MIN_AGE })} />
               </View>
             </Pressable>
           )}
@@ -204,16 +206,16 @@ export default function Onboarding({ onDone }) {
           {step === 3 && (
             <View>
               <Text style={s.title} maxFontSizeMultiplier={1.3}>
-                Teach {petName}'s first sound
+                {t('onboarding.step3Title', { petName })}
               </Text>
               <Text style={s.sub}>
-                Every time you tell {APP_NAME} what {petName} meant, it remembers the sound fingerprint on your phone.
+                {t('onboarding.step3Sub', { appName: APP_NAME, petName })}
               </Text>
 
               <Sticker radius={24} innerStyle={s.teachCard} style={{ marginTop: 18 }}>
-                <Text style={s.stepLine}>1. Tap the paw when {petName} is about to {sp.sound}.</Text>
-                <Text style={s.stepLine}>2. Tap "Tell {APP_NAME} what {petName} meant" under the translation.</Text>
-                <Text style={s.stepLine}>3. After 6 taught {sp.sounds} across 2 situations, {APP_NAME} starts guessing on its own!</Text>
+                <Text style={s.stepLine}>{t('onboarding.step3Point1', { petName, sound: sp.sound })}</Text>
+                <Text style={s.stepLine}>{t('onboarding.step3Point2', { appName: APP_NAME, petName })}</Text>
+                <Text style={s.stepLine}>{t('onboarding.step3Point3', { appName: APP_NAME, sounds: sp.sounds })}</Text>
               </Sticker>
 
               <Text style={[s.label, { marginTop: 22 }]}>What is {petName} doing right now? (optional)</Text>
@@ -245,7 +247,7 @@ export default function Onboarding({ onDone }) {
           {step < 3 ? (
             <>
               <StickerButton
-                label="Next"
+                label={t('onboarding.next')}
                 emoji="🐾"
                 disabled={!ageOk}
                 onPress={() => {
@@ -254,11 +256,11 @@ export default function Onboarding({ onDone }) {
                   setStep((v) => v + 1);
                 }}
               />
-              {!ageOk && <Text style={s.hint}>Tick the age box to continue.</Text>}
+              {!ageOk && <Text style={s.hint}>{t('onboarding.ageHint')}</Text>}
             </>
           ) : (
             <StickerButton
-              label={`Start translating ${petName}`}
+              label={t('onboarding.startTranslatingPet', { petName })}
               emoji="🐾"
               onPress={() => finish(firstContextId)}
             />

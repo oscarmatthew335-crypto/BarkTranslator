@@ -12,13 +12,14 @@ import { bondLevel } from '../learning/petLearning';
 import { activeContext } from '../lines';
 import SpeechBubble from './SpeechBubble';
 import ContextSheet from './ContextSheet';
+import { useI18n, translate } from '../i18n';
 
 // The goal under the paw: how many answers until the next bond level.
 function targetLine(bond, name) {
-  if (bond.needsContext) return `🎯 Teach me a sound from a new situation to unlock guesses`;
+  if (bond.needsContext) return translate('scanner.targetNewContext');
   const n = bond.remaining;
-  if (bond.unlocksGuesses) return `🎯 ${n} more till I can guess what ${name} means`;
-  return `🎯 ${n} more till I know ${name} better`;
+  if (bond.unlocksGuesses) return translate('scanner.targetUnlock', { n, petName: name });
+  return translate('scanner.targetNext', { n, petName: name });
 }
 
 export default function ScannerScreen(props) {
@@ -54,6 +55,7 @@ export default function ScannerScreen(props) {
     onOpenClipPicker
   } = props;
   const bond = progress ? bondLevel(progress) : null;
+  const { t } = useI18n();
 
   const [contextOpen, setContextOpen] = useState(false);
   const [idleH, setIdleH] = useState(0);
@@ -158,7 +160,7 @@ export default function ScannerScreen(props) {
                 {!notice && (
                   <Pressable onPress={onToggleCamera} style={s.camHint} accessibilityRole="button">
                     <Text style={s.camHintText} maxFontSizeMultiplier={1.3}>
-                      🎥 Film {pet.name} for a share video
+                      {t('scanner.filmHint', { petName: pet.name })}
                     </Text>
                   </Pressable>
                 )}
@@ -190,7 +192,7 @@ export default function ScannerScreen(props) {
           <Text style={s.contextText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
             {context.label}
           </Text>
-          <Text style={s.contextChange}>Change</Text>
+          <Text style={s.contextChange}>{t('scanner.change')}</Text>
         </Pressable>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.faces}>
@@ -223,20 +225,20 @@ export default function ScannerScreen(props) {
           {showPawHint && !busy && !result && (
             <Sticker color={C.paper} radius={16} offset={3} style={s.hintWrap} innerStyle={s.hintBox}>
               <Text style={s.hintText}>
-                Tap the paw, then let {pet.name} {species.sound}. {APP_NAME} stops listening when {pet.name} is done.
+                {t('scanner.pawHintBody', { petName: pet.name, sound: species.sound, appName: APP_NAME })}
               </Text>
               <Pressable onPress={onPawHintSeen} accessibilityRole="button" hitSlop={8}>
-                <Text style={s.hintOk}>Got it</Text>
+                <Text style={s.hintOk}>{t('scanner.gotIt')}</Text>
               </Pressable>
             </Sticker>
           )}
           <View style={s.pawCenterRow}>
             <View style={s.sideSlot}>
               {recorder.watching && !busy && (
-                <View style={s.watchBadge} accessible accessibilityLabel="Microphone listening for recent sounds">
+                <View style={s.watchBadge} accessible accessibilityLabel={t('scanner.listeningBadgeA11y')}>
                   <View style={s.watchDot} />
                   <Text style={s.watchText} maxFontSizeMultiplier={1.1}>
-                    listening
+                    {t('scanner.listeningBadge')}
                   </Text>
                 </View>
               )}
@@ -245,7 +247,7 @@ export default function ScannerScreen(props) {
               <PawButton
                 recorder={recorder}
                 onPress={pressPaw}
-                label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
+                label={listening ? t('scanner.stopListening') : t('scanner.listenTo', { petName: pet.name })}
               />
             </ProgressRing>
             <View style={s.sideSlot}>
@@ -254,12 +256,12 @@ export default function ScannerScreen(props) {
                   onPress={onOpenClipPicker}
                   disabled={busy}
                   accessibilityRole="button"
-                  accessibilityLabel="From a clip"
+                  accessibilityLabel={t('scanner.fromClip')}
                   style={[s.clipBtn, busy && { opacity: 0.45 }]}
                 >
                   <Text style={s.clipEmoji}>📎</Text>
                   <Text style={s.clipText} maxFontSizeMultiplier={1.15}>
-                    From a clip
+                    {t('scanner.fromClip')}
                   </Text>
                 </Pressable>
               )}
@@ -267,11 +269,11 @@ export default function ScannerScreen(props) {
           </View>
           <Text style={s.pawHint} maxFontSizeMultiplier={1.3} numberOfLines={2}>
             {importingClip
-              ? 'Listening to your clip…'
+              ? t('scanner.listeningToClip')
               : listening
-              ? `Listening… tap to stop`
+              ? t('scanner.listeningTapStop')
               : showPawHint || !bond
-              ? `Tap the paw to listen to ${pet.name}`
+              ? t('scanner.tapPawHint', { petName: pet.name })
               : targetLine(bond, pet.name)}
           </Text>
         </View>
@@ -316,6 +318,7 @@ function ListeningCard({ recorder, pet, species, filming }) {
 }
 
 function ResultFooter({ result, species, onReplay, onShare, onDismiss, onTeach, onConfirmGuess }) {
+  const { t } = useI18n();
   const count = result.soundCount;
   return (
     <>
@@ -337,36 +340,36 @@ function ResultFooter({ result, species, onReplay, onShare, onDismiss, onTeach, 
         <Tag text={`🔊 ${result.loudness}`} color={C.mint} />
       </View>
       <View style={s.actions}>
-        <Action emoji="🔊" label="Replay" onPress={() => onReplay(result)} />
-        <Action emoji="📤" label="Share" onPress={() => onShare(result)} primary />
-        <Action emoji="✕" label="Close" onPress={onDismiss} />
+        <Action emoji="🔊" label={t('scanner.replay')} onPress={() => onReplay(result)} />
+        <Action emoji="📤" label={t('scanner.share')} onPress={() => onShare(result)} primary />
+        <Action emoji="✕" label={t('scanner.close')} onPress={onDismiss} />
       </View>
       {result.features && !result.labelled && (
         result.guess ? (
           <View style={s.confirm}>
             <Text style={s.confirmText} maxFontSizeMultiplier={1.3}>
-              Did I get it right?
+              {t('scanner.didIGetItRight')}
             </Text>
             <View style={s.confirmBtns}>
               <Pressable style={[s.yesNo, { backgroundColor: C.mint }]} onPress={() => onConfirmGuess(result, true)} accessibilityRole="button">
-                <Text style={s.yesNoText}>✅ Yes</Text>
+                <Text style={s.yesNoText}>{t('scanner.yes')}</Text>
               </Pressable>
               <Pressable style={[s.yesNo, { backgroundColor: C.paper }]} onPress={() => onConfirmGuess(result, false)} accessibilityRole="button">
-                <Text style={s.yesNoText}>❌ No</Text>
+                <Text style={s.yesNoText}>{t('scanner.no')}</Text>
               </Pressable>
             </View>
           </View>
         ) : (
           <Pressable onPress={() => onTeach(result)} style={s.teach} accessibilityRole="button">
             <Text style={s.teachText} maxFontSizeMultiplier={1.3}>
-              🧠 Tell {APP_NAME} what {result.petName} meant
+              {t('scanner.teachBtn', { appName: APP_NAME, petName: result.petName })}
             </Text>
           </Pressable>
         )
       )}
       {result.labelled && (
         <Text style={s.taught} maxFontSizeMultiplier={1.3}>
-          ✓ Thanks, {APP_NAME} learned from this one
+          {t('scanner.taughtThanks', { appName: APP_NAME })}
         </Text>
       )}
     </>

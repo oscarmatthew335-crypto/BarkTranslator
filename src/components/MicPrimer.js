@@ -3,24 +3,23 @@ import { Modal, Pressable, View, Text, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
 import { APP_NAME } from '../species';
 import { StickerButton } from './ui';
+import { useI18n } from '../i18n';
 
 // Explains why the microphone is needed before Android/iOS asks.
 export default function MicPrimer({ visible, petName, species, onAllow, onClose }) {
+  const { t } = useI18n();
   return (
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose}>
         <Pressable style={s.card} onPress={() => {}}>
           <Text style={s.emoji}>🎙️</Text>
-          <Text style={s.title}>Let {APP_NAME} hear {petName}</Text>
-          <Text style={s.body}>
-            {APP_NAME} listens only while the paw is lit up, to measure {petName}'s {species.sounds} and learn them. Your
-            phone will ask next. Tap Allow.
-          </Text>
+          <Text style={s.title}>{t('mic.title', { appName: APP_NAME, petName })}</Text>
+          <Text style={s.body}>{t('mic.body', { appName: APP_NAME, petName, sounds: species.sounds })}</Text>
           <View style={{ marginTop: 18 }}>
-            <StickerButton label="Allow microphone" emoji="🐾" onPress={onAllow} />
+            <StickerButton label={t('mic.allow')} emoji="🐾" onPress={onAllow} />
           </View>
           <Pressable onPress={onClose} style={s.later} accessibilityRole="button">
-            <Text style={s.laterText}>Not now</Text>
+            <Text style={s.laterText}>{t('consent.notNow')}</Text>
           </Pressable>
         </Pressable>
       </Pressable>

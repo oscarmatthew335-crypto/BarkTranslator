@@ -17,6 +17,7 @@ import { makeVideo, videoAvailable } from '../share/videoShare';
 import { extractClipAudio, canUseForShareVideo, MAX_EXTRACT_SECONDS } from '../share/extractClip';
 import { File } from 'expo-file-system';
 import { getSpecies, APP_NAME, STORE_URL } from '../species';
+import { translate } from '../i18n';
 
 const MILESTONE_PER_CONTEXT = 3;
 
@@ -290,10 +291,10 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
           copyVideo: true,
           thumbTimeMs: Math.round((startSec || 0) * 1000 + 800),
           recordedAt: extracted.recordedAt,
-          notHeardMsg: `Couldn't hear ${pet.name} in that clip.`
+          notHeardMsg: translate('error.couldntHearClip', { petName: pet.name })
         });
       } catch (e) {
-        showNotice(e?.message || 'Could not read that clip.');
+        showNotice(e?.message || translate('error.couldNotReadClip'));
       } finally {
         setImportingClip(false);
       }
