@@ -38,7 +38,8 @@ export default function ConsentScreen({ petName, onChoose }) {
 
         <Text style={s.no}>
           If you say not now, no recordings are kept or sent. {APP_NAME} still learns {petName || 'your pet'}'s sounds
-          privately on this phone.
+          privately on this phone. If you pick a clip from your phone, it is sent to our server only to read the sound,
+          and deleted straight away.
         </Text>
       </ScrollView>
 

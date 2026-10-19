@@ -12,6 +12,12 @@ Google Cloud Functions (2nd gen, Python 3.12), one HTTP function, three routes:
                    optional "video" (the phone's silent camera clip, MP4) or
                    "photo" (JPEG), and "clip" (WAV sound): returns a short MP4
                    share video. Nothing is stored; inputs are deleted at once.
+  POST   /extract  multipart: "media" (a video or voice note the owner picked,
+                   any common format, max 25 MB) + optional "start" and
+                   "seconds" (up to 30): returns the sound as 16 kHz mono WAV
+                   for the app to analyse. Nothing is stored; the upload is
+                   deleted at once. Header X-Recorded-At carries the file's
+                   own recording time when it has one.
   GET    /privacy  the public privacy policy page (no key needed)
 
 Each phone (install ID) is limited per day: DAILY_LIMITS below. Over the
@@ -45,9 +51,12 @@ WORD_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 META_NUMBERS = ("soundCount", "loudness", "clarity", "durationMs", "activeMs", "longestMs", "peakDb", "noiseFloorDb")
 META_WORDS = ("breedId", "chosenContext", "pattern", "platform", "format", "featureVersion")
 MAX_FEATURES = 128
-DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40}
+DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40, "extracts": 60}
 MAX_PHOTO_BYTES = 4_000_000
 MAX_VIDEO_BYTES = 15_000_000
+MAX_MEDIA_BYTES = 25_000_000   # a picked clip from the gallery or WhatsApp
+MAX_EXTRACT_SECONDS = 30
+EXTRACT_TIMEOUT_S = 60
 PRIVACY_PAGE = os.path.join(os.path.dirname(__file__), "privacy.html")
 
 
@@ -189,6 +198,10 @@ def ingest(request):
         if _over_limit(install_id, "videos"):
             return _error(429, "daily video limit reached; try tomorrow")
         return _post_video(request)
+    if path.endswith("/extract") and request.method == "POST":
+        if _over_limit(install_id, "extracts"):
+            return _error(429, "daily clip import limit reached; try tomorrow")
+        return _post_extract(request)
     if path.endswith("/me") and request.method == "DELETE":
         removed = get_backend().delete_install(install_id)
         return jsonify({"deleted": removed}), 200
@@ -371,3 +384,60 @@ def _post_video(request):
         with open(out, "rb") as f:
             data = f.read()
     return data, 200, {"Content-Type": "video/mp4", "Cache-Control": "no-store"}
+
+
+RECORDED_RE = re.compile(r"creation_time\s*:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})")
+
+
+def _post_extract(request):
+    """Pull the sound out of a clip the owner picked (gallery video, WhatsApp voice note, ...).
+
+    The phone can't decode every video and voice-note format itself, so ffmpeg does it here and the app runs its
+    usual analysis on the returned WAV. The upload lives only in a temp folder for the length of the request."""
+    if request.content_length and request.content_length > MAX_MEDIA_BYTES + 20_000:
+        return _error(413, "clip too large")
+    f = request.files.get("media")
+    if not f:
+        return _error(400, "missing media")
+    data = f.read(MAX_MEDIA_BYTES + 1)
+    if len(data) > MAX_MEDIA_BYTES:
+        return _error(413, "clip too large")
+    if len(data) < 100:
+        return _error(400, "empty clip")
+    try:
+        start = max(0.0, min(float(request.form.get("start", 0) or 0), 3600.0))
+        seconds = float(request.form.get("seconds", MAX_EXTRACT_SECONDS) or MAX_EXTRACT_SECONDS)
+    except (TypeError, ValueError):
+        return _error(400, "bad start or seconds")
+    seconds = max(0.5, min(seconds, MAX_EXTRACT_SECONDS))
+
+    import subprocess
+
+    import imageio_ffmpeg
+
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "in")
+        out = os.path.join(tmp, "out.wav")
+        with open(src, "wb") as fh:
+            fh.write(data)
+        try:
+            probe = subprocess.run([ff, "-hide_banner", "-i", src], capture_output=True, text=True,
+                                   timeout=EXTRACT_TIMEOUT_S).stderr
+            r = subprocess.run(
+                [ff, "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{start:.3f}", "-t", f"{seconds:.3f}",
+                 "-i", src, "-vn", "-sn", "-dn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav", out],
+                capture_output=True, text=True, timeout=EXTRACT_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            return _error(422, "that clip took too long to read")
+        if r.returncode != 0 or not os.path.exists(out) or os.path.getsize(out) <= 44:
+            if "Audio:" not in probe:
+                return _error(422, "that clip has no sound")
+            return _error(422, "could not read that clip")
+        with open(out, "rb") as fh:
+            wav = fh.read()
+    headers = {"Content-Type": "audio/wav", "Cache-Control": "no-store"}
+    m = RECORDED_RE.search(probe or "")
+    if m:
+        headers["X-Recorded-At"] = m.group(1) + "Z"
+    return wav, 200, headers

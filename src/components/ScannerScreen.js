@@ -49,7 +49,9 @@ export default function ScannerScreen(props) {
     onConfirmGuess,
     onChangeContext,
     onChangePersonality,
-    progress
+    progress,
+    importingClip,
+    onOpenClipPicker
   } = props;
   const bond = progress ? bondLevel(progress) : null;
 
@@ -59,7 +61,8 @@ export default function ScannerScreen(props) {
   const activeId = activeContext(pet);
   const context = species.contexts.find((c) => c.id === activeId) || species.contexts[0];
   const listening = recorder.isRecording;
-  const result = currentResult && !listening && currentResult.petId === pet.id ? currentResult : null;
+  const busy = listening || importingClip;
+  const result = currentResult && !busy && currentResult.petId === pet.id ? currentResult : null;
 
   const pressPaw = () => {
     if (showPawHint) onPawHintSeen();
@@ -115,7 +118,13 @@ export default function ScannerScreen(props) {
 
       {/* Middle: live listening, the speech bubble, or a message */}
       <View style={s.middle} pointerEvents="box-none">
-        {listening ? (
+        {importingClip ? (
+          <Sticker color={C.paper} radius={24} innerStyle={s.listenBox}>
+            <Text style={s.listenTitle} maxFontSizeMultiplier={1.3}>
+              Listening to your clip…
+            </Text>
+          </Sticker>
+        ) : listening ? (
           <ListeningCard recorder={recorder} pet={pet} species={species} filming={cameraOn} />
         ) : result ? (
           <SpeechBubble
@@ -211,7 +220,7 @@ export default function ScannerScreen(props) {
         </ScrollView>
 
         <View style={s.pawRow}>
-          {showPawHint && !listening && !result && (
+          {showPawHint && !busy && !result && (
             <Sticker color={C.paper} radius={16} offset={3} style={s.hintWrap} innerStyle={s.hintBox}>
               <Text style={s.hintText}>
                 Tap the paw, then let {pet.name} {species.sound}. {APP_NAME} stops listening when {pet.name} is done.
@@ -221,15 +230,45 @@ export default function ScannerScreen(props) {
               </Pressable>
             </Sticker>
           )}
-          <ProgressRing bond={bond}>
-            <PawButton
-              recorder={recorder}
-              onPress={pressPaw}
-              label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
-            />
-          </ProgressRing>
+          <View style={s.pawCenterRow}>
+            <View style={s.sideSlot}>
+              {recorder.watching && !busy && (
+                <View style={s.watchBadge} accessible accessibilityLabel="Microphone listening for recent sounds">
+                  <View style={s.watchDot} />
+                  <Text style={s.watchText} maxFontSizeMultiplier={1.1}>
+                    listening
+                  </Text>
+                </View>
+              )}
+            </View>
+            <ProgressRing bond={bond}>
+              <PawButton
+                recorder={recorder}
+                onPress={pressPaw}
+                label={listening ? 'Stop listening' : `Listen to ${pet.name}`}
+              />
+            </ProgressRing>
+            <View style={s.sideSlot}>
+              {onOpenClipPicker && (
+                <Pressable
+                  onPress={onOpenClipPicker}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="From a clip"
+                  style={[s.clipBtn, busy && { opacity: 0.45 }]}
+                >
+                  <Text style={s.clipEmoji}>📎</Text>
+                  <Text style={s.clipText} maxFontSizeMultiplier={1.15}>
+                    From a clip
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          </View>
           <Text style={s.pawHint} maxFontSizeMultiplier={1.3} numberOfLines={2}>
-            {listening
+            {importingClip
+              ? 'Listening to your clip…'
+              : listening
               ? `Listening… tap to stop`
               : showPawHint || !bond
               ? `Tap the paw to listen to ${pet.name}`
@@ -513,6 +552,33 @@ const s = StyleSheet.create({
   faceLabel: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, marginTop: 6 },
   faceLabelActive: { fontFamily: F.bold, color: C.ink },
   pawRow: { alignItems: 'center', paddingTop: 6 },
+  pawCenterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingHorizontal: 12 },
+  sideSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  watchBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: C.bg,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: C.ink,
+    paddingHorizontal: 9,
+    paddingVertical: 4
+  },
+  watchDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.mint },
+  watchText: { fontFamily: F.medium, fontSize: 11, color: C.inkSoft },
+  clipBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.bg,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: C.ink,
+    paddingHorizontal: 10,
+    paddingVertical: 7
+  },
+  clipEmoji: { fontSize: 16 },
+  clipText: { fontFamily: F.semibold, fontSize: 11, color: C.ink, marginTop: 2 },
   pawHint: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 4, textAlign: 'center', paddingHorizontal: 24 },
   hintWrap: { position: 'absolute', bottom: 150, left: 16, right: 16, zIndex: 5 },
   hintBox: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },

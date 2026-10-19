@@ -43,10 +43,11 @@ export async function migrateSpeciesExamples(species, petId) {
   } catch (_) {}
 }
 
-export async function addExample(petId, vector, contextId, moods) {
+export async function addExample(petId, vector, contextId, moods, at = Date.now()) {
   if (!vector || !contextId || contextId === 'other') return loadExamples(petId);
   const list = await loadExamples(petId);
-  list.push({ v: vector, c: contextId, m: moods || [], at: Date.now(), fv: FEATURE_VERSION });
+  const atMs = typeof at === 'string' ? Date.parse(at) || Date.now() : Number(at) || Date.now();
+  list.push({ v: vector, c: contextId, m: moods || [], at: atMs, fv: FEATURE_VERSION });
   while (list.length > MAX_EXAMPLES) list.shift();
   memo[petId] = list;
   try {

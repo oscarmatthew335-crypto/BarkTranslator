@@ -6,12 +6,17 @@
 // started and db is the level in dBFS (0 = loudest, -160 = silence) as
 // reported by expo-audio metering.
 
+import { pitch, SAMPLE_RATE, windowLevels } from './features';
+
 const SILENCE_DB = -160;
 const FLOOR_CLAMP_DB = -70;
+export const SETTLE_MS = 350; // first bit of audio is used only to measure background noise
 const MERGE_GAP_MS = 140; // gaps shorter than this belong to the same bark
-const MIN_BURST_MS = 50; // ignore blips shorter than this
+export const MIN_BURST_MS = 120; // ignore taps and clicks shorter than this
 const HOWL_MS = 900; // one continuous sound this long reads as a howl/rant
 const QUIET_PEAK_DB = -28; // a peak below this is a soft whine/grumble
+const FRAME = 400; // 25 ms at 16 kHz
+const HOP = 160; // 10 ms at 16 kHz
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
@@ -21,7 +26,49 @@ function percentile(sorted, p) {
   return sorted[idx];
 }
 
-export function analyzeBark(samples, totalMs) {
+// Checks that the loud bursts contain at least MIN_BURST_MS of actual signal
+// at 10 ms resolution and that the loud frames have a clear pitch (80-1500 Hz).
+// Taps, clicks, rustles and phone knocks are either too brief or unpitched.
+function isVoiced(pcm, barks, thresholdDb) {
+  if (!pcm || pcm.length < FRAME) return false;
+  const ampThreshold = Math.max(0.015, 10 ** (thresholdDb / 20));
+  const frame = new Float32Array(FRAME);
+  const hopMs = (HOP / SAMPLE_RATE) * 1000;
+  let voiced = 0;
+  let activeHops = 0;
+  let maxBurstMs = 0;
+  for (const b of barks) {
+    const startSample = Math.max(0, Math.floor((b.start / 1000) * SAMPLE_RATE));
+    const endSample = Math.min(pcm.length, Math.ceil((b.end / 1000) * SAMPLE_RATE));
+    let burstHops = 0;
+    for (let off = startSample; off + FRAME <= endSample; off += HOP) {
+      let hopPeak = 0;
+      const hopStart = off + ((FRAME - HOP) >> 1);
+      for (let i = 0; i < HOP; i++) {
+        const a = Math.abs(pcm[hopStart + i]);
+        if (a > hopPeak) hopPeak = a;
+      }
+      if (hopPeak < ampThreshold) continue;
+      burstHops++;
+      activeHops++;
+      for (let i = 0; i < FRAME; i++) frame[i] = pcm[off + i];
+      const [f0, strength] = pitch(frame);
+      if (strength >= 0.3 && f0 >= 80 && f0 <= 1500) voiced++;
+    }
+    if (burstHops * hopMs > maxBurstMs) maxBurstMs = burstHops * hopMs;
+  }
+  return maxBurstMs >= MIN_BURST_MS && voiced >= 5 && voiced / Math.max(1, activeHops) >= 0.25;
+}
+
+export function analyzeBark(samplesOrPcm, totalMs, { pcm = null, liveHeard = true } = {}) {
+  let samples = samplesOrPcm;
+  let rawPcm = pcm;
+  if (samplesOrPcm instanceof Float32Array) {
+    rawPcm = samplesOrPcm;
+    samples = windowLevels(rawPcm, SAMPLE_RATE, 0);
+    if (totalMs === undefined) totalMs = (rawPcm.length / SAMPLE_RATE) * 1000;
+  }
+
   const clean = (samples || [])
     .filter((s) => s && Number.isFinite(s.db) && Number.isFinite(s.t))
     .sort((a, b) => a.t - b.t);
@@ -33,17 +80,24 @@ export function analyzeBark(samples, totalMs) {
   }
 
   const levels = clean.map((s) => Math.max(s.db, FLOOR_CLAMP_DB));
-  const sorted = [...levels].sort((a, b) => a - b);
-  const noiseFloorDb = percentile(sorted, 0.2);
-  const peakDb = sorted[sorted.length - 1];
+  const settleLevels = clean.filter((s) => s.t < SETTLE_MS).map((s) => Math.max(s.db, FLOOR_CLAMP_DB));
+  const sortedAll = [...levels].sort((a, b) => a - b);
+  const sortedSettle = [...settleLevels].sort((a, b) => a - b);
+  const noiseFloorDb = sortedSettle.length
+    ? Math.min(percentile(sortedSettle, 0.5), percentile(sortedAll, 0.2))
+    : percentile(sortedAll, 0.2);
+
+  const postSettle = clean.filter((s) => s.t >= SETTLE_MS).map((s) => Math.max(s.db, FLOOR_CLAMP_DB));
+  const peakDb = postSettle.length ? Math.max(...postSettle) : noiseFloorDb;
   const thresholdDb = Math.max(noiseFloorDb + 10, -45);
 
-  // Find stretches where the level is above the threshold.
+  // Find stretches after SETTLE_MS where the level is above the threshold.
+  // The first SETTLE_MS is used only for the background noise floor.
   const step = clean.length > 1 ? (clean[clean.length - 1].t - clean[0].t) / (clean.length - 1) : 60;
   const raw = [];
   let current = null;
   clean.forEach((s, i) => {
-    const loud = levels[i] >= thresholdDb;
+    const loud = s.t >= SETTLE_MS && levels[i] >= thresholdDb;
     if (loud && !current) current = { start: s.t, end: s.t + step, peak: levels[i] };
     else if (loud && current) {
       current.end = s.t + step;
@@ -55,7 +109,7 @@ export function analyzeBark(samples, totalMs) {
   });
   if (current) raw.push(current);
 
-  // Merge stretches separated by tiny gaps, then drop blips.
+  // Merge stretches separated by tiny gaps, then drop short taps/blips.
   const bursts = [];
   raw.forEach((b) => {
     const last = bursts[bursts.length - 1];
@@ -68,7 +122,8 @@ export function analyzeBark(samples, totalMs) {
   });
   const barks = bursts.filter((b) => b.end - b.start >= MIN_BURST_MS);
 
-  if (barks.length === 0 || peakDb < thresholdDb) {
+  const voicedOk = rawPcm ? isVoiced(rawPcm, barks, thresholdDb) : true;
+  if (!liveHeard || !voicedOk || barks.length === 0 || peakDb < thresholdDb) {
     return { ...emptyResult(durationMs), noiseFloorDb, peakDb };
   }
 

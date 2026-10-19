@@ -1,4 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
+import { AppState } from 'react-native';
 import {
   useAudioStream,
   setAudioModeAsync,
@@ -6,29 +7,35 @@ import {
   requestRecordingPermissionsAsync
 } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
-import { analyzeBark } from './barkAnalysis';
+import { analyzeBark, SETTLE_MS } from './barkAnalysis';
 import { computeFeatures, encodeWav, resample, windowLevels, SAMPLE_RATE } from './features';
+import { RollingAudioBuffer } from './rollingBuffer';
 
 const MAX_CLIP_SECONDS = 15; // listening always stops by itself after this
 const QUIET_AFTER_SOUND_MS = 1300; // stop this long after the last bark
 const GIVE_UP_MS = 8000; // stop if nothing has been heard for this long
-const SETTLE_MS = 350; // first bit of audio is used to measure background noise
 
 // Tap to listen: the microphone runs until the pet has barked and gone quiet
 // again (or nothing is heard, or 15 seconds pass), then onAutoStop fires.
-// From the raw signal we get the live meter, the bark measurements, the sound
-// fingerprint used for learning, and, only if the owner opted in to sharing,
-// a WAV clip. Nothing is written to disk unless keepClip is set.
-//
-// The live meter is delivered through subscribeMeter() instead of React
-// state, so only the meter redraws while listening (smooth on budget phones).
-export default function useBarkRecorder({ onAutoStop } = {}) {
+// While the scanner screen is open in the foreground and watchEnabled is true,
+// also keeps a rolling 10-second in-memory buffer ("Catch sounds I just missed").
+export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {}) {
   const [phase, setPhaseState] = useState('idle'); // idle | starting | recording | analysing
   const phaseRef = useRef('idle');
   const setPhase = (p) => {
     phaseRef.current = p;
     setPhaseState(p);
   };
+  const [watching, setWatchingState] = useState(false);
+  const watchingRef = useRef(false);
+  const setWatching = (w) => {
+    watchingRef.current = w;
+    setWatchingState(w);
+  };
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  const rollingRef = useRef(new RollingAudioBuffer(10));
+  const streamRunningRef = useRef(false);
+
   const chunksRef = useRef([]);
   const totalRef = useRef(0);
   const rateRef = useRef(SAMPLE_RATE);
@@ -51,7 +58,6 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
   };
 
   const onBuffer = useCallback((buf) => {
-    if (phaseRef.current !== 'recording' || cappedRef.current) return;
     if (!buf?.data) return;
     let chunk = new Float32Array(buf.data.slice(0));
     if (buf.channels > 1) {
@@ -60,6 +66,13 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       chunk = mono;
     }
     rateRef.current = buf.sampleRate || SAMPLE_RATE;
+
+    if (phaseRef.current === 'idle' && watchingRef.current) {
+      rollingRef.current.push(chunk, rateRef.current);
+      return;
+    }
+
+    if (phaseRef.current !== 'recording' || cappedRef.current) return;
     const lv = windowLevels(chunk, rateRef.current, totalRef.current);
     samplesRef.current.push(...lv);
     chunksRef.current.push(chunk);
@@ -98,14 +111,60 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
   const { stream } = useAudioStream({ sampleRate: SAMPLE_RATE, channels: 1, encoding: 'float32', onBuffer });
   streamRef.current = stream;
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const active = state === 'active';
+      setAppActive(active);
+      if (!active) {
+        rollingRef.current.clear();
+      }
+    });
+    return () => {
+      sub.remove();
+      rollingRef.current.clear();
       try {
         streamRef.current?.stop();
       } catch (_) {}
-    },
-    []
-  );
+    };
+  }, []);
+
+  // Manage the passive 10-second rolling buffer while on the scanner screen.
+  useEffect(() => {
+    let cancelled = false;
+    const shouldWatch = Boolean(watchEnabled && appActive && phase === 'idle');
+    if (!shouldWatch) {
+      if (watchingRef.current) {
+        setWatching(false);
+        rollingRef.current.clear();
+        if (phaseRef.current === 'idle' && streamRunningRef.current) {
+          streamRunningRef.current = false;
+          try {
+            streamRef.current?.stop();
+          } catch (_) {}
+        }
+      }
+      return;
+    }
+    (async () => {
+      try {
+        const p = await getRecordingPermissionsAsync();
+        if (cancelled || !p.granted || phaseRef.current !== 'idle') return;
+        await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+        if (cancelled || phaseRef.current !== 'idle') return;
+        rollingRef.current.clear();
+        if (!streamRunningRef.current) {
+          await streamRef.current?.start();
+          streamRunningRef.current = true;
+        }
+        setWatching(true);
+      } catch (_) {
+        setWatching(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [watchEnabled, appActive, phase]);
 
   // 'granted' | 'undetermined' | 'denied' | 'blocked'
   const permissionStatus = useCallback(async () => {
@@ -126,6 +185,8 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
   const start = useCallback(async () => {
     if (phaseRef.current !== 'idle') return { ok: false, reason: 'busy' };
     setPhase('starting');
+    setWatching(false);
+    rollingRef.current.clear();
     try {
       const perm = await permissionStatus();
       if (perm !== 'granted') {
@@ -142,9 +203,13 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       emitMeter();
       startedAtRef.current = Date.now();
       setPhase('recording');
-      await stream.start();
+      if (!streamRunningRef.current) {
+        await stream.start();
+        streamRunningRef.current = true;
+      }
       return { ok: true };
     } catch (e) {
+      streamRunningRef.current = false;
       setPhase('idle');
       return { ok: false, reason: 'error', error: e };
     }
@@ -156,6 +221,7 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       setPhase('analysing');
       autoRef.current.fired = true;
       const heldMs = Date.now() - startedAtRef.current;
+      streamRunningRef.current = false;
       try {
         stream.stop();
       } catch (_) {}
@@ -172,8 +238,12 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       }
       chunksRef.current = [];
       const pcm = resample(raw, rateRef.current, SAMPLE_RATE);
+      const liveHeard = autoRef.current.heard;
 
-      const analysis = analyzeBark(samplesRef.current, heldMs);
+      const analysis = analyzeBark(samplesRef.current, heldMs, {
+        pcm,
+        liveHeard
+      });
       samplesRef.current = [];
       const features = analysis?.heard ? computeFeatures(pcm) : null;
 
@@ -188,10 +258,30 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
       meterRef.current = { levels: [], ms: 0, heard: false };
       emitMeter();
       setPhase('idle');
-      return { heldMs, analysis, features, clipUri };
+      return { pcm, liveHeard, heldMs, analysis, features, clipUri };
     },
     [stream]
   );
+
+  // If the rolling 10s buffer caught a sound right before the owner tapped
+  // the paw, consumes and returns it immediately; otherwise returns null.
+  const consumeMissed = useCallback(({ keepClip = false } = {}) => {
+    if (!watchingRef.current) return null;
+    const snap = rollingRef.current.inspect();
+    if (!snap.heard) return null;
+    rollingRef.current.clear();
+    const { pcm, durationMs, liveHeard, analysis } = snap;
+    const features = computeFeatures(pcm);
+    let clipUri = null;
+    if (keepClip) {
+      try {
+        const f = new File(Paths.cache, `bark-${Date.now()}.wav`);
+        f.write(encodeWav(pcm, SAMPLE_RATE));
+        clipUri = f.uri;
+      } catch (_) {}
+    }
+    return { fromBuffer: true, pcm, liveHeard, heldMs: durationMs, analysis, features, clipUri };
+  }, []);
 
   const subscribeMeter = useCallback((fn) => {
     meterListeners.current.add(fn);
@@ -202,8 +292,10 @@ export default function useBarkRecorder({ onAutoStop } = {}) {
   return {
     phase,
     isRecording: phase === 'recording',
+    watching,
     start,
     stop,
+    consumeMissed,
     permissionStatus,
     requestPermission,
     subscribeMeter

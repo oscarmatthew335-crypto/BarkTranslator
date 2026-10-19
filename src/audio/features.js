@@ -112,7 +112,7 @@ function powerSpectrum(frame, t) {
 }
 
 // Pitch by autocorrelation, 80-1500 Hz. Returns [f0Hz, strength 0..1].
-function pitch(frame) {
+export function pitch(frame) {
   const minLag = Math.floor(SAMPLE_RATE / 1500);
   const maxLag = Math.min(FRAME - 1, Math.floor(SAMPLE_RATE / 80));
   let energy = 0;
@@ -295,7 +295,50 @@ export function encodeWav(pcm, sampleRate = SAMPLE_RATE) {
   v.setUint32(40, n * 2, true);
   for (let i = 0; i < n; i++) {
     const s = Math.max(-1, Math.min(1, pcm[i]));
-    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+    v.setInt16(44 + i * 2, Math.round(s < 0 ? s * 0x8000 : s * 0x7fff), true);
   }
   return new Uint8Array(buf);
+}
+
+// Decodes 16-bit PCM WAV bytes (from encodeWav or /extract) to Float32Array at SAMPLE_RATE.
+export function decodeWav(bytes) {
+  if (!bytes) return null;
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (u8.byteLength < 44) return null;
+  const v = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const tag = (o) => String.fromCharCode(u8[o], u8[o + 1], u8[o + 2], u8[o + 3]);
+  if (tag(0) !== 'RIFF' || tag(8) !== 'WAVE') return null;
+
+  let channels = 1;
+  let sampleRate = SAMPLE_RATE;
+  let bits = 16;
+  let dataOffset = -1;
+  let dataBytes = 0;
+  let off = 12;
+  while (off + 8 <= u8.byteLength) {
+    const id = tag(off);
+    const size = v.getUint32(off + 4, true);
+    const body = off + 8;
+    if (id === 'fmt ' && size >= 16 && body + 16 <= u8.byteLength) {
+      const fmt = v.getUint16(body, true);
+      if (fmt !== 1) return null; // PCM only
+      channels = v.getUint16(body + 2, true) || 1;
+      sampleRate = v.getUint32(body + 4, true) || SAMPLE_RATE;
+      bits = v.getUint16(body + 14, true) || 16;
+    } else if (id === 'data') {
+      dataOffset = body;
+      dataBytes = Math.min(size, u8.byteLength - body);
+      break;
+    }
+    off = body + size + (size & 1);
+  }
+  if (dataOffset < 0 || bits !== 16 || dataBytes < 2) return null;
+  const frameBytes = 2 * channels;
+  const frames = Math.floor(dataBytes / frameBytes);
+  const pcm = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    const s = v.getInt16(dataOffset + i * frameBytes, true);
+    pcm[i] = s < 0 ? s / 0x8000 : s / 0x7fff;
+  }
+  return resample(pcm, sampleRate, SAMPLE_RATE);
 }

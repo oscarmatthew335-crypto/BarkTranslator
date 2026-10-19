@@ -2,6 +2,7 @@
   "expo": {
     "name": "Pawlingo",
     "slug": "pawlingo",
+    "scheme": "pawlingo",
     "version": "2.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -23,7 +24,7 @@
         "android.permission.RECORD_AUDIO",
         "android.permission.VIBRATE"
       ],
-      "versionCode": 2,
+      "versionCode": 3,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -52,6 +53,19 @@
           "imageWidth": 180,
           "resizeMode": "contain",
           "backgroundColor": "#EEE7FF"
+        }
+      ],
+      [
+        "expo-share-intent",
+        {
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsMovieWithMaxCount": 1,
+            "NSExtensionActivationSupportsFileWithMaxCount": 1
+          },
+          "androidIntentFilters": [
+            "video/*",
+            "audio/*"
+          ]
         }
       ]
     ],
