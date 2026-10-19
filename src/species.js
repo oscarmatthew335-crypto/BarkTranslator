@@ -7,6 +7,8 @@ import { CAT_CONTEXTS } from './data/cat/contexts';
 import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 import { HUMAN_TO_CAT_PHRASES, CAT_DECODER_GUIDE } from './data/cat/speakAndDecoder';
 import { DOG_CHAT_LINES, CAT_CHAT_LINES } from './data/chatLines';
+import { Platform } from 'react-native';
+import appJson from '../app.json';
 
 // "Just chatting" comes first: the default, with lines that fit anywhere.
 const CHAT = {
@@ -19,7 +21,13 @@ const withChat = (packs, chat) =>
   Object.fromEntries(Object.entries(packs).map(([id, p]) => [id, { ...p, lines: { chat: chat[id], ...p.lines } }]));
 
 export const APP_NAME = 'Pawlingo';
-export const STORE_URL = 'https://play.google.com/store/apps/details?id=com.pawlingo.app';
+// The iPhone app links to the App Store (set expo.extra.appStoreUrl in
+// app.json once the App Store Connect record exists; no link until then).
+export const STORE_NAME = Platform.OS === 'ios' ? 'App Store' : 'Google Play';
+export const STORE_URL =
+  Platform.OS === 'ios'
+    ? appJson.expo.extra?.appStoreUrl || ''
+    : 'https://play.google.com/store/apps/details?id=com.pawlingo.app';
 export const SUPPORT_EMAIL = 'pawlingo@zdns.co.za';
 export const MIN_AGE = 13;
 

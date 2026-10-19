@@ -173,6 +173,7 @@ export default {
   'settings.resetLearning': "Start {petName}'s learning again",
   'settings.about': 'About',
   'settings.privacyPolicy': 'Privacy policy',
+  'settings.entertainment': '{appName} is for fun and bonding with your pet. Translations are playful guesses based on the sound, not advice from a vet or behaviourist.',
   'settings.contactUs': 'Contact us: {email}',
 
   'species.dog': 'Dog',

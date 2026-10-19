@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { loadState, saveState, makePet, DEFAULT_SETTINGS } from '../storage/savedState';
-import { prunePhotos } from '../storage/photos';
+import { prunePhotos, withCurrentUris } from '../storage/photos';
 import { migrateSpeciesExamples, resetExamples } from '../learning/petLearning';
 import { getSpecies } from '../species';
 import { setAllowMobileData } from '../contribute/contributions';
@@ -23,10 +23,11 @@ export default function useAppData() {
         // Pets saved before "home" existed get their species' usual answer.
         setPets(saved.pets.map((p) => (p.home ? p : { ...p, home: getSpecies(p.species).defaultHome })));
         setActivePetId(saved.pets.some((p) => p.id === saved.activePetId) ? saved.activePetId : saved.pets[0].id);
-        setHistory(Array.isArray(saved.history) ? saved.history : []);
+        const history = (Array.isArray(saved.history) ? saved.history : []).map(withCurrentUris);
+        setHistory(history);
         setShareClips(typeof saved.shareClips === 'boolean' ? saved.shareClips : null);
         setSettings(saved.settings);
-        prunePhotos(saved.history);
+        prunePhotos(history);
       }
       setLoaded(true);
     });

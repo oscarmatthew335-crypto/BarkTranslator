@@ -1,7 +1,7 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
-import { getSpecies, APP_NAME } from '../species';
+import { getSpecies, APP_NAME, STORE_NAME } from '../species';
 import SpeechBubble from './SpeechBubble';
 import { translate } from '../i18n';
 
@@ -30,7 +30,7 @@ const ShareCard = forwardRef(function ShareCard({ item }, ref) {
           </View>
           <View style={s.store}>
             <Text style={s.storeSmall}>{translate('share.freeOn')}</Text>
-            <Text style={s.storeBig}>Google Play</Text>
+            <Text style={s.storeBig}>{STORE_NAME}</Text>
           </View>
         </View>
       </View>

@@ -166,7 +166,8 @@ class Card:
     """Draws the frames. Layout is worked out once; each frame only changes
     the photo zoom, how much text is shown and the sound bars."""
 
-    def __init__(self, photo, text, name, label, species):
+    def __init__(self, photo, text, name, label, species, store="Google Play"):
+        self.store = store
         self.name = clean(name, 20) or ("Your dog" if species == "dog" else "Your cat")
         self.text = clean(text, 160) or "..."
         self.label = clean(label, 40)
@@ -275,7 +276,7 @@ class Card:
         bw = 196
         d.rounded_rectangle((W - bw - 22, top + 18, W - 22, top + 74), 14, fill=INK)
         d.text((W - bw - 6, top + 22), "Free on", font=self.f_badge_s, fill=PAPER)
-        d.text((W - bw - 6, top + 40), "Google Play", font=self.f_badge, fill=PAPER)
+        d.text((W - bw - 6, top + 40), self.store, font=self.f_badge, fill=PAPER)
 
     def end_card(self, t):
         frame = Image.new("RGB", (W, H), BUTTER)
@@ -293,7 +294,7 @@ class Card:
         ):
             tw = d.textlength(text, font=font)
             d.text(((W - tw) / 2, y), text, font=font, fill=INK)
-        label = "Free on Google Play"
+        label = f"Free on {self.store}"
         tw = d.textlength(label, font=self.f_chip)
         x0 = (W - tw) / 2 - 28
         d.rounded_rectangle((x0 + 5, 655, x0 + tw + 61, 721), 33, fill=INK)
@@ -302,7 +303,8 @@ class Card:
         return frame
 
 
-def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="", species="dog", video_path=None):
+def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="", species="dog", video_path=None,
+           store="Google Play"):
     photo = None
     if photo_bytes:
         try:
@@ -310,7 +312,7 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
             photo.load()
         except Exception:  # an unreadable photo just means the no-photo look
             photo = None
-    card = Card(photo, text, name, label, species)
+    card = Card(photo, text, name, label, species, store)
 
     audio = read_wav(wav_bytes) if wav_bytes else None
     samples, rate = audio if audio else ([], 16000)

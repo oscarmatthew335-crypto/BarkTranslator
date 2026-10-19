@@ -174,6 +174,7 @@ export default {
   'settings.resetLearning': 'Begin {petName} se leerproses van voor af',
   'settings.about': 'Oor',
   'settings.privacyPolicy': 'Privaatheidsbeleid',
+  'settings.entertainment': '{appName} is vir pret en om nader aan jou troeteldier te kom. Vertalings is speelse raaiskote op grond van die klank, nie advies van \'n veearts of gedragskundige nie.',
   'settings.contactUs': 'Kontak ons: {email}',
 
   'species.dog': 'Hond',

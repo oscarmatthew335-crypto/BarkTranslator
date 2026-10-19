@@ -3,6 +3,7 @@
 // Phones can't encode video from JS, so the server does the rendering and
 // deletes everything straight after (see the privacy policy).
 
+import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { getInstallId } from '../contribute/contributions';
@@ -38,7 +39,8 @@ export async function makeVideo(entry, { signal } = {}) {
       text: entry.text,
       petName: entry.petName,
       label: entry.guess?.label || entry.contextLabel || '',
-      species: entry.species
+      species: entry.species,
+      platform: Platform.OS
     })
   );
   if (fileExists(entry.videoUri)) {

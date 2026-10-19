@@ -232,6 +232,18 @@ def test_video_with_photo_and_sound(client):
     assert r.data[4:8] == b"ftyp" and len(r.data) > 10_000
 
 
+def test_video_names_the_store_for_the_phone(client, monkeypatch):
+    import video
+
+    seen = []
+    real = video.render
+    monkeypatch.setattr(video, "render", lambda out, **kw: (seen.append(kw["store"]), real(out, **kw))[1])
+    for platform in ("ios", "android", None):
+        meta = {"text": "Mrrp?", "petName": "Luna", "species": "cat", "platform": platform}
+        assert post_video(client, meta).status_code == 200
+    assert seen == ["App Store", "Google Play", "Google Play"]
+
+
 def test_video_without_photo_or_sound(client):
     r = post_video(client, {"text": "Mrrp?", "petName": "Luna", "species": "cat"})
     assert r.status_code == 200 and r.data[4:8] == b"ftyp"

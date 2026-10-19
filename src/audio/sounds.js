@@ -1,6 +1,8 @@
 // Generated list of the Speak tab sounds (see tools/make_sounds.py).
 // Swap any WAV for a licensed recording with the same name; no code changes needed.
+import { Platform } from 'react-native';
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import * as Speech from 'expo-speech';
 
 export const SOUND_FILES = {
   dog_good_boy: require('../../assets/sounds/dog_good_boy.wav'),
@@ -38,9 +40,34 @@ export const SOUND_DURATIONS = {"dog_good_boy": 1.25, "dog_walkies": 0.9, "dog_s
 let current = null;
 let timers = [];
 
+// On iOS the microphone stream keeps the audio session in record-only mode,
+// which silences playback, and switching the session over to playback stops
+// the stream. So while something plays, the bark recorder (listening via
+// onPlaybackChange) pauses its "catch sounds I just missed" microphone.
+const IOS = Platform.OS === 'ios';
+const playbackListeners = new Set();
+let soundBusy = false;
+let speechBusy = false;
+let busy = false;
+
+function setBusy({ sound = soundBusy, speech = speechBusy }) {
+  soundBusy = sound;
+  speechBusy = speech;
+  const next = soundBusy || speechBusy;
+  if (next === busy) return;
+  busy = next;
+  playbackListeners.forEach((fn) => fn(busy));
+}
+
+export function onPlaybackChange(fn) {
+  playbackListeners.add(fn);
+  return () => playbackListeners.delete(fn);
+}
+
 export function stopSounds() {
   timers.forEach(clearTimeout);
   timers = [];
+  setBusy({ sound: false });
   if (current) {
     try {
       current.pause();
@@ -67,6 +94,7 @@ function playOne(name) {
 // Plays one sound, or several one after the other with a short gap.
 export async function playSounds(names, gapMs = 90) {
   stopSounds();
+  setBusy({ sound: true });
   try {
     await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
   } catch (_) {}
@@ -83,11 +111,36 @@ export async function playSounds(names, gapMs = 90) {
 // Plays a recording from a file (the pet's own sound from a translation).
 export async function playFile(uri) {
   stopSounds();
+  setBusy({ sound: true });
   try {
     await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
   } catch (_) {}
   try {
-    current = createAudioPlayer({ uri });
-    current.play();
+    const player = createAudioPlayer({ uri });
+    current = player;
+    if (IOS) {
+      // Hand the microphone back once the clip has played (clips are 30 s at most).
+      player.addListener('playbackStatusUpdate', (status) => {
+        if (status?.didJustFinish && current === player) setTimeout(stopSounds, 0);
+      });
+      timers.push(setTimeout(stopSounds, 32000));
+    }
+    player.play();
+  } catch (_) {
+    if (IOS) stopSounds();
+  }
+}
+
+// Reads a translation aloud with the phone's voice ("Read translations aloud").
+export async function speakText(text, options = {}) {
+  if (!IOS) {
+    Speech.speak(text, options);
+    return;
+  }
+  setBusy({ speech: true });
+  try {
+    await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: false });
   } catch (_) {}
+  const done = () => setBusy({ speech: false });
+  Speech.speak(text, { ...options, onDone: done, onStopped: done, onError: done });
 }
