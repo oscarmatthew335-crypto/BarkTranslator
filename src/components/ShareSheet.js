@@ -3,9 +3,11 @@ import { Modal, Pressable, View, Text, StyleSheet, ActivityIndicator } from 'rea
 import { C, F, INK_WIDTH } from '../theme';
 import { StickerButton } from './ui';
 import { fileExists } from '../storage/photos';
+import { useI18n } from '../i18n';
 
 // "Video or picture?" then a short wait while the server makes the video.
 export default function ShareSheet({ job, onVideo, onPicture, onClose }) {
+  const { t } = useI18n();
   const item = job?.item;
   const hasSound = Boolean(item && fileExists(item.audioUri));
   return (
@@ -14,14 +16,14 @@ export default function ShareSheet({ job, onVideo, onPicture, onClose }) {
         <Pressable style={s.card} onPress={() => {}}>
           {job?.step === 'choose' && (
             <>
-              <Text style={s.title}>Share {item.petName}'s translation</Text>
+              <Text style={s.title}>{t('share.title', { petName: item.petName })}</Text>
               <View style={{ gap: 12, marginTop: 16 }}>
                 <StickerButton
-                  label={hasSound ? `Video with ${item.petName}'s voice` : 'Video'}
+                  label={hasSound ? t('share.videoWithVoice', { petName: item.petName }) : t('share.video')}
                   emoji="🎬"
                   onPress={() => onVideo(item)}
                 />
-                <StickerButton label="Picture" emoji="🖼️" color={C.paper} onPress={() => onPicture(item)} />
+                <StickerButton label={t('share.picture')} emoji="🖼️" color={C.paper} onPress={() => onPicture(item)} />
               </View>
               <Text style={s.note}>Videos are made on our server and deleted straight after.</Text>
             </>
@@ -29,22 +31,22 @@ export default function ShareSheet({ job, onVideo, onPicture, onClose }) {
           {job?.step === 'making' && (
             <View style={{ alignItems: 'center', paddingVertical: 8 }}>
               <ActivityIndicator size="large" color={C.ink} />
-              <Text style={[s.title, { textAlign: 'center', marginTop: 14 }]}>Making {item.petName}'s video…</Text>
-              <Text style={[s.body, { textAlign: 'center' }]}>This takes about 10 seconds.</Text>
+              <Text style={[s.title, { textAlign: 'center', marginTop: 14 }]}>{t('share.making', { petName: item.petName })}</Text>
+              <Text style={[s.body, { textAlign: 'center' }]}>{t('share.takesTenSec')}</Text>
               <Pressable onPress={onClose} style={s.later} accessibilityRole="button">
-                <Text style={s.laterText}>Cancel</Text>
+                <Text style={s.laterText}>{t('pets.cancel')}</Text>
               </Pressable>
             </View>
           )}
           {job?.step === 'error' && (
             <>
-              <Text style={s.title}>No video this time</Text>
+              <Text style={s.title}>{t('share.noVideo')}</Text>
               <Text style={s.body}>{job.message}</Text>
               <View style={{ marginTop: 16 }}>
-                <StickerButton label="Share a picture instead" emoji="🖼️" onPress={() => onPicture(item)} />
+                <StickerButton label={t('share.pictureInstead')} emoji="🖼️" onPress={() => onPicture(item)} />
               </View>
               <Pressable onPress={onClose} style={s.later} accessibilityRole="button">
-                <Text style={s.laterText}>Close</Text>
+                <Text style={s.laterText}>{t('scanner.close')}</Text>
               </Pressable>
             </>
           )}

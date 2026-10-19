@@ -5,12 +5,14 @@ import { APP_NAME, SUPPORT_EMAIL } from '../species';
 import appJson from '../../app.json';
 import { getStatus, onStatusChange, flush, deleteMyData, discardQueued, getInstallId } from '../contribute/contributions';
 import { resetExamples } from '../learning/petLearning';
+import { useI18n, LANGUAGE_OPTIONS } from '../i18n';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 export const PRIVACY_URL = API ? `${API}/privacy` : null;
 
 export default function SettingsSheet({ visible, onClose, data, onShowNotice }) {
   const { pet, settings, updateSettings, shareClips, setShareClips, setHistory } = data;
+  const { t, pref } = useI18n();
   const [status, setStatus] = useState(null);
   const [installId, setInstallId] = useState('');
   useEffect(() => {
@@ -74,20 +76,39 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
       <Pressable style={s.backdrop} onPress={onClose}>
         <Pressable style={s.sheet} onPress={() => {}}>
           <ScrollView>
-            <Text style={s.title}>Settings</Text>
+            <Text style={s.title}>{t('settings.title')}</Text>
 
-            <Text style={s.section}>Help {APP_NAME} learn</Text>
+            <Text style={s.section}>{t('settings.language')}</Text>
+            <View style={[s.box, { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }]}>
+              {LANGUAGE_OPTIONS.map((opt) => {
+                const active = (pref || 'system') === opt.id;
+                const label = opt.labelKey ? t(opt.labelKey) : opt.label;
+                return (
+                  <Pressable
+                    key={opt.id}
+                    onPress={() => updateSettings({ language: opt.id })}
+                    style={[s.langPill, active && s.langPillOn]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <Text style={s.langText}>{label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={s.section}>{t('settings.helpLearn', { appName: APP_NAME })}</Text>
             <View style={s.box}>
               <Row
-                title="Share clips and answers"
-                sub={shareClips ? 'Short clips and your answers help train a real translator.' : 'Off. Nothing is recorded or sent.'}
+                title={t('settings.shareTitle')}
+                sub={shareClips ? t('settings.shareSubOn') : t('settings.shareSubOff')}
                 value={shareClips === true}
                 onChange={toggleSharing}
               />
               {shareClips && (
                 <Row
-                  title="Upload on mobile data"
-                  sub="Off: clips wait for Wi-Fi. Each clip is up to about 0.5 MB."
+                  title={t('settings.mobileDataTitle')}
+                  sub={t('settings.mobileDataSub')}
                   value={settings.mobileData}
                   onChange={(v) => updateSettings({ mobileData: v })}
                   divider
@@ -111,42 +132,42 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 </View>
               )}
               <Pressable onPress={confirmDelete} accessibilityRole="button" style={s.linkRow}>
-                <Text style={[s.link, { color: C.tomato }]}>Delete everything I've shared</Text>
+                <Text style={[s.link, { color: C.tomato }]}>{t('settings.deleteShared')}</Text>
               </Pressable>
             </View>
 
-            <Text style={s.section}>Sound</Text>
+            <Text style={s.section}>{t('settings.sound')}</Text>
             <View style={s.box}>
               <Row
-                title="Catch sounds I just missed"
-                sub={`Keeps the last 10 seconds in memory while the scanner is open so tapping the paw right after ${pet.name} makes a sound still catches it. Never saved or sent.`}
+                title={t('settings.catchMissedTitle')}
+                sub={t('settings.catchMissedSub', { petName: pet.name })}
                 value={settings.catchMissed !== false}
                 onChange={(v) => updateSettings({ catchMissed: v })}
               />
               <Row
-                title="Read translations aloud"
-                sub={`Off: you see the words, and Replay plays ${pet.name}'s real sound. On: the phone's voice also reads them.`}
+                title={t('settings.readAloudTitle')}
+                sub={t('settings.readAloudSub', { petName: pet.name })}
                 value={settings.readAloud === true}
                 onChange={(v) => updateSettings({ readAloud: v })}
                 divider
               />
             </View>
             <Text style={s.privacyNote}>
-              If you pick a clip from your phone, it is sent to our server only to read the sound, and deleted straight away.
+              {t('settings.clipPrivacyNote')}
             </Text>
 
             <Text style={s.section}>{pet.name}</Text>
             <View style={s.box}>
               <Pressable onPress={confirmReset} accessibilityRole="button" style={s.linkRow}>
-                <Text style={s.link}>Start {pet.name}'s learning again</Text>
+                <Text style={s.link}>{t('settings.resetLearning', { petName: pet.name })}</Text>
               </Pressable>
             </View>
 
-            <Text style={s.section}>About</Text>
+            <Text style={s.section}>{t('settings.about')}</Text>
             <View style={s.box}>
               {PRIVACY_URL && (
                 <Pressable onPress={() => Linking.openURL(PRIVACY_URL)} accessibilityRole="link" style={s.linkRow}>
-                  <Text style={s.link}>Privacy policy</Text>
+                  <Text style={s.link}>{t('settings.privacyPolicy')}</Text>
                 </Pressable>
               )}
               <Pressable
@@ -154,7 +175,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 accessibilityRole="link"
                 style={s.linkRow}
               >
-                <Text style={s.link}>Contact us: {SUPPORT_EMAIL}</Text>
+                <Text style={s.link}>{t('settings.contactUs', { email: SUPPORT_EMAIL })}</Text>
               </Pressable>
               <Text style={s.version} selectable>
                 {APP_NAME} {appJson?.expo?.version}
@@ -208,6 +229,9 @@ const s = StyleSheet.create({
   statusBox: { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(36,22,74,0.15)', gap: 2 },
   statusText: { fontFamily: F.regular, fontSize: 12, lineHeight: 17, color: C.inkSoft },
   privacyNote: { fontFamily: F.regular, fontSize: 12, lineHeight: 17, color: C.inkSoft, marginTop: 8 },
+  langPill: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, borderWidth: 2, borderColor: C.ink, backgroundColor: C.bg },
+  langPillOn: { backgroundColor: C.butter },
+  langText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
   linkRow: { paddingTop: 10 },
   link: { fontFamily: F.semibold, fontSize: 14, color: C.ink, textDecorationLine: 'underline' },
   version: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 12 }

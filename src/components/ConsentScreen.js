@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { C, F } from '../theme';
 import { APP_NAME } from '../species';
 import { Sticker, StickerButton } from './ui';
+import { useI18n } from '../i18n';
 
 const POINTS = [
   ['🎙️', 'We keep a short recording each time you translate, up to 15 seconds.'],
@@ -16,18 +17,16 @@ const POINTS = [
 // Opt-in for sharing clips. Shown once at setup (and once to people who
 // installed before this existed). "Not now" changes nothing about the app.
 export default function ConsentScreen({ petName, onChoose }) {
+  const { t } = useI18n();
+  const who = petName || 'your pet';
   return (
     <SafeAreaView style={s.container} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={s.content}>
-        <Text style={s.title}>Help {APP_NAME} learn real pet language</Text>
-        <Text style={s.sub}>
-          {APP_NAME} grows with {petName || 'your pet'}. It learns {petName || 'your pet'}'s own sounds on this phone
-          whatever you choose here. Sharing clips also teaches it what barks and meows mean across every pet, so its
-          guesses get better for everyone.
-        </Text>
+        <Text style={s.title}>{t('consent.title', { appName: APP_NAME })}</Text>
+        <Text style={s.sub}>{t('consent.sub', { appName: APP_NAME, petName: who })}</Text>
 
         <Sticker radius={24} innerStyle={s.card} style={{ marginTop: 20 }}>
-          <Text style={s.cardTitle}>If you say yes</Text>
+          <Text style={s.cardTitle}>{t('consent.cardTitle')}</Text>
           {POINTS.map(([icon, text]) => (
             <View key={text} style={s.point}>
               <Text style={s.pointIcon}>{icon}</Text>
@@ -36,17 +35,13 @@ export default function ConsentScreen({ petName, onChoose }) {
           ))}
         </Sticker>
 
-        <Text style={s.no}>
-          If you say not now, no recordings are kept or sent. {APP_NAME} still learns {petName || 'your pet'}'s sounds
-          privately on this phone. If you pick a clip from your phone, it is sent to our server only to read the sound,
-          and deleted straight away.
-        </Text>
+        <Text style={s.no}>{t('consent.noNote', { appName: APP_NAME, petName: who })}</Text>
       </ScrollView>
 
       <View style={s.footer}>
-        <StickerButton label="Yes, I'll help" emoji="🐾" onPress={() => onChoose(true)} />
+        <StickerButton label={t('consent.yes')} emoji="🐾" onPress={() => onChoose(true)} />
         <View style={{ height: 10 }} />
-        <StickerButton label="Not now" color={C.paper} onPress={() => onChoose(false)} />
+        <StickerButton label={t('consent.notNow')} color={C.paper} onPress={() => onChoose(false)} />
       </View>
     </SafeAreaView>
   );

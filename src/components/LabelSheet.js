@@ -15,10 +15,12 @@ import * as Haptics from 'expo-haptics';
 import { C, F, INK_WIDTH } from '../theme';
 import { APP_NAME } from '../species';
 import { StickerButton } from './ui';
+import { useI18n } from '../i18n';
 
 // Asks the owner what the sound really meant. This is the training label.
 // Only "what was going on" is needed; mood and comment are optional extras.
 export default function LabelSheet({ visible, species, petName, entry, onSubmit, onClose }) {
+  const { t } = useI18n();
   const [contextId, setContextId] = useState(null);
   const [moods, setMoods] = useState([]);
   const [comment, setComment] = useState('');
@@ -49,9 +51,9 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
           <Pressable style={s.sheet} onPress={Keyboard.dismiss}>
             <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
               <Text style={s.title} maxFontSizeMultiplier={1.3}>
-                {entry?.wrongGuess ? `Oops. What was ${petName} on about?` : `What was ${petName} on about?`}
+                {entry?.wrongGuess ? t('label.titleWrong', { petName }) : t('label.title', { petName })}
               </Text>
-              <Text style={s.sub}>You know {petName} best. Every answer makes {APP_NAME}'s next guess better.</Text>
+              <Text style={s.sub}>{t('label.sub', { petName, appName: APP_NAME })}</Text>
 
               <View style={s.chips}>
                 {species.contexts
@@ -59,22 +61,22 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
                   .map((c) => (
                     <Chip key={c.id} text={c.label} on={contextId === c.id} onPress={() => setContextId(c.id)} color={C.sky} />
                   ))}
-                <Chip text="🤔 Something else" on={contextId === 'other'} onPress={() => setContextId('other')} color={C.sky} />
+                <Chip text={t('label.somethingElse')} on={contextId === 'other'} onPress={() => setContextId('other')} color={C.sky} />
               </View>
 
               {!showMore ? (
                 <Pressable onPress={() => setShowMore(true)} style={s.more} accessibilityRole="button">
-                  <Text style={s.moreText}>+ Add how {petName} seemed (optional)</Text>
+                  <Text style={s.moreText}>{t('label.addMood', { petName })}</Text>
                 </Pressable>
               ) : (
                 <>
-                  <Text style={s.label}>How did {petName} seem?</Text>
+                  <Text style={s.label}>{t('label.howSeemed', { petName })}</Text>
                   <View style={s.chips}>
                     {species.moods.map((m) => (
                       <Chip key={m.id} text={m.label} on={moods.includes(m.id)} onPress={() => toggleMood(m.id)} color={C.pink} />
                     ))}
                   </View>
-                  <Text style={s.label}>Anything else?</Text>
+                  <Text style={s.label}>{t('label.anythingElse')}</Text>
                   <TextInput
                     style={s.input}
                     value={comment}
@@ -94,7 +96,7 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
 
               <View style={s.buttons}>
                 <StickerButton
-                  label="Save"
+                  label={t('label.save')}
                   emoji="🧠"
                   disabled={!contextId}
                   onPress={() => {
@@ -103,7 +105,7 @@ export default function LabelSheet({ visible, species, petName, entry, onSubmit,
                   }}
                   style={{ flex: 1 }}
                 />
-                <StickerButton label="Skip" color={C.paper} onPress={onClose} />
+                <StickerButton label={t('label.skip')} color={C.paper} onPress={onClose} />
               </View>
             </ScrollView>
           </Pressable>

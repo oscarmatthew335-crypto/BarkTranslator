@@ -5,6 +5,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { C, F, INK_WIDTH } from '../theme';
 import { StickerButton } from './ui';
 import { MAX_EXTRACT_SECONDS } from '../share/extractClip';
+import { useI18n } from '../i18n';
 
 function fmtTime(sec) {
   const s = Math.max(0, Math.round(sec));
@@ -14,6 +15,7 @@ function fmtTime(sec) {
 }
 
 export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmitClip, onClose, onShowNotice }) {
+  const { t } = useI18n();
   const [clip, setClip] = useState(null);
   const [startSec, setStartSec] = useState(0);
   const [barW, setBarW] = useState(260);
@@ -44,7 +46,7 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
       }
     } catch (_) {
       onClose();
-      onShowNotice?.('Could not open your video gallery.');
+      onShowNotice?.(t('clip.cantOpenVideo'));
     }
   };
 
@@ -58,7 +60,7 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
       onSubmitClip({ ...picked, startSec: 0 });
     } catch (_) {
       onClose();
-      onShowNotice?.('Could not open that audio file.');
+      onShowNotice?.(t('clip.cantOpenAudio'));
     }
   };
 
@@ -70,9 +72,9 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
         <Pressable style={s.sheet} onPress={() => {}}>
           {clip && maxStart > 0 ? (
             <>
-              <Text style={s.title}>Pick the 30s moment</Text>
+              <Text style={s.title}>{t('clip.pickMoment')}</Text>
               <Text style={s.sub}>
-                This clip is {fmtTime(clip.durationSec)} long. Slide to the part where {petName} makes the sound:
+                {t('clip.slidePrompt', { petName, duration: fmtTime(clip.durationSec) })}
               </Text>
               <Text style={s.rangeLabel}>
                 {fmtTime(startSec)} – {fmtTime(Math.min(clip.durationSec, startSec + MAX_EXTRACT_SECONDS))}
@@ -92,7 +94,7 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
                   <Text style={s.stepText}>− 5s</Text>
                 </Pressable>
                 <Pressable style={s.stepBtn} onPress={() => setStartSec(0)}>
-                  <Text style={s.stepText}>Start</Text>
+                  <Text style={s.stepText}>{t('clip.stepStart')}</Text>
                 </Pressable>
                 <Pressable style={s.stepBtn} onPress={() => setStartSec((v) => Math.min(maxStart, v + 5))}>
                   <Text style={s.stepText}>+ 5s</Text>
@@ -100,7 +102,7 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
               </View>
               <View style={{ marginTop: 16 }}>
                 <StickerButton
-                  label="Translate this part"
+                  label={t('clip.translatePart')}
                   emoji="🐾"
                   onPress={() => {
                     const chosen = clip;
@@ -114,14 +116,14 @@ export default function ClipPickerSheet({ visible, petName, pendingClip, onSubmi
             </>
           ) : (
             <>
-              <Text style={s.title}>Translate from a clip</Text>
-              <Text style={s.sub}>Pick a video or voice note where {petName} barked or meowed.</Text>
+              <Text style={s.title}>{t('clip.title')}</Text>
+              <Text style={s.sub}>{t('clip.sub', { petName })}</Text>
               <View style={{ gap: 10, marginTop: 14 }}>
-                <StickerButton label="Video from gallery" emoji="🎥" onPress={pickVideo} />
-                <StickerButton label="Voice note or audio" emoji="🎙️" color={C.sky} onPress={pickAudio} />
+                <StickerButton label={t('clip.videoFromGallery')} emoji="🎥" onPress={pickVideo} />
+                <StickerButton label={t('clip.voiceNoteOrAudio')} emoji="🎙️" color={C.sky} onPress={pickAudio} />
               </View>
               <Text style={s.privacy}>
-                If you pick a clip from your phone, it is sent to our server only to read the sound, and deleted straight away.
+                {t('settings.clipPrivacyNote')}
               </Text>
             </>
           )}

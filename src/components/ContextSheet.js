@@ -2,13 +2,15 @@ import React from 'react';
 import { Modal, Pressable, View, Text, StyleSheet, ScrollView } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { C, F, INK_WIDTH } from '../theme';
+import { useI18n } from '../i18n';
 
 export default function ContextSheet({ visible, contexts, selected, petName, onSelect, onClose }) {
+  const { t } = useI18n();
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
       <Pressable style={s.backdrop} onPress={onClose}>
         <Pressable style={s.sheet} onPress={() => {}}>
-          <Text style={s.title}>What's {petName} on about?</Text>
+          <Text style={s.title}>{t('context.title', { petName })}</Text>
           <ScrollView contentContainerStyle={s.grid}>
             {contexts.map((c) => {
               const active = c.id === selected;

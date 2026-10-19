@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F } from '../theme';
 import { Sticker, ScreenTitle } from './ui';
+import { useI18n } from '../i18n';
 
 // Real behaviour tips for the selected species.
 export default function DecoderTab({ species }) {
+  const { t } = useI18n();
   const categories = ['All', ...Array.from(new Set(species.decoder.map((i) => i.category)))];
   const [filter, setFilter] = useState('All');
   useEffect(() => setFilter('All'), [species.id]);
@@ -13,8 +15,8 @@ export default function DecoderTab({ species }) {
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle
-        title={`${species.label} decoder`}
-        subtitle={`What ${species.sounds} and body language really mean.`}
+        title={t('decoder.title', { species: species.label })}
+        subtitle={t('decoder.subtitle', { sounds: species.sounds })}
       />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.filters} style={{ marginBottom: 16 }}>
@@ -28,7 +30,7 @@ export default function DecoderTab({ species }) {
               accessibilityRole="button"
               accessibilityState={{ selected: on }}
             >
-              <Text style={s.filterText}>{cat}</Text>
+              <Text style={s.filterText}>{cat === 'All' ? t('decoder.all') : cat}</Text>
             </Pressable>
           );
         })}

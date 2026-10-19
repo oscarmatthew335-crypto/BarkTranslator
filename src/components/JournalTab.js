@@ -4,6 +4,7 @@ import { C, F } from '../theme';
 import { getSpecies } from '../species';
 import { Sticker, StickerButton, ScreenTitle } from './ui';
 import LearningCard from './LearningCard';
+import { useI18n } from '../i18n';
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -13,6 +14,7 @@ function formatDate(iso) {
 }
 
 export default function JournalTab({ history, pets, pet, onReplay, onShare, onClear, onGoScan, onTeach, species, progress }) {
+  const { t } = useI18n();
   const [filter, setFilter] = useState('pet'); // 'pet' (the selected pet) or 'all'
   const shown = filter === 'all' || pets.length < 2 ? history : history.filter((h) => !h.petId || h.petId === pet.id);
   // How often Pawlingo's guesses were confirmed by the owner
@@ -23,14 +25,14 @@ export default function JournalTab({ history, pets, pet, onReplay, onShare, onCl
   const totalSounds = shown.reduce((sum, h) => sum + (h.soundCount ?? h.barkCount ?? 0), 0);
 
   const confirmClear = () =>
-    Alert.alert('Clear the journal?', 'This deletes every saved translation on this phone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Clear', style: 'destructive', onPress: onClear }
+    Alert.alert(t('journal.clearTitle'), t('journal.clearBody'), [
+      { text: t('pets.cancel'), style: 'cancel' },
+      { text: t('journal.clear'), style: 'destructive', onPress: onClear }
     ]);
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <ScreenTitle title="Journal" subtitle="Every translation, saved on this phone." />
+      <ScreenTitle title={t('journal.title')} subtitle={t('journal.subtitle')} />
 
       <LearningCard progress={progress} species={species} petName={pet.name} />
 
@@ -38,7 +40,7 @@ export default function JournalTab({ history, pets, pet, onReplay, onShare, onCl
         <View style={s.filters}>
           {[
             ['pet', pet.name],
-            ['all', 'All pets']
+            ['all', t('journal.allPets')]
           ].map(([id, label]) => (
             <Pressable
               key={id}
@@ -54,18 +56,18 @@ export default function JournalTab({ history, pets, pet, onReplay, onShare, onCl
       )}
 
       <View style={s.stats}>
-        <Stat value={shown.length} label="Translations" color={C.butter} />
-        <Stat value={totalSounds} label="Sounds heard" color={C.sky} />
-        <Stat value={rightPct} label="Guessed right" color={C.mint} />
+        <Stat value={shown.length} label={t('journal.translations')} color={C.butter} />
+        <Stat value={totalSounds} label={t('journal.soundsHeard')} color={C.sky} />
+        <Stat value={rightPct} label={t('journal.guessedRight')} color={C.mint} />
       </View>
 
       {shown.length === 0 ? (
         <Sticker radius={24} innerStyle={s.empty}>
           <Text style={s.emptyEmoji}>{species.emoji}</Text>
-          <Text style={s.emptyTitle}>Nothing here yet</Text>
-          <Text style={s.emptySub}>Translate {pet.name}'s first {species.sound} and it will show up here.</Text>
+          <Text style={s.emptyTitle}>{t('journal.emptyTitle')}</Text>
+          <Text style={s.emptySub}>{t('journal.emptySub', { petName: pet.name, sound: species.sound })}</Text>
           <View style={{ marginTop: 14 }}>
-            <StickerButton label="Start translating" emoji="🐾" onPress={onGoScan} small />
+            <StickerButton label={t('journal.startTranslating')} emoji="🐾" onPress={onGoScan} small />
           </View>
         </Sticker>
       ) : (
@@ -97,10 +99,10 @@ export default function JournalTab({ history, pets, pet, onReplay, onShare, onCl
                 {item.loudness != null ? `, loudness ${item.loudness}` : ''}
               </Text>
               <View style={s.actions}>
-                <StickerButton label="Replay" emoji="🔊" small color={C.paper} onPress={() => onReplay(item)} />
-                <StickerButton label="Share" emoji="📤" small onPress={() => onShare(item)} />
+                <StickerButton label={t('scanner.replay')} emoji="🔊" small color={C.paper} onPress={() => onReplay(item)} />
+                <StickerButton label={t('scanner.share')} emoji="📤" small onPress={() => onShare(item)} />
                 {item.features && !item.labelled && (!item.petId || pets.some((p) => p.id === item.petId)) && (
-                  <StickerButton label="Teach" emoji="🧠" small color={C.pink} onPress={() => onTeach(item)} />
+                  <StickerButton label={t('journal.teach')} emoji="🧠" small color={C.pink} onPress={() => onTeach(item)} />
                 )}
               </View>
             </Sticker>
@@ -110,7 +112,7 @@ export default function JournalTab({ history, pets, pet, onReplay, onShare, onCl
 
       {history.length > 0 && (
         <Pressable onPress={confirmClear} style={s.clear} accessibilityRole="button">
-          <Text style={s.clearText}>Clear journal</Text>
+          <Text style={s.clearText}>{t('journal.clear')}</Text>
         </Pressable>
       )}
     </ScrollView>
