@@ -19,7 +19,12 @@ import imageio_ffmpeg
 
 Image.MAX_IMAGE_PIXELS = 40_000_000
 
-W, H = 720, 900
+W, H = 720, 1280                 # 9:16, full screen on phones (WhatsApp Status, TikTok, Reels)
+FOOT_H = 92                      # Pawlingo footer bar
+PIC_H = 740                      # the pet's picture fills the top; nothing is drawn over it
+PANEL_TOP = PIC_H                # the speech bubble sits below the picture, pointing up at the pet
+TAIL_H = 36                      # space above the bubble body for its tail
+MAX_BH = H - FOOT_H - PANEL_TOP - TAIL_H - 40
 FPS = 24
 HERE = os.path.dirname(__file__)
 INK = (36, 22, 74)
@@ -80,6 +85,30 @@ def envelope(samples, rate, fps, frames):
     return [min(1.0, v / top) for v in out]
 
 
+class _Shifted:
+    """Wraps an ImageDraw so every y coordinate is moved down by dy (keeps the drawing code readable)."""
+
+    def __init__(self, draw, dy):
+        self._d, self._dy = draw, dy
+
+    def _sy(self, xy):
+        if isinstance(xy, (list, tuple)) and xy and isinstance(xy[0], (list, tuple)):
+            return [(x, y + self._dy) for x, y in xy]
+        if len(xy) == 2:
+            return (xy[0], xy[1] + self._dy)
+        x0, y0, x1, y1 = xy
+        return (x0, y0 + self._dy, x1, y1 + self._dy)
+
+    def text(self, xy, *a, **k):
+        return self._d.text(self._sy(xy), *a, **k)
+
+    def rounded_rectangle(self, xy, *a, **k):
+        return self._d.rounded_rectangle(self._sy(xy), *a, **k)
+
+    def textlength(self, *a, **k):
+        return self._d.textlength(*a, **k)
+
+
 def _wrap(draw, text, font, width):
     lines, line = [], ""
     for word in text.split(" "):
@@ -103,7 +132,7 @@ class ClipFrames:
         self.seconds = probe_seconds(path)
         self.proc = subprocess.Popen(
             [ff, "-loglevel", "error", "-i", path, "-an",
-             "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS}",
+             "-vf", f"scale={W}:{PIC_H}:force_original_aspect_ratio=increase,crop={W}:{PIC_H},fps={FPS}",
              "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
         )
@@ -111,12 +140,12 @@ class ClipFrames:
 
     def next(self):
         if self.proc is not None:
-            raw = self.proc.stdout.read(W * H * 3)
-            if len(raw) == W * H * 3:
-                self.last = Image.frombytes("RGB", (W, H), raw)
+            raw = self.proc.stdout.read(W * PIC_H * 3)
+            if len(raw) == W * PIC_H * 3:
+                self.last = Image.frombytes("RGB", (W, PIC_H), raw)
             else:
                 self.close()
-        return self.last.copy() if self.last is not None else Image.new("RGB", (W, H), BG)
+        return self.last.copy() if self.last is not None else Image.new("RGB", (W, PIC_H), BG)
 
     def close(self):
         if self.proc is not None:
@@ -155,48 +184,64 @@ class Card:
         self.photo = None
         if photo is not None:
             img = ImageOps.exif_transpose(photo).convert("RGB")
-            scale = max(W * 1.1 / img.width, H * 1.1 / img.height)
+            scale = max(W * 1.1 / img.width, PIC_H * 1.1 / img.height)
             self.photo = img.resize((math.ceil(img.width * scale), math.ceil(img.height * scale)), Image.LANCZOS)
 
         # Bubble: pick the biggest text size that fits in 5 lines.
         probe = ImageDraw.Draw(Image.new("RGB", (10, 10)))
         self.bw = W - 64
-        for size in (50, 46, 42, 38, 34, 30):
+        chip_h = 44 if self.label else 0
+        for size in (48, 44, 40, 36, 32, 28):
             self.f_text = _font("700Bold", size)
             self.lines = _wrap(probe, self.text, self.f_text, self.bw - 56)
-            if len(self.lines) <= 5:
+            self.line_h = int(self.f_text.size * 1.18)
+            self.bh = 28 + 36 + len(self.lines) * self.line_h + (chip_h + 14 if chip_h else 0) + 26
+            if len(self.lines) <= 6 and self.bh <= MAX_BH:
                 break
         self.lines = self.lines[:6]
-        self.line_h = int(self.f_text.size * 1.18)
-        chip_h = 44 if self.label else 0
         self.bh = 28 + 36 + len(self.lines) * self.line_h + (chip_h + 14 if chip_h else 0) + 26
-        self.bubble_y = H - 92 - 34 - self.bh
+        # centred in the panel under the picture (layer top = tail tip)
+        self.bubble_y = PANEL_TOP + max(14, (H - FOOT_H - PANEL_TOP - TAIL_H - self.bh) // 2)
         self.total_chars = sum(len(l) for l in self.lines)
 
     # -- pieces -------------------------------------------------------------
 
-    def _background(self, t, total):
+    def _picture(self, t, total):
+        """The top area (W x PIC_H): the photo with a slow zoom, or the Pawlingo mark when there's no photo."""
         if self.photo is not None:
             z = 1.0 + 0.08 * (t / total)
-            cw, ch = int(W * 1.1 / z), int(H * 1.1 / z)
+            cw, ch = int(W * 1.1 / z), int(PIC_H * 1.1 / z)
             px, py = (self.photo.width - cw) // 2, (self.photo.height - ch) // 2
-            return self.photo.crop((px, py, px + cw, py + ch)).resize((W, H), Image.BILINEAR)
-        frame = Image.new("RGB", (W, H), BG)
+            return self.photo.crop((px, py, px + cw, py + ch)).resize((W, PIC_H), Image.BILINEAR)
+        pic = Image.new("RGB", (W, PIC_H), BG)
         size = 330
         bob = int(10 * math.sin(t * 2.4))
         mark = self.mark.resize((size, int(size * self.mark.height / self.mark.width)), Image.LANCZOS)
-        frame.paste(mark, ((W - size) // 2, 110 + bob), mark)
+        pic.paste(mark, ((W - size) // 2, (PIC_H - mark.height) // 2 + bob), mark)
+        return pic
+
+    def compose(self, picture):
+        """Full frame: picture on top, lilac panel underneath for the bubble (footer added later)."""
+        frame = Image.new("RGB", (W, H), BG)
+        frame.paste(picture, (0, 0))
+        d = ImageDraw.Draw(frame)
+        d.line([(0, PIC_H), (W, PIC_H)], fill=INK, width=4)
         return frame
 
+    def _background(self, t, total):
+        return self.compose(self._picture(t, total))
+
     def _bubble(self, shown, level):
-        layer = Image.new("RGBA", (self.bw + 8, self.bh + 40), (0, 0, 0, 0))
+        T = TAIL_H
+        layer = Image.new("RGBA", (self.bw + 8, self.bh + T + 8), (0, 0, 0, 0))
         d = ImageDraw.Draw(layer)
-        # hard shadow, tail, body
-        d.rounded_rectangle((7, 7, self.bw + 7, self.bh + 7), 30, fill=INK)
-        d.polygon([(70, self.bh - 4), (150, self.bh - 4), (88, self.bh + 36)], fill=INK)
-        d.rounded_rectangle((0, 0, self.bw, self.bh), 30, fill=PAPER, outline=INK, width=4)
-        d.polygon([(66, self.bh - 6), (140, self.bh - 6), (82, self.bh + 30)], fill=PAPER)
-        d.line([(66, self.bh - 2), (82, self.bh + 30), (140, self.bh - 2)], fill=INK, width=4, joint="curve")
+        # hard shadow, body, and a tail pointing UP at the pet in the picture above
+        d.rounded_rectangle((7, T + 7, self.bw + 7, T + self.bh + 7), 30, fill=INK)
+        d.polygon([(70, T + 10), (150, T + 10), (88, 4)], fill=INK)
+        d.rounded_rectangle((0, T, self.bw, T + self.bh), 30, fill=PAPER, outline=INK, width=4)
+        d.polygon([(66, T + 6), (140, T + 6), (82, 2)], fill=PAPER)
+        d.line([(66, T + 2), (82, 2), (140, T + 2)], fill=INK, width=4, joint="curve")
+        d = _Shifted(d, T)
         d.text((28, 26), f"{self.name} says", font=self.f_head, fill=SOFT)
         # live sound bars next to the name
         bx = 28 + int(d.textlength(f"{self.name} says", font=self.f_head)) + 18
@@ -222,7 +267,7 @@ class Card:
 
     def _footer(self, frame):
         d = ImageDraw.Draw(frame)
-        top = H - 92
+        top = H - FOOT_H
         d.rectangle((0, top, W, H), fill=BUTTER)
         d.line([(0, top), (W, top)], fill=INK, width=4)
         d.text((24, top + 14), "Pawlingo", font=self.f_brand, fill=INK)
@@ -234,12 +279,13 @@ class Card:
 
     def end_card(self, t):
         frame = Image.new("RGB", (W, H), BUTTER)
-        d = ImageDraw.Draw(frame)
+        d = _Shifted(ImageDraw.Draw(frame), (H - 900) // 2)
+        oy = (H - 900) // 2
         size = 280
         pop = _ease_out_back(min(1.0, t / 0.45))
         s = max(1, int(size * pop))
         icon = self.icon.resize((s, s), Image.LANCZOS)
-        frame.paste(icon, ((W - s) // 2, 150 + (size - s) // 2), icon)
+        frame.paste(icon, ((W - s) // 2, oy + 150 + (size - s) // 2), icon)
         big = _font("700Bold", 76)
         for text, font, y in (
             ("Pawlingo", big, 470),
@@ -322,7 +368,7 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
                 if t - main_s < 0.25:  # quick fade from the main card
                     frame = Image.blend(last, frame, (t - main_s) / 0.25)
             else:
-                frame = clip.next() if clip else card._background(t, main_s)
+                frame = card.compose(clip.next()) if clip else card._background(t, main_s)
                 if t >= 0.35:
                     k = 1.0 if t >= type_start + type_s else max(0.0, (t - type_start) / type_s)
                     shown = int(round(card.total_chars * _ease_in_out(k))) if k < 1 else card.total_chars
@@ -334,7 +380,7 @@ def render(out_path, photo_bytes=None, wav_bytes=None, text="", name="", label="
                         lw, lh = max(1, int(layer.width * pop)), max(1, int(layer.height * pop))
                         layer = layer.resize((lw, lh), Image.BILINEAR)
                         x = 32 + (card.bw - lw) // 2
-                        y = card.bubble_y + (card.bh - lh)
+                        y = card.bubble_y
                     else:
                         x, y = 32, card.bubble_y
                     frame.paste(layer, (x, y), layer)
