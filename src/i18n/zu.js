@@ -174,5 +174,18 @@ export default {
   'settings.resetLearning': 'Qala kabusha ukufunda kuka-{petName}',
   'settings.about': 'Mayelana',
   'settings.privacyPolicy': 'Inqubomgomo yobumfihlo',
-  'settings.contactUs': 'Xhumana nathi: {email}'
+  'settings.contactUs': 'Xhumana nathi: {email}',
+
+  'species.dog': 'Inja',
+  'species.cat': 'Ikati',
+  'pets.editTitle': 'Hlela u-{petName}',
+  'scanner.flipCamera': 'Phendula ikhamera',
+  'scanner.torch': 'Ithoshi',
+  'scanner.settings': 'Izilungiselelo',
+  'share.serverNote': 'Amavidiyo enziwa kuseva yethu bese esuswa ngokushesha ngemuva kwalokho.',
+  'share.cta': 'Uthini u-{species} wakho?',
+  'share.freeOn': 'Mahhala ku-',
+  'settings.waiting': 'Kulindile ukuthunyelwa: iziqeshana ezi-{clips}, izimpendulo ezi-{answers}',
+  'settings.noServer': 'Lokhu kwakhiwa kokuhlola akunayo iseva, ngakho iziqeshana ziyalinda.',
+  'settings.lastTry': 'Umzamo wokugcina: {detail}'
 };
