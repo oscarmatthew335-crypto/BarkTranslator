@@ -15,6 +15,7 @@ export default {
   'onboarding.startPet': 'Qala ukuhumusha u-{petName}',
   'onboarding.pickToStart': 'Khetha isilwane ukuze uqale',
   'onboarding.ageHint': 'Thikha ibhokisi leminyaka ukuze uqhubeke.',
+  'onboarding.speciesHint': 'Thepha Inja noma Ikati ukuze uqhubeke.',
   'onboarding.back': '← Emuva',
   'onboarding.skip': 'Yeqa',
   'onboarding.next': 'Okulandelayo',
