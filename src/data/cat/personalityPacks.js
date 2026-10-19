@@ -1,3 +1,5 @@
+import { EXTRA_CAT_LINES } from './extraCatLines';
+
 // Cat voice personalities. Same shape as the dog packs: lines per context,
 // "short" for a single meow or soft sound, "long" for a yowl or chatter run.
 export const CAT_PERSONALITY_PACKS = {
@@ -444,3 +446,16 @@ export const CAT_PERSONALITY_PACKS = {
     }
   }
 };
+
+for (const [id, extra] of Object.entries(EXTRA_CAT_LINES)) {
+  const pack = CAT_PERSONALITY_PACKS[id];
+  if (!pack) continue;
+  for (const [ctx, pools] of Object.entries(extra)) {
+    if (ctx === 'chat' || !pack.lines[ctx]) continue;
+    pack.lines[ctx] = {
+      short: [...pack.lines[ctx].short, ...(pools.short || [])],
+      long: [...pack.lines[ctx].long, ...(pools.long || [])]
+    };
+  }
+}
+

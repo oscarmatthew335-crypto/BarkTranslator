@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { pickLine, activeContext, fitsPlace, fitsTime } from '../src/lines.js';
+import { SPECIES } from '../src/species.js';
 
 const pool = {
   short: ["You're eating snoek on the braai and I'm getting pellets?", 'Eish bru, I can see the bottom of the bowl.', 'Midnight snack time!'],
@@ -31,3 +32,25 @@ test('a picked situation wears off after 20 minutes', () => {
   assert.equal(activeContext({ contextId: 'food', contextSetAt: now - 25 * 60e3 }, now), 'chat');
   assert.equal(activeContext({ contextId: 'food' }, now), 'chat');
 });
+
+test('every dog and cat personality has expanded lines and no duplicate lines', () => {
+  for (const sp of Object.values(SPECIES)) {
+    for (const [packId, pack] of Object.entries(sp.packs)) {
+      const allLines = [];
+      for (const pools of Object.values(pack.lines)) {
+        allLines.push(...(pools.short || []), ...(pools.long || []));
+      }
+      assert.ok(
+        allLines.length >= 38,
+        `${sp.id}.${packId} should have at least 38 total lines (has ${allLines.length})`
+      );
+      const seen = new Set();
+      for (const line of allLines) {
+        const norm = line.trim();
+        assert.ok(!seen.has(norm), `Duplicate line in ${sp.id}.${packId}: "${norm}"`);
+        seen.add(norm);
+      }
+    }
+  }
+});
+

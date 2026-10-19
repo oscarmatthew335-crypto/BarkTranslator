@@ -1,3 +1,5 @@
+import { EXTRA_DOG_LINES } from './extraDogLines';
+
 export const PERSONALITY_PACKS = {
   boet: {
     name: '🥩 Local SA Boet',
@@ -411,5 +413,18 @@ export const PERSONALITY_PACKS = {
     }
   }
 };
+
+for (const [id, extra] of Object.entries(EXTRA_DOG_LINES)) {
+  const pack = PERSONALITY_PACKS[id];
+  if (!pack) continue;
+  for (const [ctx, pools] of Object.entries(extra)) {
+    if (ctx === 'chat' || !pack.lines[ctx]) continue;
+    pack.lines[ctx] = {
+      short: [...pack.lines[ctx].short, ...(pools.short || [])],
+      long: [...pack.lines[ctx].long, ...(pools.long || [])]
+    };
+  }
+}
+
 
 
