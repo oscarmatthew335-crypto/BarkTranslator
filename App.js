@@ -79,8 +79,6 @@ function PetApp() {
   if (!data.loaded) return <View style={styles.blank} />;
   if (!pet)
     return (
-  if (!pet)
-    return (
       <I18nProvider language={data.settings.language}>
         <Onboarding
           onDone={({ species: sp, name, breedId = null, home = null, contextId = null }) => {
@@ -104,7 +102,6 @@ function PetApp() {
       <I18nProvider language={data.settings.language}>
         <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />
       </I18nProvider>
-    );
     );
 
   const listening = t.bark.phase !== 'idle' || t.importingClip;

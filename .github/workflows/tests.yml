@@ -14,8 +14,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
+      - name: Install
+        run: npm ci --no-audit --no-fund
       - name: Run tests
         run: npm test
+      - name: Bundle check (catches syntax errors the APK build would hit)
+        run: npx expo export --platform android --output-dir /tmp/expo-export
 
   server:
     name: Server and training job
