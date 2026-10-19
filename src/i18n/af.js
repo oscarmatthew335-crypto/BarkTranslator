@@ -15,6 +15,7 @@ export default {
   'onboarding.startPet': 'Begin {petName} vertaal',
   'onboarding.pickToStart': "Kies 'n troeteldier om te begin",
   'onboarding.ageHint': 'Merk die ouderdomblokkie om voort te gaan.',
+  'onboarding.speciesHint': 'Tik op Hond of Kat om voort te gaan.',
   'onboarding.back': '← Terug',
   'onboarding.skip': 'Slaan oor',
   'onboarding.next': 'Volgende',

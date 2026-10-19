@@ -14,6 +14,7 @@ export default {
   'onboarding.startPet': 'Start translating {petName}',
   'onboarding.pickToStart': 'Pick a pet to start',
   'onboarding.ageHint': 'Tick the age box to continue.',
+  'onboarding.speciesHint': 'Tap Dog or Cat to continue.',
   'onboarding.back': '← Back',
   'onboarding.skip': 'Skip',
   'onboarding.next': 'Next',

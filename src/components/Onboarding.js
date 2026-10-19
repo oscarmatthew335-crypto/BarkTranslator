@@ -26,14 +26,14 @@ import { useI18n } from '../i18n';
 export default function Onboarding({ onDone }) {
   const { t } = useI18n();
   const [step, setStep] = useState(1); // 1 | 2 | 3
-  const [speciesId, setSpeciesId] = useState('dog');
+  const [speciesId, setSpeciesId] = useState(null); // no default: a cat owner must not end up with a dog
   const [name, setName] = useState('');
   const [ageOk, setAgeOk] = useState(false);
   const [home, setHome] = useState(null);
   const [breedId, setBreedId] = useState(null);
   const [firstContextId, setFirstContextId] = useState(null);
 
-  const sp = SPECIES[speciesId] || SPECIES.dog;
+  const sp = SPECIES[speciesId || 'dog'] || SPECIES.dog;
   const petName = name.trim() || sp.defaultName;
   const chosenHome = home || sp.defaultHome;
   const chosenBreed = sp.breeds ? breedId || sp.breeds[0].id : null;
@@ -91,7 +91,7 @@ export default function Onboarding({ onDone }) {
 
               <View style={s.choices}>
                 {Object.values(SPECIES).map((opt) => {
-                  const active = sp.id === opt.id;
+                  const active = speciesId === opt.id;
                   return (
                     <Pressable
                       key={opt.id}
@@ -249,14 +249,18 @@ export default function Onboarding({ onDone }) {
               <StickerButton
                 label={t('onboarding.next')}
                 emoji="🐾"
-                disabled={!ageOk}
+                disabled={!ageOk || !speciesId}
                 onPress={() => {
                   Keyboard.dismiss();
                   Haptics.selectionAsync().catch(() => {});
                   setStep((v) => v + 1);
                 }}
               />
-              {!ageOk && <Text style={s.hint}>{t('onboarding.ageHint')}</Text>}
+              {!speciesId ? (
+                <Text style={s.hint}>{t('onboarding.speciesHint')}</Text>
+              ) : (
+                !ageOk && <Text style={s.hint}>{t('onboarding.ageHint')}</Text>
+              )}
             </>
           ) : (
             <StickerButton
