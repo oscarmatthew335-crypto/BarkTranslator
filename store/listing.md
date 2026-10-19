@@ -38,3 +38,10 @@ Your pets, journal and personal sound fingerprints stay on your phone—no accou
 
 ## Keywords / Tags
 dog translator, cat translator, bark translator, meow translator, pet translator, dog sounds, cat sounds, pet behaviour, dog clicker, puppy training, South Africa
+
+
+## Support Email
+SUPPORT_EMAIL_TBD
+
+## Privacy Policy URL
+https://pawlingo-api-pfyzny5p7q-uc.a.run.app/privacy
