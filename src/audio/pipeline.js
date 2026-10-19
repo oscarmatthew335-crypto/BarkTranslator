@@ -6,7 +6,9 @@ import { analyzeBark, pickLinePool, moodScores, SETTLE_MS } from './barkAnalysis
 import { computeFeatures, SAMPLE_RATE, windowLevels } from './features';
 import { guessContext } from '../learning/petLearning';
 import { loadSharedModel } from '../learning/sharedModel';
-import { pickLine, activeContext } from '../lines';
+import { pickLocalizedLine, activeContext } from '../lines';
+import { getAppLanguage } from '../i18n/index';
+import { localizeContext } from '../data/i18n/index';
 
 export async function runTranslationPipeline({
   pcm,
@@ -18,7 +20,8 @@ export async function runTranslationPipeline({
   sharedModel,
   recordedAt = null,
   now = null,
-  random = Math.random
+  random = Math.random,
+  lang = getAppLanguage()
 }) {
   const durationMs = pcm ? (pcm.length / SAMPLE_RATE) * 1000 : 0;
   const samples = pcm ? windowLevels(pcm, SAMPLE_RATE, 0) : [];
@@ -41,15 +44,19 @@ export async function runTranslationPipeline({
   });
   const guessCtx = guess?.show ? species.contexts.find((c) => c.id === guess.contextId) : null;
 
-  const pack = species.packs[pet.personality] || species.packs[species.defaultPersonality];
+  const packId = species.packs[pet.personality] ? pet.personality : species.defaultPersonality;
+  const pack = species.packs[packId];
   const pickedId = activeContext(pet, timeMs);
   const ctx = guessCtx || species.contexts.find((c) => c.id === pickedId) || species.contexts[0];
   const recent = (history || [])
     .filter((h) => h.petId === pet.id)
     .slice(0, 8)
-    .map((h) => h.text);
+    .map((h) => h.textKey || h.text);
 
-  const text = pickLine({
+  const { key: textKey, text } = pickLocalizedLine({
+    species: species.id,
+    pack: packId,
+    lang,
     pool: pack.lines[ctx.id] || pack.lines.chat,
     size: pickLinePool(analysis.pattern),
     home: pet.home,
@@ -69,9 +76,10 @@ export async function runTranslationPipeline({
     breedName: breed?.name || null,
     personalityName: pack.name,
     personalityFace: pack.face,
-    contextLabel: ctx.label,
-    tip: ctx.tip,
+    contextLabel: localizeContext(ctx, 'label', { species: species.id, lang }),
+    tip: localizeContext(ctx, 'tip', { species: species.id, lang }),
     text,
+    textKey,
     duration: (durationMs / 1000).toFixed(1),
     patternLabel: species.patternLabels[analysis.pattern],
     pattern: analysis.pattern,
@@ -88,7 +96,7 @@ export async function runTranslationPipeline({
     guess: guessCtx
       ? {
           contextId: guess.contextId,
-          label: guessCtx.label,
+          label: localizeContext(guessCtx, 'label', { species: species.id, lang }),
           confidence: guess.confidence,
           wording: guess.wording,
           source: guess.source,

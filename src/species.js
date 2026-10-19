@@ -7,6 +7,8 @@ import { CAT_CONTEXTS } from './data/cat/contexts';
 import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 import { HUMAN_TO_CAT_PHRASES, CAT_DECODER_GUIDE } from './data/cat/speakAndDecoder';
 import { DOG_CHAT_LINES, CAT_CHAT_LINES } from './data/chatLines';
+import { localizeContext } from './data/i18n/index';
+import { getAppLanguage } from './i18n/index';
 
 // "Just chatting" comes first: the default, with lines that fit anywhere.
 const CHAT = {
@@ -15,6 +17,19 @@ const CHAT = {
   shortLabel: 'Chatting',
   tip: 'Tip: Pick what is going on (food, door, play) for a few minutes and the translations follow. It goes back to chatting by itself.'
 };
+// Situation labels and tips read in the app language each time they're shown
+// (English when a translation is missing); ids and everything else stay put.
+const followLanguage = (species, contexts) =>
+  contexts.map((ctx) => {
+    const out = { ...ctx };
+    for (const field of ['label', 'shortLabel', 'tip']) {
+      Object.defineProperty(out, field, {
+        enumerable: true,
+        get: () => localizeContext(ctx, field, { species, lang: getAppLanguage() })
+      });
+    }
+    return out;
+  });
 const withChat = (packs, chat) =>
   Object.fromEntries(Object.entries(packs).map(([id, p]) => [id, { ...p, lines: { chat: chat[id], ...p.lines } }]));
 
@@ -32,7 +47,7 @@ export const SPECIES = {
     sound: 'bark',
     sounds: 'barks',
     speakTab: 'Speak Dog',
-    contexts: [CHAT, ...DOG_CONTEXTS],
+    contexts: followLanguage('dog', [CHAT, ...DOG_CONTEXTS]),
     packs: withChat(DOG_PACKS, DOG_CHAT_LINES),
     breeds: DOG_BREEDS,
     phrases: HUMAN_TO_DOG_PHRASES,
@@ -70,7 +85,7 @@ export const SPECIES = {
     sound: 'meow',
     sounds: 'meows',
     speakTab: 'Speak Cat',
-    contexts: [CHAT, ...CAT_CONTEXTS],
+    contexts: followLanguage('cat', [CHAT, ...CAT_CONTEXTS]),
     packs: withChat(CAT_PERSONALITY_PACKS, CAT_CHAT_LINES),
     breeds: null,
     phrases: HUMAN_TO_CAT_PHRASES,
