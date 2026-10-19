@@ -10,7 +10,7 @@ Use the answers below when completing the **App Content → Data safety** form i
 | :--- | :--- | :--- |
 | **Does your app collect or share any of the required user data types?** | **Yes** | Collects anonymous crash logs (`src/crash.js`), optional picked clips / videos processed ephemerally (`POST /extract`, `POST /video`), and optional opt-in pet audio clips (`src/contribute/contributions.js`). |
 | **Is all of the user data collected by your app encrypted in transit?** | **Yes** | All requests to `EXPO_PUBLIC_PAWLINGO_API` use HTTPS/TLS. |
-| **Do you provide a way for users to request that their data is deleted?** | **Yes** | In-app button: **Settings → Delete everything I've shared** (`DELETE /me` in `src/contribute/contributions.js` & `server/main.py`), plus email support (`SUPPORT_EMAIL_TBD` with Install ID). |
+| **Do you provide a way for users to request that their data is deleted?** | **Yes** | In-app button: **Settings → Delete everything I've shared** (`DELETE /me` in `src/contribute/contributions.js` & `server/main.py`), plus email support (`pawlingo@zdns.co.za` with Install ID). |
 
 *(Note: Pawlingo has no user accounts, so select "My app does not allow users to create an account" and provide the Privacy Policy URL where deletion via Settings or email is explained.)*
 

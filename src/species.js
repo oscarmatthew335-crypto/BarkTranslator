@@ -20,7 +20,7 @@ const withChat = (packs, chat) =>
 
 export const APP_NAME = 'Pawlingo';
 export const STORE_URL = 'https://play.google.com/store/apps/details?id=com.pawlingo.app';
-export const SUPPORT_EMAIL = 'support@zdns.co.za';
+export const SUPPORT_EMAIL = 'pawlingo@zdns.co.za';
 export const MIN_AGE = 13;
 
 export const SPECIES = {
