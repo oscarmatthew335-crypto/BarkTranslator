@@ -173,5 +173,18 @@ export default {
   'settings.resetLearning': "Start {petName}'s learning again",
   'settings.about': 'About',
   'settings.privacyPolicy': 'Privacy policy',
-  'settings.contactUs': 'Contact us: {email}'
+  'settings.contactUs': 'Contact us: {email}',
+
+  'species.dog': 'Dog',
+  'species.cat': 'Cat',
+  'pets.editTitle': 'Edit {petName}',
+  'scanner.flipCamera': 'Flip camera',
+  'scanner.torch': 'Torch',
+  'scanner.settings': 'Settings',
+  'share.serverNote': 'Videos are made on our server and deleted straight after.',
+  'share.cta': "What's your {species} saying?",
+  'share.freeOn': 'Free on',
+  'settings.waiting': 'Waiting to send: {clips} clip(s), {answers} answer(s)',
+  'settings.noServer': 'This test build has no server set up, so clips wait.',
+  'settings.lastTry': 'Last try: {detail}'
 };

@@ -104,7 +104,7 @@ export default function Onboarding({ onDone }) {
                         setHome(null);
                       }}
                       accessibilityRole="button"
-                      accessibilityLabel={opt.label}
+                      accessibilityLabel={t(`species.${opt.id}`)}
                       accessibilityState={{ selected: active }}
                     >
                       <Sticker
@@ -114,7 +114,7 @@ export default function Onboarding({ onDone }) {
                         innerStyle={s.choiceInner}
                       >
                         <Text style={s.choiceEmoji}>{opt.emoji}</Text>
-                        <Text style={s.choiceLabel}>{opt.label}</Text>
+                        <Text style={s.choiceLabel}>{t(`species.${opt.id}`)}</Text>
                       </Sticker>
                     </Pressable>
                   );
@@ -122,7 +122,7 @@ export default function Onboarding({ onDone }) {
               </View>
 
               <View style={{ marginTop: 24 }}>
-                <Text style={s.label}>{t('onboarding.petNameLabel', { species: sp.label.toLowerCase() })}</Text>
+                <Text style={s.label}>{t('onboarding.petNameLabel', { species: t(`species.${sp.id}`).toLowerCase() })}</Text>
                 <TextInput
                   style={s.input}
                   value={name}
@@ -145,17 +145,17 @@ export default function Onboarding({ onDone }) {
           {step === 2 && (
             <View>
               <Text style={s.title} maxFontSizeMultiplier={1.3}>
-                About {petName}
+                {t('onboarding.step2Title', { petName })}
               </Text>
               <Text style={s.sub}>
-                This helps {APP_NAME} pick translations that fit {petName}'s home and voice.
+                {t('onboarding.step2Sub', { appName: APP_NAME, petName })}
               </Text>
 
-              <Text style={[s.label, { marginTop: 22 }]}>Where does {petName} hang out?</Text>
+              <Text style={[s.label, { marginTop: 22 }]}>{t('onboarding.whereHangOut', { petName })}</Text>
               <View style={s.segment}>
                 {[
-                  { id: 'indoor', label: '🏠 Indoors' },
-                  { id: 'garden', label: '🌳 Has a garden' }
+                  { id: 'indoor', label: t('pets.indoor') },
+                  { id: 'garden', label: t('pets.garden') }
                 ].map((opt) => {
                   const on = chosenHome === opt.id;
                   return (
@@ -177,7 +177,7 @@ export default function Onboarding({ onDone }) {
 
               {sp.breeds && (
                 <>
-                  <Text style={[s.label, { marginTop: 20 }]}>Pick {petName}'s breed (changes the voice)</Text>
+                  <Text style={[s.label, { marginTop: 20 }]}>{t('onboarding.pickBreed', { petName })}</Text>
                   <View style={{ gap: 8 }}>
                     {sp.breeds.map((b) => {
                       const on = chosenBreed === b.id;
@@ -218,7 +218,7 @@ export default function Onboarding({ onDone }) {
                 <Text style={s.stepLine}>{t('onboarding.step3Point3', { appName: APP_NAME, sounds: sp.sounds })}</Text>
               </Sticker>
 
-              <Text style={[s.label, { marginTop: 22 }]}>What is {petName} doing right now? (optional)</Text>
+              <Text style={[s.label, { marginTop: 22 }]}>{t('onboarding.step3ContextQuestion', { petName })}</Text>
               <View style={s.chips}>
                 {sp.contexts
                   .filter((c) => c.id !== 'chat')

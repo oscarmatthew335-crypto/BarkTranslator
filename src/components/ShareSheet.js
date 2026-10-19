@@ -25,7 +25,7 @@ export default function ShareSheet({ job, onVideo, onPicture, onClose }) {
                 />
                 <StickerButton label={t('share.picture')} emoji="🖼️" color={C.paper} onPress={() => onPicture(item)} />
               </View>
-              <Text style={s.note}>Videos are made on our server and deleted straight after.</Text>
+              <Text style={s.note}>{t('share.serverNote')}</Text>
             </>
           )}
           {job?.step === 'making' && (

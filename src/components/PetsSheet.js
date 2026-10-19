@@ -59,7 +59,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
                             {p.name}
                           </Text>
                           <Text style={s.petSub} numberOfLines={1}>
-                            {breed ? breed.name.replace(/^\S+\s/, '') : sp.label}
+                            {breed ? breed.name.replace(/^\S+\s/, '') : t(`species.${sp.id}`)}
                             {active ? t('pets.selected') : ''}
                           </Text>
                         </View>
@@ -88,7 +88,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
             {mode === 'edit' && editing && (
               <PetForm
                 key={editing.id}
-                title={`Edit ${editing.name}`}
+                title={t('pets.editTitle', { petName: editing.name })}
                 initial={editing}
                 canRemove={pets.length > 1}
                 onCancel={() => setMode('list')}
@@ -118,7 +118,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
 
             {mode === 'add' && (
               <PetForm
-                title="Add a pet"
+                title={t('pets.add')}
                 initial={{ name: '', species: null, breedId: null, home: null }}
                 onCancel={() => setMode('list')}
                 onSave={(fields) => {
@@ -135,6 +135,7 @@ export default function PetsSheet({ visible, pets, activePetId, onSelect, onAdd,
 }
 
 function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
+  const { t } = useI18n();
   const [species, setSpecies] = useState(initial.species);
   const [name, setName] = useState(initial.name);
   const [breedId, setBreedId] = useState(initial.breedId);
@@ -159,14 +160,14 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
               accessibilityState={{ selected: on }}
             >
               <Text style={s.segText}>
-                {opt.emoji} {opt.label}
+                {opt.emoji} {t(`species.${opt.id}`)}
               </Text>
             </Pressable>
           );
         })}
       </View>
 
-      <Text style={s.label}>Name</Text>
+      <Text style={s.label}>{t('pets.name')}</Text>
       <TextInput
         style={s.input}
         value={name}
@@ -182,11 +183,11 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
 
       {sp && (
         <>
-          <Text style={s.label}>Where does {name.trim() || sp.defaultName} hang out?</Text>
+          <Text style={s.label}>{t('pets.hangOut', { petName: name.trim() || sp.defaultName })}</Text>
           <View style={[s.segment, { marginBottom: 8 }]}>
             {[
-              { id: 'indoor', label: '🏠 Indoors' },
-              { id: 'garden', label: '🌳 Has a garden' }
+              { id: 'indoor', label: t('pets.indoor') },
+              { id: 'garden', label: t('pets.garden') }
             ].map((opt) => {
               const on = (home || sp.defaultHome) === opt.id;
               return (
@@ -210,7 +211,7 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
 
       {sp?.breeds && (
         <>
-          <Text style={s.label}>Breed (changes the voice)</Text>
+          <Text style={s.label}>{t('pets.breed')}</Text>
           <View style={{ gap: 8 }}>
             {sp.breeds.map((b) => {
               const on = (breedId || sp.breeds[0].id) === b.id;
@@ -236,7 +237,7 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
 
       <View style={s.formButtons}>
         <StickerButton
-          label="Save"
+          label={t('pets.save')}
           emoji="✅"
           disabled={!species}
           style={{ flex: 1 }}
@@ -250,11 +251,11 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
             });
           }}
         />
-        <StickerButton label="Cancel" color={C.paper} onPress={onCancel} />
+        <StickerButton label={t('pets.cancel')} color={C.paper} onPress={onCancel} />
       </View>
       {canRemove && onRemove && (
         <Pressable onPress={onRemove} style={s.remove} accessibilityRole="button">
-          <Text style={s.removeText}>Remove this pet</Text>
+          <Text style={s.removeText}>{t('pets.removePet', { petName: initial.name || '' }).trim()}</Text>
         </Pressable>
       )}
     </ScrollView>

@@ -106,15 +106,15 @@ export default function ScannerScreen(props) {
           </Sticker>
         </Pressable>
         <View style={s.tools}>
-          {cameraOn && <RoundTool emoji="🔄" label="Flip camera" onPress={onFlip} />}
-          {cameraOn && <RoundTool emoji="🔦" label="Torch" onPress={onTorch} active={torch} />}
+          {cameraOn && <RoundTool emoji="🔄" label={t('scanner.flipCamera')} onPress={onFlip} />}
+          {cameraOn && <RoundTool emoji="🔦" label={t('scanner.torch')} onPress={onTorch} active={torch} />}
           <RoundTool
             emoji={cameraOn ? '📷' : '📸'}
             label={cameraOn ? 'Turn camera off' : 'Turn camera on'}
             onPress={onToggleCamera}
             active={!cameraOn}
           />
-          <RoundTool emoji="⚙️" label="Settings" onPress={onOpenSettings} />
+          <RoundTool emoji="⚙️" label={t('scanner.settings')} onPress={onOpenSettings} />
         </View>
       </View>
 

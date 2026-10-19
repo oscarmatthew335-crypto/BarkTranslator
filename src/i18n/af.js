@@ -174,5 +174,18 @@ export default {
   'settings.resetLearning': 'Begin {petName} se leerproses van voor af',
   'settings.about': 'Oor',
   'settings.privacyPolicy': 'Privaatheidsbeleid',
-  'settings.contactUs': 'Kontak ons: {email}'
+  'settings.contactUs': 'Kontak ons: {email}',
+
+  'species.dog': 'Hond',
+  'species.cat': 'Kat',
+  'pets.editTitle': 'Wysig {petName}',
+  'scanner.flipCamera': 'Draai kamera',
+  'scanner.torch': 'Flits',
+  'scanner.settings': 'Instellings',
+  'share.serverNote': 'Video’s word op ons bediener gemaak en dadelik daarna uitgevee.',
+  'share.cta': 'Wat sê jou {species}?',
+  'share.freeOn': 'Gratis op',
+  'settings.waiting': 'Wag om te stuur: {clips} greep/grepe, {answers} antwoord(e)',
+  'settings.noServer': 'Hierdie toetsweergawe het nie ’n bediener nie, so grepe wag.',
+  'settings.lastTry': 'Laaste poging: {detail}'
 };

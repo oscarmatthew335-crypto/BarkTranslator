@@ -117,16 +117,15 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
               {shareClips && status && (
                 <View style={s.statusBox}>
                   <Text style={s.statusText}>
-                    Waiting to send: {status.waitingClips} clip{status.waitingClips === 1 ? '' : 's'}, {status.waitingLabels} answer
-                    {status.waitingLabels === 1 ? '' : 's'}
+                    {t('settings.waiting', { clips: status.waitingClips, answers: status.waitingLabels })}
                   </Text>
-                  {!status.configured && <Text style={s.statusText}>This test build has no server set up, so clips wait.</Text>}
+                  {!status.configured && <Text style={s.statusText}>{t('settings.noServer')}</Text>}
                   {status.last.at && (
-                    <Text style={[s.statusText, { color: status.last.ok ? '#16815A' : C.tomato }]}>Last try: {status.last.detail}</Text>
+                    <Text style={[s.statusText, { color: status.last.ok ? '#16815A' : C.tomato }]}>{t('settings.lastTry', { detail: status.last.detail })}</Text>
                   )}
                   {status.configured && status.waitingClips + status.waitingLabels > 0 && (
                     <Pressable onPress={() => flush().then(refresh)} accessibilityRole="button" style={{ paddingTop: 4 }}>
-                      <Text style={s.link}>Send now</Text>
+                      <Text style={s.link}>{t('settings.sendNow')}</Text>
                     </Pressable>
                   )}
                 </View>

@@ -3,6 +3,7 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../theme';
 import { getSpecies, APP_NAME } from '../species';
 import SpeechBubble from './SpeechBubble';
+import { translate } from '../i18n';
 
 // A 4:5 picture card (photo + speech bubble + branding) rendered off-screen
 // and captured as an image for sharing to WhatsApp, Instagram or TikTok.
@@ -25,10 +26,10 @@ const ShareCard = forwardRef(function ShareCard({ item }, ref) {
         <View style={s.footer}>
           <View>
             <Text style={s.brand}>🐾 {APP_NAME}</Text>
-            <Text style={s.cta}>What's your {sp.label.toLowerCase()} saying?</Text>
+            <Text style={s.cta}>{translate('share.cta', { species: translate(`species.${sp.id}`).toLowerCase() })}</Text>
           </View>
           <View style={s.store}>
-            <Text style={s.storeSmall}>Free on</Text>
+            <Text style={s.storeSmall}>{translate('share.freeOn')}</Text>
             <Text style={s.storeBig}>Google Play</Text>
           </View>
         </View>
