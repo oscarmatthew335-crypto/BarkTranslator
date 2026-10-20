@@ -4,7 +4,8 @@ Receives the sound clips and labels that people opt in to share from the app, so
 
 - **Clips** go to a Cloud Storage bucket: `clips/<dog|cat>/<installId>/<clipId>.m4a`
 - **Metadata and owner labels** go to the Firestore collection `clips`
-- **`DELETE /me`** removes everything for an install (the app's "Delete everything I've shared" button)
+- **Photos** (Play tab photo challenges, only with clip sharing *and* the separate "Share pet photos" choice) go to `photos/<dog|cat>/<installId>/<photoId>.jpg`, with their labels in the Firestore collection `photos`. EXIF/location is removed on the phone and again on the server. `DELETE /photo` removes one.
+- **`DELETE /me`** removes everything for an install, clips and photos (the app's "Delete everything I've shared" button)
 
 No names, accounts or locations are stored. Each phone has a random install ID.
 

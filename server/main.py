@@ -18,6 +18,12 @@ Google Cloud Functions (2nd gen, Python 3.12), one HTTP function, three routes:
                    for the app to analyse. Nothing is stored; the upload is
                    deleted at once. Header X-Recorded-At carries the file's
                    own recording time when it has one.
+  POST   /photo    multipart: "meta" (JSON {photoId, species, petKey, situation,
+                   isPet, size, breedId, breedConfirmed, savedAt, appVersion, platform})
+                   + "photo" (JPEG only, max 1.5 MB): a Play tab photo-challenge photo
+                   the owner chose to share. Any EXIF/metadata segments (camera,
+                   location) are stripped again here before it is stored.
+  DELETE /photo    JSON {photoId}: deletes one shared photo
   GET    /privacy  the public privacy policy page (no key needed)
 
 Each phone (install ID) is limited per day: DAILY_LIMITS below. Over the
@@ -31,6 +37,8 @@ Every request carries:
 Clips are stored in Cloud Storage at clips/<species>/<installId>/<clipId>.<wav|m4a>
 and their metadata (including the on-phone sound fingerprint) and labels in the
 Firestore collection "clips". Models live at models/<species>/<fv>/current.json.
+Shared photos are stored at photos/<species>/<installId>/<photoId>.jpg with their
+labels in the Firestore collection "photos". DELETE /me removes clips and photos.
 """
 
 import hmac
@@ -51,12 +59,16 @@ WORD_RE = re.compile(r"^[a-z0-9_-]{1,32}$")
 META_NUMBERS = ("soundCount", "loudness", "clarity", "durationMs", "activeMs", "longestMs", "peakDb", "noiseFloorDb")
 META_WORDS = ("breedId", "chosenContext", "pattern", "platform", "format", "featureVersion")
 MAX_FEATURES = 128
-DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40, "extracts": 60}
+DAILY_LIMITS = {"clips": 150, "labels": 500, "errors": 50, "videos": 40, "extracts": 60, "photos": 30}
 MAX_PHOTO_BYTES = 4_000_000
 MAX_VIDEO_BYTES = 15_000_000
 MAX_MEDIA_BYTES = 25_000_000   # a picked clip from the gallery or WhatsApp
 MAX_EXTRACT_SECONDS = 30
 EXTRACT_TIMEOUT_S = 60
+MAX_SHARED_PHOTO_BYTES = 1_500_000  # a re-encoded photo-challenge JPEG
+PHOTO_RE = re.compile(r"^ph-(dog|cat)-\d{10,16}$")
+PHOTO_SITUATIONS = ("eating", "sleeping", "playing", "door", "outside", "toy")
+PHOTO_SIZES = ("small", "medium", "large")
 PRIVACY_PAGE = os.path.join(os.path.dirname(__file__), "privacy.html")
 
 
@@ -102,16 +114,36 @@ class Backend:
     def save_error(self, record):
         self.fs.collection("errors").add(record)
 
+    def save_photo(self, doc_id, path, data, record):
+        self.bucket.blob(path).upload_from_string(data, content_type="image/jpeg")
+        self.fs.collection("photos").document(doc_id).set(record)
+
+    def delete_photo(self, doc_id):
+        ref = self.fs.collection("photos").document(doc_id)
+        snap = ref.get()
+        if not snap.exists:
+            return False
+        path = (snap.to_dict() or {}).get("storagePath")
+        if path:
+            blob = self.bucket.blob(path)
+            if blob.exists():
+                blob.delete()
+        ref.delete()
+        return True
+
     def delete_install(self, install_id):
-        docs = list(self.fs.collection("clips").where("installId", "==", install_id).stream())
-        for d in docs:
-            path = (d.to_dict() or {}).get("storagePath")
-            if path:
-                blob = self.bucket.blob(path)
-                if blob.exists():
-                    blob.delete()
-            d.reference.delete()
-        return len(docs)
+        removed = 0
+        for collection in ("clips", "photos"):
+            docs = list(self.fs.collection(collection).where("installId", "==", install_id).stream())
+            for d in docs:
+                path = (d.to_dict() or {}).get("storagePath")
+                if path:
+                    blob = self.bucket.blob(path)
+                    if blob.exists():
+                        blob.delete()
+                d.reference.delete()
+            removed += len(docs)
+        return removed
 
 
 _backend = None
@@ -202,6 +234,12 @@ def ingest(request):
         if _over_limit(install_id, "extracts"):
             return _error(429, "daily clip import limit reached; try tomorrow")
         return _post_extract(request)
+    if path.endswith("/photo") and request.method == "POST":
+        if _over_limit(install_id, "photos"):
+            return _error(429, "daily photo limit reached; try tomorrow")
+        return _post_photo(request, install_id)
+    if path.endswith("/photo") and request.method == "DELETE":
+        return _delete_photo(request, install_id)
     if path.endswith("/me") and request.method == "DELETE":
         removed = get_backend().delete_install(install_id)
         return jsonify({"deleted": removed}), 200
@@ -444,3 +482,105 @@ def _post_extract(request):
     if m:
         headers["X-Recorded-At"] = m.group(1) + "Z"
     return wav, 200, headers
+
+
+def strip_jpeg_metadata(data):
+    """Return the JPEG without its APPn (EXIF, XMP, ICC...) and comment segments, or None if it isn't a JPEG.
+
+    The app already re-encodes photos (which drops EXIF and location); this is a second line of defence so a
+    location can never be stored even from an older or modified app."""
+    if len(data) < 4 or data[:3] != b"\xff\xd8\xff":
+        return None
+    out = bytearray(b"\xff\xd8")
+    i = 2
+    n = len(data)
+    while i + 4 <= n:
+        if data[i] != 0xFF:
+            return None
+        marker = data[i + 1]
+        if marker == 0xFF:  # fill byte
+            i += 1
+            continue
+        if marker == 0xDA:  # start of scan: the image data follows to the end
+            out += data[i:]
+            return bytes(out)
+        if 0xD0 <= marker <= 0xD7 or marker == 0x01:
+            out += data[i:i + 2]
+            i += 2
+            continue
+        length = int.from_bytes(data[i + 2:i + 4], "big")
+        if length < 2 or i + 2 + length > n:
+            return None
+        if not (0xE0 <= marker <= 0xEF or marker == 0xFE):  # keep everything but APP0-15 and comments
+            out += data[i:i + 2 + length]
+        elif marker == 0xE0 and data[i + 4:i + 9] == b"JFIF\x00":
+            out += data[i:i + 2 + length]  # the plain JFIF header carries no personal data
+        i += 2 + length
+    return None
+
+
+def _post_photo(request, install_id):
+    if request.content_length and request.content_length > MAX_SHARED_PHOTO_BYTES + 20_000:
+        return _error(413, "photo too large")
+    try:
+        raw = json.loads(request.form.get("meta", ""))
+    except (ValueError, TypeError):
+        return _error(400, "bad meta")
+    if not isinstance(raw, dict):
+        return _error(400, "bad meta")
+    photo_id = str(raw.get("photoId", ""))
+    species = raw.get("species", "")
+    m = PHOTO_RE.match(photo_id)
+    if not m or m.group(1) != species:
+        return _error(400, "bad photo id or species")
+    situation = raw.get("situation")
+    if situation not in PHOTO_SITUATIONS:
+        return _error(400, "bad situation")
+
+    upload = request.files.get("photo")
+    if upload is None:
+        return _error(400, "missing photo")
+    data = upload.read(MAX_SHARED_PHOTO_BYTES + 1)
+    if len(data) > MAX_SHARED_PHOTO_BYTES:
+        return _error(413, "photo too large")
+    clean = strip_jpeg_metadata(data)
+    if clean is None or len(clean) < 500:
+        return _error(415, "only JPEG photos")
+
+    label = {"situation": situation}
+    if raw.get("isPet") in ("yes", "no"):
+        label["isPet"] = raw["isPet"]
+    if raw.get("size") in PHOTO_SIZES:
+        label["size"] = raw["size"]
+    if isinstance(raw.get("breedId"), str) and WORD_RE.match(raw["breedId"]):
+        label["breedId"] = raw["breedId"]
+    if isinstance(raw.get("breedConfirmed"), bool):
+        label["breedConfirmed"] = raw["breedConfirmed"]
+    pet_key = raw.get("petKey")
+    record = {
+        "installId": install_id,
+        "photoId": photo_id,
+        "species": species,
+        "petKey": pet_key if isinstance(pet_key, str) and re.match(r"^p[0-9a-f]{16}$", pet_key) else None,
+        "label": label,
+        "bytes": len(clean),
+        "storagePath": f"photos/{species}/{install_id}/{photo_id}.jpg",
+        "receivedAt": _now(),
+    }
+    for k in ("savedAt", "appVersion"):
+        v = raw.get(k)
+        if isinstance(v, str) and len(v) <= 40:
+            record[k] = v
+    if raw.get("platform") in ("ios", "android"):
+        record["platform"] = raw["platform"]
+    get_backend().save_photo(f"{install_id}_{photo_id}", record["storagePath"], clean, record)
+    return jsonify({"ok": True}), 201
+
+
+def _delete_photo(request, install_id):
+    body = request.get_json(silent=True)
+    photo_id = str((body or {}).get("photoId", "")) if isinstance(body, dict) else ""
+    if not PHOTO_RE.match(photo_id):
+        return _error(400, "bad photo id")
+    removed = get_backend().delete_photo(f"{install_id}_{photo_id}")
+    return jsonify({"ok": True, "deleted": bool(removed)}), 200

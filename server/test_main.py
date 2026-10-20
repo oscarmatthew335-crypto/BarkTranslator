@@ -21,6 +21,7 @@ class FakeBackend:
         self.models = {}
         self.counts = {}
         self.errors = []
+        self.photos = {}
 
     def bump(self, install_id, kind):
         self.counts[(install_id, kind)] = self.counts.get((install_id, kind), 0) + 1
@@ -46,12 +47,25 @@ class FakeBackend:
         self.docs[doc_id]["labelled"] = True
         return True
 
+    def save_photo(self, doc_id, path, data, record):
+        self.blobs[path] = data
+        self.photos[doc_id] = record
+
+    def delete_photo(self, doc_id):
+        rec = self.photos.pop(doc_id, None)
+        if rec:
+            self.blobs.pop(rec["storagePath"], None)
+        return bool(rec)
+
     def delete_install(self, install_id):
-        gone = [k for k, v in self.docs.items() if v["installId"] == install_id]
-        for k in gone:
-            self.blobs.pop(self.docs[k]["storagePath"], None)
-            del self.docs[k]
-        return len(gone)
+        removed = 0
+        for store in (self.docs, self.photos):
+            gone = [k for k, v in store.items() if v["installId"] == install_id]
+            for k in gone:
+                self.blobs.pop(store[k]["storagePath"], None)
+                del store[k]
+            removed += len(gone)
+        return removed
 
 
 @pytest.fixture
@@ -342,3 +356,113 @@ def test_extract_is_rate_limited(client, monkeypatch):
     monkeypatch.setitem(main.DAILY_LIMITS, "extracts", 1)
     assert post_extract(client, _media(0.5, fmt="m4a")).status_code == 200
     assert post_extract(client, _media(0.5, fmt="m4a")).status_code == 429
+
+
+# --- Play tab photo challenge ----------------------------------------------
+
+def _jpeg_with_gps(size=(64, 64)):
+    """A small JPEG carrying EXIF with a GPS position, like a phone camera photo."""
+    from PIL import Image
+
+    img = Image.new("RGB", size, (200, 150, 90))
+    exif = Image.Exif()
+    exif[0x010F] = "PhoneMaker"  # camera make
+    gps = exif.get_ifd(0x8825)
+    gps[1] = "S"
+    gps[2] = (33.0, 55.0, 12.0)
+    gps[3] = "E"
+    gps[4] = (18.0, 25.0, 30.0)
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=exif, quality=90)
+    return buf.getvalue()
+
+
+PHOTO_ID = "ph-dog-1760000000123"
+
+
+def post_photo(client, data=None, headers=HEADERS, **meta_over):
+    meta = {"photoId": PHOTO_ID, "species": "dog", "petKey": "p0123456789abcdef", "situation": "eating",
+            "isPet": "yes", "size": "medium", "breedId": "golden", "breedConfirmed": True,
+            "savedAt": "2026-10-20T10:00:00Z", "platform": "android", "lat": -33.9, "evil": "<b>"}
+    meta.update(meta_over)
+    return client.post(
+        "/photo",
+        data={"meta": json.dumps(meta), "photo": (io.BytesIO(_jpeg_with_gps() if data is None else data), "p.jpg", "image/jpeg")},
+        headers=headers,
+        content_type="multipart/form-data",
+    )
+
+
+def test_photo_needs_app_key_and_install_id(client):
+    assert post_photo(client, headers={"X-App-Key": "nope", "X-Install-Id": INSTALL}).status_code == 401
+    assert post_photo(client, headers={"X-App-Key": "test", "X-Install-Id": "bad"}).status_code == 400
+    assert client.fake.photos == {}
+
+
+def test_photo_saved_with_label_and_without_location(client):
+    original = _jpeg_with_gps()
+    assert b"Exif" in original
+    r = post_photo(client, data=original)
+    assert r.status_code == 201
+    rec = client.fake.photos[f"{INSTALL}_{PHOTO_ID}"]
+    assert rec["storagePath"] == f"photos/dog/{INSTALL}/{PHOTO_ID}.jpg"
+    assert rec["label"] == {"situation": "eating", "isPet": "yes", "size": "medium", "breedId": "golden", "breedConfirmed": True}
+    assert "lat" not in rec and "evil" not in rec and "-33.9" not in json.dumps(rec) and "<b>" not in json.dumps(rec)
+    stored = client.fake.blobs[rec["storagePath"]]
+    assert b"Exif" not in stored and b"PhoneMaker" not in stored
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(stored))
+    assert img.size == (64, 64) and not img.getexif()
+
+
+def test_photo_only_jpeg_and_size_limited(client):
+    assert post_photo(client, data=b"\x89PNG\r\n\x1a\n" + b"x" * 5000).status_code == 415
+    assert post_photo(client, data=b"GIF89a" + b"x" * 5000).status_code == 415
+    big = b"\xff\xd8\xff\xe0" + b"x" * 1_600_000
+    assert post_photo(client, data=big).status_code == 413
+    assert client.fake.photos == {}
+
+
+def test_photo_meta_checked(client):
+    assert post_photo(client, situation="bathroom").status_code == 400
+    assert post_photo(client, species="cat").status_code == 400  # id says dog
+    assert post_photo(client, photoId="../../x").status_code == 400
+
+
+def test_photo_rate_limited(client):
+    main.DAILY_LIMITS["photos"] = 1
+    try:
+        assert post_photo(client).status_code == 201
+        assert post_photo(client).status_code == 429
+    finally:
+        main.DAILY_LIMITS["photos"] = 30
+
+
+def test_delete_one_photo(client):
+    post_photo(client)
+    r = client.delete("/photo", json={"photoId": PHOTO_ID}, headers=HEADERS)
+    assert r.status_code == 200 and r.get_json()["deleted"] is True
+    assert client.fake.photos == {} and client.fake.blobs == {}
+    assert client.delete("/photo", json={"photoId": PHOTO_ID}, headers=HEADERS).get_json()["deleted"] is False
+    assert client.delete("/photo", json={"photoId": "nope"}, headers=HEADERS).status_code == 400
+
+
+def test_delete_my_data_covers_photos(client):
+    post_clip(client)
+    post_photo(client)
+    other = {"X-App-Key": "test", "X-Install-Id": "b" * 32}
+    post_photo(client, headers=other)
+    r = client.delete("/me", headers=HEADERS)
+    assert r.get_json()["deleted"] == 2
+    assert all(v["installId"] != INSTALL for v in client.fake.photos.values())
+    assert len(client.fake.photos) == 1  # someone else's photo stays
+    assert not any(INSTALL in k for k in client.fake.blobs)
+
+
+def test_strip_jpeg_metadata_keeps_the_picture():
+    data = _jpeg_with_gps((20, 10))
+    clean = main.strip_jpeg_metadata(data)
+    assert clean.startswith(b"\xff\xd8") and b"Exif" not in clean
+    assert main.strip_jpeg_metadata(b"not a jpeg") is None
+    assert main.strip_jpeg_metadata(b"\xff\xd8\xff\xe1\x00") is None

@@ -164,7 +164,17 @@ function PetApp() {
           />
         )}
         {activeTab === 'play' && (
-          <PlayTab pet={pet} species={species} history={data.history} onTeach={t.teach} onUpdatePet={data.updatePet} />
+          <PlayTab
+            pet={pet}
+            species={species}
+            breed={data.breed}
+            history={data.history}
+            onTeach={t.teach}
+            onUpdatePet={data.updatePet}
+            shareClips={data.shareClips}
+            settings={data.settings}
+            onUpdateSettings={data.updateSettings}
+          />
         )}
       </View>
 

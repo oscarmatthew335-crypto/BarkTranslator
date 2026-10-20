@@ -3,7 +3,7 @@ import { View, Text, Pressable, ScrollView, Modal, StyleSheet, Switch, Alert, Li
 import { C, F, INK_WIDTH } from '../theme';
 import { APP_NAME, SUPPORT_EMAIL } from '../species';
 import appJson from '../../app.json';
-import { getStatus, onStatusChange, flush, deleteMyData, discardQueued, getInstallId } from '../contribute/contributions';
+import { getStatus, onStatusChange, flush, deleteMyData, discardQueued, discardQueuedPhotos, getInstallId } from '../contribute/contributions';
 import { resetExamples } from '../learning/petLearning';
 import { useI18n, LANGUAGE_OPTIONS } from '../i18n';
 
@@ -33,24 +33,28 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
     refresh();
   };
 
+  const toggleSharePhotos = async (on) => {
+    updateSettings({ sharePhotos: on, photoShareAsked: true });
+    if (!on) await discardQueuedPhotos();
+    refresh();
+  };
+
   const confirmDelete = () =>
     Alert.alert(
-      'Delete what you have shared?',
-      `This removes every clip and answer this phone has sent to ${APP_NAME}, and anything still waiting to send.`,
+      t('settings.deleteTitle'),
+      t('settings.deleteBody', { appName: APP_NAME }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('pets.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('settings.deleteConfirm'),
           style: 'destructive',
           onPress: async () => {
             const res = await deleteMyData();
             setHistory((h) => h.map((e) => (e.clipId ? { ...e, clipId: null } : e)));
             refresh();
             Alert.alert(
-              res === 'failed' ? "Couldn't reach the server" : 'Deleted',
-              res === 'failed'
-                ? 'Anything waiting on this phone was deleted. Try again when you are online to remove what was already sent.'
-                : 'Your shared clips and answers have been deleted.'
+              res === 'failed' ? t('settings.deleteFailedTitle') : t('settings.deletedTitle'),
+              res === 'failed' ? t('settings.deleteFailedBody') : t('settings.deletedBody')
             );
           }
         }
@@ -114,11 +118,21 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                   divider
                 />
               )}
+              {shareClips && (
+                <Row
+                  title={t('settings.sharePhotosTitle')}
+                  sub={t('settings.sharePhotosSub')}
+                  value={settings.sharePhotos === true}
+                  onChange={toggleSharePhotos}
+                  divider
+                />
+              )}
               {shareClips && status && (
                 <View style={s.statusBox}>
                   <Text style={s.statusText}>
                     {t('settings.waiting', { clips: status.waitingClips, answers: status.waitingLabels })}
                   </Text>
+                  {status.waitingPhotos > 0 && <Text style={s.statusText}>{t('settings.waitingPhotos', { n: status.waitingPhotos })}</Text>}
                   {!status.configured && <Text style={s.statusText}>{t('settings.noServer')}</Text>}
                   {status.last.at && (
                     <Text style={[s.statusText, { color: status.last.ok ? '#16815A' : C.tomato }]}>{t('settings.lastTry', { detail: status.last.detail })}</Text>

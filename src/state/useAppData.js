@@ -5,6 +5,8 @@ import { migrateSpeciesExamples, resetExamples } from '../learning/petLearning';
 import { getSpecies } from '../species';
 import { setAllowMobileData } from '../contribute/contributions';
 import { setAppLanguage } from '../i18n';
+import { forgetPetGame } from '../game/gameStore';
+import { forgetPetMoments } from '../game/useMoments';
 
 // Pets, journal and settings: loading, migrating, saving, and the actions
 // that change them.
@@ -79,6 +81,8 @@ export default function useAppData() {
       await resetExamples(id);
       const rest = pets.filter((p) => p.id !== id);
       if (!rest.length) return; // always keep at least one pet
+      await forgetPetGame(id);
+      await forgetPetMoments(id);
       setPets(rest);
       if (activePetId === id) setActivePetId(rest[0].id);
       setHistory((h) => {

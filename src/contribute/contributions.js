@@ -64,6 +64,7 @@ export async function getStatus() {
     hasKey: Boolean(KEY),
     waitingClips: box.filter((o) => o.type === 'clip').length,
     waitingLabels: box.filter((o) => o.type === 'label').length,
+    waitingPhotos: box.filter((o) => o.type === 'photo').length,
     last: lastResult
   };
 }
@@ -190,6 +191,32 @@ export async function queueLabel({ clipId, contextId, moods, comment, rating }) 
   flush();
 }
 
+// Queue a Play tab photo-challenge photo. The caller checks both opt-ins
+// (clip sharing AND photo sharing) first; see game/photoChallenge.js. The
+// file is the owner's own gallery copy, so it is never deleted after upload.
+export async function queuePhoto({ photoId, uri, meta }) {
+  const box = await readOutbox();
+  box.push({ type: 'photo', photoId, uri, meta: { ...meta, photoId, appVersion: APP_VERSION, platform: Platform.OS } });
+  await writeOutbox(box);
+  flush();
+}
+
+// Ask the server to delete one shared photo (or drop it if it hasn't gone yet).
+export async function queuePhotoDelete(photoId) {
+  const box = await readOutbox();
+  const waiting = box.findIndex((o) => o.type === 'photo' && o.photoId === photoId);
+  if (waiting >= 0) box.splice(waiting, 1);
+  else box.push({ type: 'photoDelete', photoId });
+  await writeOutbox(box);
+  flush();
+}
+
+// Photo sharing turned off: photos not yet sent stay only on the phone.
+export async function discardQueuedPhotos() {
+  const box = await readOutbox();
+  await writeOutbox(box.filter((o) => o.type !== 'photo'));
+}
+
 let flushing = null;
 // Upload whatever is waiting, oldest first. Stops at the first network
 // failure and tries again next time.
@@ -204,7 +231,7 @@ export function flush() {
     const sendable = (list) => {
       if (clipsAllowed) return list;
       const waiting = new Set(list.filter((o) => o.type === 'clip').map((o) => o.clipId));
-      return list.filter((o) => o.type === 'label' && !waiting.has(o.clipId));
+      return list.filter((o) => (o.type === 'label' && !waiting.has(o.clipId)) || o.type === 'photoDelete');
     };
     let full = await readOutbox();
     if (!clipsAllowed && full.some((o) => o.type === 'clip')) setResult(false, 'Waiting for Wi-Fi to send clips');
@@ -233,6 +260,29 @@ export function flush() {
             headers: { 'X-App-Key': KEY, 'X-Install-Id': installId },
             body: form
           });
+        } else if (op.type === 'photo') {
+          const file = new File(op.uri);
+          if (!file.exists) {
+            // The owner deleted the photo before it went: nothing to send.
+            full = dropFirstMatch(await readOutbox(), op);
+            await writeOutbox(full);
+            box = sendable(full);
+            continue;
+          }
+          const form = new FormData();
+          form.append('meta', JSON.stringify(op.meta));
+          form.append('photo', file);
+          res = await fetch(`${API}/photo`, {
+            method: 'POST',
+            headers: { 'X-App-Key': KEY, 'X-Install-Id': installId },
+            body: form
+          });
+        } else if (op.type === 'photoDelete') {
+          res = await fetch(`${API}/photo`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json', 'X-App-Key': KEY, 'X-Install-Id': installId },
+            body: JSON.stringify({ photoId: op.photoId })
+          });
         } else {
           res = await fetch(`${API}/labels`, {
             method: 'POST',
@@ -249,7 +299,7 @@ export function flush() {
         setResult(false, `Server said ${res.status}${await errorText(res)}`);
         break;
       }
-      if (res.ok) setResult(true, op.type === 'clip' ? 'Clip uploaded' : 'Answer uploaded');
+      if (res.ok) setResult(true, UPLOADED[op.type] || 'Answer uploaded');
       else setResult(false, `Dropped one ${op.type}: server said ${res.status}${await errorText(res)}`);
       // 2xx is done; any other 4xx will never succeed, so drop it.
       if (op.type === 'clip') deleteFile(op.uri);
@@ -273,12 +323,15 @@ async function errorText(res) {
   }
 }
 
+const UPLOADED = { clip: 'Clip uploaded', label: 'Answer uploaded', photo: 'Photo uploaded', photoDelete: 'Shared photo deleted' };
+
 function dropFirstMatch(list, op) {
   const i = list.findIndex(
     (o) =>
       o.type === op.type &&
       o.clipId === op.clipId &&
-      (o.type === 'clip' || o.label?.labelledAt === op.label?.labelledAt)
+      o.photoId === op.photoId &&
+      (o.type !== 'label' || o.label?.labelledAt === op.label?.labelledAt)
   );
   if (i >= 0) list.splice(i, 1);
   return list;
@@ -291,7 +344,8 @@ export async function discardQueued() {
   await writeOutbox([]);
 }
 
-// Delete everything this install has shared, on the phone and on the server.
+// Delete everything this install has shared (clips, answers and photos), on
+// the phone and on the server.
 // Returns 'deleted', 'local-only' (no server configured) or 'failed'.
 export async function deleteMyData() {
   await discardQueued();

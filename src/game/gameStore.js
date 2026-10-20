@@ -57,3 +57,9 @@ export function removePetGame(state, petId) {
   delete pets[petId];
   return { ...state, pets };
 }
+
+// A pet was removed: forget its game progress.
+export async function forgetPetGame(petId) {
+  const state = await loadGame();
+  if (state.pets[petId]) await saveGame(removePetGame(state, petId));
+}
