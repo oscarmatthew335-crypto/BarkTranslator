@@ -176,6 +176,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
               >
                 <Text style={s.link}>{t('settings.contactUs', { email: SUPPORT_EMAIL })}</Text>
               </Pressable>
+              <Text style={s.version}>{t('settings.entertainment', { appName: APP_NAME })}</Text>
               <Text style={s.version} selectable>
                 {APP_NAME} {appJson?.expo?.version}
                 {'\n'}Install ID: {installId}

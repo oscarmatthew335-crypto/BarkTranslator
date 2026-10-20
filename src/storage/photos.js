@@ -3,6 +3,7 @@
 // any time) and are tidied up when the journal entries that used them go.
 // Sounds and camera clips are kept for the newest entries only, to save space.
 
+import { Platform } from 'react-native';
 import { File, Directory, Paths } from 'expo-file-system';
 
 const KEEP_AUDIO = 30;
@@ -48,6 +49,37 @@ export async function keepVideo(tempUri, id, { copy = false } = {}) {
   } catch (_) {
     return null;
   }
+}
+
+// iOS moves the app to a new folder (a new ID in the path) on every update or
+// backup restore, so a saved file:// path into Documents goes stale. Point it
+// at today's Documents folder. Android paths don't move.
+export function rebaseDocumentUri(uri, documentUri) {
+  if (typeof uri !== 'string' || !uri.startsWith('file://') || !documentUri) return uri;
+  const base = documentUri.endsWith('/') ? documentUri : `${documentUri}/`;
+  if (uri.startsWith(base)) return uri;
+  const at = uri.indexOf('/Documents/');
+  return at < 0 ? uri : base + uri.slice(at + '/Documents/'.length);
+}
+
+export function currentUri(uri) {
+  if (Platform.OS !== 'ios') return uri;
+  try {
+    return rebaseDocumentUri(uri, Paths.document.uri);
+  } catch (_) {
+    return uri;
+  }
+}
+
+// A journal entry with its saved photo, sound and video paths brought up to date.
+export function withCurrentUris(entry) {
+  if (Platform.OS !== 'ios' || !entry) return entry;
+  return {
+    ...entry,
+    photoUri: currentUri(entry.photoUri),
+    audioUri: currentUri(entry.audioUri),
+    videoUri: currentUri(entry.videoUri)
+  };
 }
 
 export function fileExists(uri) {

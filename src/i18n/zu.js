@@ -174,6 +174,7 @@ export default {
   'settings.resetLearning': 'Qala kabusha ukufunda kuka-{petName}',
   'settings.about': 'Mayelana',
   'settings.privacyPolicy': 'Inqubomgomo yobumfihlo',
+  'settings.entertainment': 'I-{appName} ingeyokuzijabulisa nokusondelana nesilwane sakho. Ukuhumusha kungukuqagela okudlalayo okusekelwe emsindweni, akusona iseluleko sikadokotela wezilwane.',
   'settings.contactUs': 'Xhumana nathi: {email}',
 
   'species.dog': 'Inja',

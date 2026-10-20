@@ -1,5 +1,5 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import {
   useAudioStream,
   setAudioModeAsync,
@@ -10,6 +10,9 @@ import { File, Paths } from 'expo-file-system';
 import { analyzeBark, SETTLE_MS } from './barkAnalysis';
 import { computeFeatures, encodeWav, resample, windowLevels, SAMPLE_RATE } from './features';
 import { RollingAudioBuffer } from './rollingBuffer';
+import { onPlaybackChange } from './sounds';
+
+const IOS = Platform.OS === 'ios';
 
 const MAX_CLIP_SECONDS = 15; // listening always stops by itself after this
 const QUIET_AFTER_SOUND_MS = 1300; // stop this long after the last bark
@@ -35,6 +38,10 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
   const rollingRef = useRef(new RollingAudioBuffer(10));
   const streamRunningRef = useRef(false);
+  // iOS: true while a sound or the read-aloud voice plays (see sounds.js).
+  const [playbackBusy, setPlaybackBusy] = useState(false);
+  const playbackRef = useRef(false);
+  const watchdogRef = useRef(null);
 
   const chunksRef = useRef([]);
   const totalRef = useRef(0);
@@ -121,6 +128,7 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
     });
     return () => {
       sub.remove();
+      clearTimeout(watchdogRef.current);
       rollingRef.current.clear();
       try {
         streamRef.current?.stop();
@@ -128,10 +136,27 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
     };
   }, []);
 
+  // iOS: let go of the microphone before anything plays, or the playback is
+  // silent and the stream stops delivering sound without saying so.
+  useEffect(() => {
+    if (!IOS) return undefined;
+    return onPlaybackChange((busy) => {
+      playbackRef.current = busy;
+      if (busy && phaseRef.current === 'idle' && streamRunningRef.current) {
+        streamRunningRef.current = false;
+        rollingRef.current.clear();
+        try {
+          streamRef.current?.stop();
+        } catch (_) {}
+      }
+      setPlaybackBusy(busy);
+    });
+  }, []);
+
   // Manage the passive 10-second rolling buffer while on the scanner screen.
   useEffect(() => {
     let cancelled = false;
-    const shouldWatch = Boolean(watchEnabled && appActive && phase === 'idle');
+    const shouldWatch = Boolean(watchEnabled && appActive && phase === 'idle' && !playbackBusy);
     if (!shouldWatch) {
       if (watchingRef.current) {
         setWatching(false);
@@ -148,9 +173,9 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
     (async () => {
       try {
         const p = await getRecordingPermissionsAsync();
-        if (cancelled || !p.granted || phaseRef.current !== 'idle') return;
+        if (cancelled || !p.granted || phaseRef.current !== 'idle' || playbackRef.current) return;
         await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-        if (cancelled || phaseRef.current !== 'idle') return;
+        if (cancelled || phaseRef.current !== 'idle' || playbackRef.current) return;
         rollingRef.current.clear();
         if (!streamRunningRef.current) {
           await streamRef.current?.start();
@@ -164,7 +189,7 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
     return () => {
       cancelled = true;
     };
-  }, [watchEnabled, appActive, phase]);
+  }, [watchEnabled, appActive, phase, playbackBusy]);
 
   // 'granted' | 'undetermined' | 'denied' | 'blocked'
   const permissionStatus = useCallback(async () => {
@@ -207,6 +232,14 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
         await stream.start();
         streamRunningRef.current = true;
       }
+      if (IOS) {
+        // An interruption (a call, Siri) stops the iOS stream without an
+        // error; finish anyway instead of waiting for sound that never comes.
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = setTimeout(() => {
+          if (phaseRef.current === 'recording') fireAutoStop();
+        }, (MAX_CLIP_SECONDS + 3) * 1000);
+      }
       return { ok: true };
     } catch (e) {
       streamRunningRef.current = false;
@@ -218,6 +251,7 @@ export default function useBarkRecorder({ onAutoStop, watchEnabled = false } = {
   const stop = useCallback(
     async ({ keepClip = false } = {}) => {
       if (phaseRef.current !== 'recording') return null;
+      clearTimeout(watchdogRef.current);
       setPhase('analysing');
       autoRef.current.fired = true;
       const heldMs = Date.now() - startedAtRef.current;

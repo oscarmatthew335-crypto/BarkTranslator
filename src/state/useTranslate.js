@@ -12,7 +12,7 @@ import { refreshSharedModel } from '../learning/sharedModel';
 import { queueClip, queueLabel, flush } from '../contribute/contributions';
 import { keepPhoto, keepAudio, keepVideo, fileExists } from '../storage/photos';
 import { getThumbnailAsync } from 'expo-video-thumbnails';
-import { playFile, playSounds, stopSounds } from '../audio/sounds';
+import { playFile, playSounds, stopSounds, speakText } from '../audio/sounds';
 import { makeVideo, videoAvailable } from '../share/videoShare';
 import { extractClipAudio, canUseForShareVideo, MAX_EXTRACT_SECONDS } from '../share/extractClip';
 import { File } from 'expo-file-system';
@@ -82,7 +82,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
           delay = 900;
         }
       }
-      if (readAloud) setTimeout(() => Speech.speak(item.text, { pitch: item.pitch, rate: item.rate }), delay);
+      if (readAloud) setTimeout(() => speakText(item.text, { pitch: item.pitch, rate: item.rate }), delay);
     },
     [readAloud]
   );
@@ -370,7 +370,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
         }
       } catch (_) {}
       try {
-        await Share.share({ message: `${item.petName} says: "${item.text}"\n\nTranslated with ${APP_NAME} 🐾 ${STORE_URL}` });
+        await Share.share({ message: `${item.petName} says: "${item.text}"\n\nTranslated with ${APP_NAME} 🐾${STORE_URL ? ` ${STORE_URL}` : ''}` });
       } catch (_) {}
     },
     [shareCardRef]

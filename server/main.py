@@ -360,6 +360,8 @@ def _post_video(request):
     import video  # Pillow and ffmpeg load only when someone shares a video
 
     species = raw.get("species") if raw.get("species") in ("dog", "cat") else "dog"
+    # The iPhone app must not point people at Google Play (and vice versa).
+    store = "App Store" if raw.get("platform") == "ios" else "Google Play"
     with tempfile.TemporaryDirectory() as tmp:
         out = os.path.join(tmp, "pawlingo.mp4")
         movie_path = None
@@ -377,6 +379,7 @@ def _post_video(request):
                 name=str(raw.get("petName") or "")[:40],
                 label=str(raw.get("label") or "")[:60],
                 species=species,
+                store=store,
             )
         except Exception as e:  # report and fail cleanly; the app falls back to a picture
             print(json.dumps({"severity": "ERROR", "message": f"video render failed: {e}"}))

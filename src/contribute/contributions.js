@@ -14,6 +14,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { File, Directory, Paths } from 'expo-file-system';
+import { currentUri } from '../storage/photos';
 import * as Network from 'expo-network';
 import appJson from '../../app.json';
 
@@ -96,7 +97,7 @@ async function readOutbox() {
   try {
     const raw = await AsyncStorage.getItem(OUTBOX_KEY);
     const list = raw ? JSON.parse(raw) : [];
-    return Array.isArray(list) ? list : [];
+    return Array.isArray(list) ? list.map((op) => (op?.uri ? { ...op, uri: currentUri(op.uri) } : op)) : [];
   } catch (_) {
     return [];
   }
