@@ -2,6 +2,11 @@
 // leaving out lines that don't fit (outdoor talk for an indoor pet, night talk
 // at lunchtime) and lines it said recently. If filtering leaves nothing, it
 // falls back to the full list, so there's always something to say.
+// Lines are picked in English and then shown in the app language: the English
+// line carries the place/time words the filters read, so a translation always
+// fits exactly where its English line does.
+
+import { localizeLine } from './data/i18n/index';
 
 export const CHAT_CONTEXT = 'chat';
 export const CONTEXT_MINUTES = 20; // a picked situation wears off after this
@@ -48,4 +53,14 @@ export function pickLine({ pool, size, home, contextId, recent = [], now = new D
     }
   }
   return main[Math.floor(random() * main.length)] || other[0] || '...';
+}
+
+// pickLine, then the picked line in `lang`. `recent` may hold English or
+// translated lines. Returns { key: English line, text: line to show }.
+export function pickLocalizedLine({ species, pack, lang = 'en', pool, recent = [], ...opts }) {
+  const tr = (l) => localizeLine(l, { species, pack, lang });
+  const said = new Set(recent);
+  const recentKeys = [...(pool.short || []), ...(pool.long || [])].filter((l) => said.has(l) || said.has(tr(l)));
+  const key = pickLine({ ...opts, pool, recent: recentKeys });
+  return { key, text: tr(key) };
 }
