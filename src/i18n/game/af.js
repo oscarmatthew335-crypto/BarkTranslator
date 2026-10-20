@@ -35,6 +35,7 @@ export default {
   'game.end.score': "Telling {n}",
   'game.end.noBumps': "Glad nie gestamp nie!",
   'game.end.bumps': "{n} keer gestamp",
+  'game.end.oneBump': "1 keer gestamp",
   'game.end.challengeDone': "Daaglikse uitdaging klaar! Bonuslekkernye bygevoeg.",
   'game.end.next': "Volgende: {stage}",
   'game.end.again': "Speel weer",

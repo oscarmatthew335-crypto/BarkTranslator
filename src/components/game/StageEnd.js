@@ -26,7 +26,7 @@ export default function StageEnd({ pet, species, wardrobe, faceUri, result, stag
         <Text style={s.line}>
           {treatEmoji} {t('game.end.treats', { n: result.treats })}
         </Text>
-        <Text style={s.line}>{result.hits === 0 ? t('game.end.noBumps') : t('game.end.bumps', { n: result.hits })}</Text>
+        <Text style={s.line}>{result.hits === 0 ? t('game.end.noBumps') : result.hits === 1 ? t('game.end.oneBump') : t('game.end.bumps', { n: result.hits })}</Text>
         {challengeDone ? <Text style={[s.line, s.bold]}>{t('game.end.challengeDone')}</Text> : null}
       </Sticker>
 

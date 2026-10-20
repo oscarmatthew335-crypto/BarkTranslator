@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, AppState, PanResponder } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDimensions } from 'react-native';
 import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle } from 'react-native-svg';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -24,6 +24,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   const [started, setStarted] = useState(false);
   const [, setTick] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const { width: winWidth } = useWindowDimensions(); // a tall phone gets bigger buttons, not a tall empty sky
   const finishRef = useRef(onFinish);
   finishRef.current = onFinish;
   const fpsRef = useRef(onFps);
@@ -138,7 +139,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
       </View>
 
       <View
-        style={s.stage}
+        style={[s.stage, { maxHeight: Math.round(winWidth * 0.95) }]}
         onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
         {...pan.panHandlers}
         accessible
@@ -262,13 +263,13 @@ const s = StyleSheet.create({
   progressFill: { height: '100%', backgroundColor: C.mint },
   treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 60, textAlign: 'right' },
   // A little sky above the 400 x 220 world, so jumps have room on screen.
-  stage: { aspectRatio: VIEW_W / 330, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
+  stage: { flex: 1, minHeight: 260, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(238,231,255,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   overlayTitle: { fontFamily: F.bold, fontSize: 26, color: C.ink, textAlign: 'center' },
   overlaySub: { fontFamily: F.regular, fontSize: 15, color: C.inkSoft, textAlign: 'center', marginTop: 6, lineHeight: 20 },
   overlayButtons: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' },
-  controls: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, alignItems: 'flex-end', minHeight: 110 },
-  ctrl: { flex: 1, height: '100%', maxHeight: 170, minHeight: 80, borderRadius: 24, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
+  controls: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, minHeight: 140 },
+  ctrl: { flex: 1, height: '100%', borderRadius: 24, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
   ctrlText: { fontFamily: F.bold, fontSize: 20, color: C.ink, textAlign: 'center' }
 });

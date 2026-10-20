@@ -35,6 +35,7 @@ export default {
   'game.end.score': "Amaphuzu angu-{n}",
   'game.end.noBumps': "Akukho kushayisa nhlobo!",
   'game.end.bumps': "Ukushayisa okungu-{n}",
+  'game.end.oneBump': "Ukushayisa okukodwa",
   'game.end.challengeDone': "Inselelo yanamuhla iphelile! Ukudla okumnandi okwengeziwe kufakiwe.",
   'game.end.next': "Okulandelayo: {stage}",
   'game.end.again': "Dlala futhi",
