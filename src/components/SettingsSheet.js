@@ -6,6 +6,7 @@ import appJson from '../../app.json';
 import { getStatus, onStatusChange, flush, deleteMyData, discardQueued, discardQueuedPhotos, getInstallId } from '../contribute/contributions';
 import { resetExamples } from '../learning/petLearning';
 import { useI18n, LANGUAGE_OPTIONS } from '../i18n';
+import GameStatsSheet from './game/GameStatsSheet';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 export const PRIVACY_URL = API ? `${API}/privacy` : null;
@@ -15,6 +16,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
   const { t, pref } = useI18n();
   const [status, setStatus] = useState(null);
   const [installId, setInstallId] = useState('');
+  const [statsOpen, setStatsOpen] = useState(false);
   useEffect(() => {
     getInstallId().then(setInstallId);
   }, []);
@@ -191,14 +193,20 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 <Text style={s.link}>{t('settings.contactUs', { email: SUPPORT_EMAIL })}</Text>
               </Pressable>
               <Text style={s.version}>{t('settings.entertainment', { appName: APP_NAME })}</Text>
-              <Text style={s.version} selectable>
-                {APP_NAME} {appJson?.expo?.version}
-                {'\n'}Install ID: {installId}
+              {/* Long-press the version for the owner's on-phone numbers (nothing is sent). */}
+              <Pressable onLongPress={() => setStatsOpen(true)} delayLongPress={700}>
+                <Text style={s.version}>
+                  {APP_NAME} {appJson?.expo?.version}
+                </Text>
+              </Pressable>
+              <Text style={[s.version, { marginTop: 0 }]} selectable>
+                Install ID: {installId}
               </Text>
             </View>
           </ScrollView>
         </Pressable>
       </Pressable>
+      <GameStatsSheet visible={statsOpen} onClose={() => setStatsOpen(false)} />
     </Modal>
   );
 }

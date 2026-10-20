@@ -23,7 +23,11 @@ import Moments from './Moments';
 import useMoments from '../../game/useMoments';
 import { challengeSituation, saveMoment, reencodeWithoutMetadata, shouldUploadPhoto, uploadMeta, PHOTO_REWARD } from '../../game/photoChallenge';
 import { queuePhoto } from '../../contribute/contributions';
-import { dayKey } from '../../game/daily';
+import { dayKey, dailySeed, updateStreak, streakShown, saverAvailable, challengeFor, advanceChallenge, CHALLENGE_REWARD } from '../../game/daily';
+import { dailyStage } from '../../game/stages';
+import { buy, toggleWear, setColour } from '../../game/wardrobe';
+import { setGameSound } from '../../game/sfx';
+import Wardrobe from './Wardrobe';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -32,7 +36,7 @@ const MAX_WAITING_POWER_UPS = 4;
 export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings }) {
   const { t } = useI18n();
   const reduceMotion = useReduceMotion();
-  const { ready, game, options, updateGame } = useGame(pet);
+  const { ready, game, options, updateGame, setOptions } = useGame(pet);
   const [screen, setScreen] = useState({ name: 'hub' });
   const moments = useMoments();
   const petMoments = moments.all.filter((m) => m.petId === pet.id);
@@ -54,22 +58,32 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   // next stage played.
   const startStage = useCallback(
     (stage) => {
-      count('stagesPlayed');
+      count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
       const powerUps = game?.powerUps || [];
       if (powerUps.length) updateGame((g) => ({ ...g, powerUps: [] }));
-      setScreen({ name: 'run', stage, seed: hashString(`${stage.id}:${Date.now()}`), powerUps, key: Date.now() });
+      // The daily run is the same course for everyone with this pet type today.
+      const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
+      setScreen({ name: 'run', stage, seed, powerUps, key: Date.now() });
     },
     [game, updateGame]
   );
 
   const finish = useCallback(
     (result) => {
-      count('stagesFinished');
+      if (!result.daily) count('stagesFinished');
+      const day = dayKey();
+      const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
+      const { challenge, justDone } = advanceChallenge(current, result);
       updateGame((g) => ({
         ...g,
-        progress: recordStage(g.progress, result),
-        bank: g.bank + result.treats,
-        lifetimeTreats: g.lifetimeTreats + result.treats
+        progress: result.daily ? g.progress : recordStage(g.progress, result),
+        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0),
+        lifetimeTreats: g.lifetimeTreats + result.treats,
+        streak: updateStreak(g.streak, day).streak,
+        challenge,
+        daily: result.daily
+          ? { day, best: g.daily.day === day ? Math.max(g.daily.best, result.score) : result.score, plays: (g.daily.day === day ? g.daily.plays : 0) + 1 }
+          : g.daily
       }));
       // Questions for the optional treat round, worked out once per end card.
       const roundItems = pickQuestions({
@@ -80,7 +94,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         hasAudio: (e) => fileExists(e.audioUri)
       });
       if (roundItems.length) count('treatRoundsOffered');
-      setScreen((sc) => ({ name: 'end', result, stage: sc.stage, roundItems }));
+      setScreen((sc) => ({ name: 'end', result, stage: sc.stage, roundItems, challengeDone: justDone }));
     },
     [updateGame, pet, history, game]
   );
@@ -172,6 +186,20 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       />
     );
 
+  if (screen.name === 'wardrobe')
+    return (
+      <Wardrobe
+        pet={pet}
+        species={species}
+        wardrobe={game.wardrobe}
+        bank={game.bank}
+        onColour={(c) => updateGame((g) => ({ ...g, wardrobe: setColour(g.wardrobe, c) }))}
+        onBuy={(id) => updateGame((g) => ({ ...g, ...buy(g.wardrobe, g.bank, id) }))}
+        onWear={(id) => updateGame((g) => ({ ...g, wardrobe: toggleWear(g.wardrobe, id) }))}
+        onBack={() => setScreen({ name: 'hub' })}
+      />
+    );
+
   if (screen.name === 'moments')
     return (
       <Moments
@@ -229,6 +257,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         result={screen.result}
         stage={screen.stage}
         next={next}
+        challengeDone={screen.challengeDone}
         treatRoundCount={screen.roundItems?.length || 0}
         onTreatRound={startRound}
         onNext={() => startStage(next)}
@@ -241,6 +270,9 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   }
 
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
+  const streak = streakShown(game.streak, today);
+  const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
+  const dailyBest = game.daily.day === today ? game.daily.best : null;
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
@@ -251,6 +283,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             {treatEmoji} {game.bank}
           </Text>
           <Text style={s.heroLine}>⭐ {totalStars(game.progress)}</Text>
+          <Text style={s.heroSmall}>
+            {streak > 0 ? t('game.streak.days', { n: streak }) : t('game.streak.none')}
+            {streak > 0 && saverAvailable(game.streak, today) ? ` · ${t('game.streak.saverNote')}` : ''}
+          </Text>
           {game.powerUps.length > 0 && (
             <View style={s.ready}>
               <Text style={s.readyText}>{t('game.readyPowerUps')}</Text>
@@ -270,8 +306,36 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         </Sticker>
       ) : null}
 
+      <Sticker radius={22} color={C.sky} style={{ marginTop: 14 }} innerStyle={s.photoCard}>
+        <Text style={s.photoTitle}>🌅 {t('game.daily.title')}</Text>
+        <Text style={s.photoSub}>
+          {dailyBest != null ? t('game.daily.best', { n: dailyBest }) : t('game.daily.sub', { seconds: dailyStage(pet.species).seconds })}
+        </Text>
+        <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+          <StickerButton label={t('game.daily.play')} emoji="▶️" small onPress={() => startStage(dailyStage(pet.species))} />
+        </View>
+      </Sticker>
+
+      <Sticker radius={22} color={challenge.done ? C.mint : C.paper} style={{ marginTop: 14 }} innerStyle={s.photoCard}>
+        <Text style={s.photoTitle}>
+          🎯 {t('game.challenge.title')}
+          {challenge.done ? ' ✅' : ''}
+        </Text>
+        <Text style={s.photoSub}>
+          {t(`game.challenge.${challenge.type}`, {
+            n: challenge.target,
+            stage: challenge.stageId ? t(`game.place.${challenge.stageId.split('-')[1]}`) : '',
+            emoji: treatEmoji
+          })}
+        </Text>
+        <Text style={s.photoSub}>
+          {challenge.done ? t('game.challenge.done') : t('game.challenge.progress', { n: challenge.count, total: challenge.target, bonus: CHALLENGE_REWARD })}
+        </Text>
+      </Sticker>
+
       <PhotoCard pet={pet} situation={situation} onPress={() => setScreen({ name: 'photo' })} />
       <View style={s.row}>
+        <StickerButton label={t('game.wardrobe.button')} emoji="🎀" small color={C.butter} onPress={() => setScreen({ name: 'wardrobe' })} />
         <StickerButton
           label={t('game.moments.button', { petName: pet.name, n: petMoments.length })}
           emoji="🖼️"
@@ -283,6 +347,20 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
       <Text style={s.section}>{t('game.map.title')}</Text>
       <StageMap species={pet.species} progress={game.progress} onPlay={startStage} />
+
+      <View style={[s.row, { marginTop: 18 }]}>
+        <StickerButton
+          small
+          color={C.paper}
+          emoji={options.sound ? '🔊' : '🔇'}
+          label={options.sound ? t('game.sound.on') : t('game.sound.off')}
+          onPress={() => {
+            setGameSound(!options.sound);
+            setOptions({ sound: !options.sound });
+          }}
+        />
+      </View>
+      <Text style={s.footnote}>{t('game.footnote')}</Text>
     </ScrollView>
   );
 }
@@ -306,6 +384,8 @@ const s = StyleSheet.create({
   content: { padding: 18, paddingBottom: 36 },
   hero: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
   heroLine: { fontFamily: F.bold, fontSize: 20, color: C.ink },
+  heroSmall: { fontFamily: F.medium, fontSize: 13, color: C.ink, lineHeight: 18 },
+  footnote: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 12, lineHeight: 17 },
   ready: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
   readyText: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
