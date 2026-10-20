@@ -13,8 +13,8 @@
       "buildNumber": "1",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Pawlingo uses the microphone to hear your pet's barks and meows and translate them. While the Translate screen is open it keeps the last 10 seconds in memory so it can catch a sound you just missed. Recordings stay on your phone unless you choose to share them.",
-        "NSCameraUsageDescription": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video. It only uses the camera after you switch it on, and clips stay on your phone unless you share them.",
-        "NSPhotoLibraryUsageDescription": "Pawlingo opens a video of your pet that you pick, so it can translate the sound in it. It only sees the video you choose.",
+        "NSCameraUsageDescription": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video, and lets you take a photo of your pet for a Play tab photo challenge. It only uses the camera after you switch it on or choose to take a photo, and clips and photos stay on your phone unless you share them.",
+        "NSPhotoLibraryUsageDescription": "Pawlingo opens a video of your pet that you pick, so it can translate the sound in it, or a photo you pick for a Play tab photo challenge. It only sees what you choose.",
         "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
@@ -70,7 +70,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video. It only uses the camera after you switch it on, and clips stay on your phone unless you share them.",
+          "cameraPermission": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video, and lets you take a photo of your pet for a Play tab photo challenge. It only uses the camera after you switch it on or choose to take a photo, and clips and photos stay on your phone unless you share them.",
           "recordAudioAndroid": false,
           "barcodeScannerEnabled": false,
           "microphonePermission": "Pawlingo uses the microphone to hear your pet's barks and meows and translate them. While the Translate screen is open it keeps the last 10 seconds in memory so it can catch a sound you just missed. Recordings stay on your phone unless you choose to share them."
@@ -86,8 +86,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Pawlingo opens a video of your pet that you pick, so it can translate the sound in it. It only sees the video you choose.",
-          "cameraPermission": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video. It only uses the camera after you switch it on, and clips stay on your phone unless you share them.",
+          "photosPermission": "Pawlingo opens a video of your pet that you pick, so it can translate the sound in it, or a photo you pick for a Play tab photo challenge. It only sees what you choose.",
+          "cameraPermission": "Pawlingo shows your pet on screen while it listens and films a short silent clip for your share video, and lets you take a photo of your pet for a Play tab photo challenge. It only uses the camera after you switch it on or choose to take a photo, and clips and photos stay on your phone unless you share them.",
           "microphonePermission": "Pawlingo uses the microphone to hear your pet's barks and meows and translate them. While the Translate screen is open it keeps the last 10 seconds in memory so it can catch a sound you just missed. Recordings stay on your phone unless you choose to share them."
         }
       ],

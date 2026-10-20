@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { StyleSheet, View, StatusBar, Linking } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { StyleSheet, View, StatusBar, Linking, AppState } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermissions } from 'expo-camera';
 import { useFonts, Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
@@ -24,9 +24,11 @@ import ClipPickerSheet from './src/components/ClipPickerSheet';
 import ShareCard from './src/components/ShareCard';
 import ShareSheet from './src/components/ShareSheet';
 import TabBar from './src/components/TabBar';
+import PlayTab from './src/components/game/PlayTab';
 import { getSpecies } from './src/species';
 import useIncomingShareClip from './src/share/incomingShare';
 import { I18nProvider, translate } from './src/i18n';
+import { countSession } from './src/game/counters';
 
 installCrashReporting();
 
@@ -51,6 +53,13 @@ function PetApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const cameraRef = useRef(null);
   const shareCardRef = useRef(null);
+
+  // On-phone usage counts for the hidden numbers screen (never sent).
+  useEffect(() => {
+    countSession();
+    const sub = AppState.addEventListener('change', (state) => state === 'active' && countSession());
+    return () => sub.remove();
+  }, []);
 
   const cameraOn = Boolean(camPerm?.granted && cameraWanted);
   const t = useTranslate({ data, cameraRef, cameraOn, shareCardRef, scannerOpen: activeTab === 'scanner' });
@@ -160,6 +169,19 @@ function PetApp() {
               t.dismissResult();
             }}
             onGoScan={() => setActiveTab('scanner')}
+          />
+        )}
+        {activeTab === 'play' && (
+          <PlayTab
+            pet={pet}
+            species={species}
+            breed={data.breed}
+            history={data.history}
+            onTeach={t.teach}
+            onUpdatePet={data.updatePet}
+            shareClips={data.shareClips}
+            settings={data.settings}
+            onUpdateSettings={data.updateSettings}
           />
         )}
       </View>

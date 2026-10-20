@@ -1,5 +1,7 @@
 // Everything Pawlingo keeps on the phone, in one saved object:
-//   pets         [{ id, name, species, breedId, personality, contextId, contextSetAt, home: 'indoor'|'garden', createdAt }]
+//   pets         [{ id, name, species, breedId, personality, contextId, contextSetAt, home: 'indoor'|'garden', createdAt,
+//                   answers? }]  answers: Play tab treat-round profile/habit answers,
+//                   { [questionId]: { value, at, lowConfidence?, earlier?, edited? } } (see src/game/treatRound.js)
 //   activePetId  which pet the Translate screen is for
 //   history      the journal (newest first, capped)
 //   shareClips   true / false / null (not asked yet)
@@ -15,7 +17,18 @@ const KEY = 'pawlingo:state:v2';
 const OLD_KEY = 'barktranslator:state:v1';
 export const MAX_HISTORY = 100;
 
-export const DEFAULT_SETTINGS = { mobileData: false, ageConfirmed: false, readAloud: false, catchMissed: true, language: 'system', seen: {} };
+// sharePhotos: the Play tab's separate "share pet photos" choice (only used
+// while clip sharing is on too); photoShareAsked: that choice was shown once.
+export const DEFAULT_SETTINGS = {
+  mobileData: false,
+  ageConfirmed: false,
+  readAloud: false,
+  catchMissed: true,
+  language: 'system',
+  seen: {},
+  sharePhotos: false,
+  photoShareAsked: false
+};
 
 export function newPetId() {
   const bytes = new Uint8Array(8);

@@ -1,6 +1,6 @@
 # Google Play Console — Data Safety Form Answers (`com.pawlingo.app`)
 
-Use the answers below when completing the **App Content → Data safety** form in Google Play Console. Every answer is verified against the actual codebase (`src/contribute/contributions.js`, `src/crash.js`, `src/share/videoShare.js`, `src/share/extractClip.js`, `src/audio/rollingBuffer.js`, and `server/main.py`).
+Use the answers below when completing the **App Content → Data safety** form in Google Play Console. Every answer is verified against the actual codebase (`src/contribute/contributions.js`, `src/crash.js`, `src/share/videoShare.js`, `src/share/extractClip.js`, `src/audio/rollingBuffer.js`, `src/game/photoChallenge.js`, and `server/main.py`).
 
 ---
 
@@ -45,6 +45,18 @@ Check the following data types:
 - **Why is this user data collected?**
   - ✅ **App functionality** (extracting pet audio from an imported video clip to translate it, or compositing a shareable MP4 video card). The server reads the audio track in a temporary directory and deletes all uploaded and converted video files immediately. Videos are never stored on disk or cloud storage, and are never used for training.
 
+### 2b. Photos and videos → Photos
+- **Collected:** Yes, only with **two** opt-ins: *Share clips and answers* is on **and** the owner ticked the separate, default-off choice *"Share pet photos to help Pawlingo learn breeds and moods (no location, you can delete them any time)"* (shown the first time they do a Play tab photo challenge; also in Settings → *Share pet photos*). See `shouldUploadPhoto` in `src/game/photoChallenge.js` → `queuePhoto` → `POST /photo`.
+- **Shared with third parties:** No
+- **Processed ephemerally:** **No** (kept for training until deleted)
+- **Is this data required or optional?** **Optional** (user-chosen photos only; without both opt-ins photos never leave the phone)
+- **Why is this user data collected?**
+  - ✅ **App functionality** (improving the app: learning breeds and moods)
+- **What is sent:** a re-encoded JPEG (max 1.5 MB) with **no EXIF or location** (stripped on the phone with `expo-image-manipulator` before saving, and again on the server by `strip_jpeg_metadata`), plus labels: challenge situation, optional "is this my pet" / size / breed confirmation, species, random pet ID and install ID. Temperament is never inferred from photos.
+- **Deletion:** deleting a photo in the pet's moments sends `DELETE /photo`; *Settings → Delete everything I've shared* (`DELETE /me`) deletes all shared photos.
+
+> **Play tab counters:** the app keeps local usage counts (sessions per day, stages played, treat-round answer rates, photo challenges) for a hidden on-phone debug screen. They are never sent, so they are **not collected**. Treat-round answers about the pet stay on the phone; answers about the pet's own recordings are only sent as normal labels under *Share clips and answers* (section 4).
+
 ### 3. App info and performance → Crash logs
 - **Collected:** Yes (`POST /errors` in `src/crash.js` sends `message`, `stack`, `fatal`, `where`, `appVersion`, `platform`, `osVersion`)
 - **Shared with third parties:** No (sent directly to Pawlingo's own first-party Cloud Function, no third-party crash SDK)
@@ -68,5 +80,5 @@ Check the following data types:
   - **Required** (used for daily rate limiting and allowing the user to delete their shared clips via `DELETE /me`)
 - **Why is this user data collected?**
   - ✅ **App functionality**
-  - ✅ **Fraud prevention, security, and compliance** (rate-limiting `/clips`, `/video`, `/errors`, `/extract` and fulfilling `DELETE /me` erasure requests)
+  - ✅ **Fraud prevention, security, and compliance** (rate-limiting `/clips`, `/video`, `/errors`, `/extract`, `/photo` and fulfilling `DELETE /me` erasure requests)
 

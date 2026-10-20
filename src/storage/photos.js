@@ -26,6 +26,26 @@ export async function keepPhoto(tempUri, id) {
   }
 }
 
+// Keep a Play tab photo-challenge photo (already re-encoded without EXIF) in
+// the pet's "moments" folder. Moments are never pruned: only the owner deletes them.
+export async function keepMoment(tempUri, id) {
+  if (!tempUri) return null;
+  try {
+    const dest = new File(dir('moments'), `${id}.jpg`);
+    await new File(tempUri).move(dest);
+    return dest.uri;
+  } catch (_) {
+    return null;
+  }
+}
+
+export function deleteLocalFile(uri) {
+  try {
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  } catch (_) {}
+}
+
 // Keep a copy of the recording so the owner can share it as a video later.
 export async function keepAudio(tempUri, id) {
   if (!tempUri) return null;

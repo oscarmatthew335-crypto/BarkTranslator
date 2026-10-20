@@ -2,8 +2,12 @@ import React, { createContext, useContext } from 'react';
 import en from './en';
 import af from './af';
 import zu from './zu';
+import gameEn from './game/en';
+import gameAf from './game/af';
+import gameZu from './game/zu';
 
-export const DICTS = { en, af, zu };
+// The Play tab's strings live in ./game/ and join each language here.
+export const DICTS = { en: { ...en, ...gameEn }, af: { ...af, ...gameAf }, zu: { ...zu, ...gameZu } };
 
 export const LANGUAGE_OPTIONS = [
   { id: 'system', labelKey: 'settings.langSystem' },

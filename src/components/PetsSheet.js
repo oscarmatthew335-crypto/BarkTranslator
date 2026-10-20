@@ -16,6 +16,8 @@ import { C, F, INK_WIDTH } from '../theme';
 import { SPECIES, getSpecies, APP_NAME } from '../species';
 import { StickerButton } from './ui';
 import { useI18n } from '../i18n';
+import { questionsFor, UNSURE } from '../game/questions';
+import { optionKey } from './game/TreatRound';
 
 // Your pets: switch between them, add one, edit or remove.
 // Each pet keeps its own learning and journal entries.
@@ -140,7 +142,11 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
   const [name, setName] = useState(initial.name);
   const [breedId, setBreedId] = useState(initial.breedId);
   const [home, setHome] = useState(initial.home);
+  // Treat-round profile answers, editable here (only when editing a pet).
+  const [answers, setAnswers] = useState(initial.answers || {});
+  const [changedAnswers, setChangedAnswers] = useState({});
   const sp = species ? SPECIES[species] : null;
+  const profileQs = initial.id && species === initial.species ? questionsFor(species, 'profile').filter((q) => q.id !== 'home') : [];
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
@@ -235,6 +241,41 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
         </>
       )}
 
+      {profileQs.length > 0 && (
+        <>
+          <Text style={[s.label, { marginTop: 14 }]}>{t('pets.profileTitle', { petName: name.trim() || initial.name })}</Text>
+          {profileQs.map((q) => (
+            <View key={q.id} style={{ marginBottom: 10 }}>
+              <Text style={s.breedTrait}>
+                {t(`q.${q.id}`, { petName: name.trim() || initial.name })}
+                {answers[q.id]?.lowConfidence && !changedAnswers[q.id] ? ` ${t('pets.profileCheck')}` : ''}
+              </Text>
+              <View style={s.chipRow}>
+                {[...q.options, UNSURE].map((o) => {
+                  const on = answers[q.id]?.value === o;
+                  return (
+                    <Pressable
+                      key={o}
+                      style={[s.chip, on && { backgroundColor: C.mint }]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        const value = { value: o, at: Date.now(), edited: true };
+                        setAnswers((a) => ({ ...a, [q.id]: value }));
+                        setChangedAnswers((c) => ({ ...c, [q.id]: true }));
+                      }}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on }}
+                    >
+                      <Text style={s.chipText}>{o === UNSURE ? t('game.round.notSure') : t(optionKey(q.id, o))}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ))}
+        </>
+      )}
+
       <View style={s.formButtons}>
         <StickerButton
           label={t('pets.save')}
@@ -247,7 +288,8 @@ function PetForm({ title, initial, canRemove, onCancel, onSave, onRemove }) {
               species,
               name: name.trim() || SPECIES[species].defaultName,
               breedId: SPECIES[species].breeds ? breedId : null,
-              home: home || SPECIES[species].defaultHome
+              home: home || SPECIES[species].defaultHome,
+              ...(Object.keys(changedAnswers).length ? { answers } : {})
             });
           }}
         />
@@ -320,6 +362,9 @@ const s = StyleSheet.create({
   breedRowActive: { borderColor: C.ink, backgroundColor: C.butter },
   breedName: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
   breedTrait: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft, marginTop: 2 },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  chip: { paddingVertical: 6, paddingHorizontal: 11, borderRadius: 999, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper },
+  chipText: { fontFamily: F.medium, fontSize: 14, color: C.ink },
   formButtons: { flexDirection: 'row', gap: 10, marginTop: 18, alignItems: 'center' },
   remove: { alignSelf: 'center', paddingTop: 16 },
   removeText: { fontFamily: F.semibold, fontSize: 14, color: C.tomato }
