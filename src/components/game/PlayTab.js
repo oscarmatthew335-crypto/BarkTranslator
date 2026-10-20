@@ -5,7 +5,8 @@ import { C, F } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
-import { recordStage, nextStageAfter, totalStars } from '../../game/progress';
+import { recordStage, nextStageAfter, totalStars, suggestedStage, isUnlocked } from '../../game/progress';
+import { stagesFor } from '../../game/stages';
 import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
@@ -255,7 +256,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     );
 
   if (screen.name === 'end') {
-    const next = screen.stage.daily ? null : nextStageAfter(pet.species, screen.stage.id);
+    // After a daily run the next thing is the stage to continue with (the daily run is a bonus, not a stage).
+    const next = screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
     return (
       <StageEnd
         pet={pet}
@@ -281,6 +283,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const streak = streakShown(game.streak, today);
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
   const dailyBest = game.daily.day === today ? game.daily.best : null;
+  const continueStage = suggestedStage(game.progress, pet.species);
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
@@ -313,6 +316,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           <Text style={s.noticeText}>{screen.notice}</Text>
         </Sticker>
       ) : null}
+
+      <Sticker radius={22} color={C.butter} style={{ marginTop: 14 }} innerStyle={s.photoCard}>
+        <Text style={s.photoTitle}>
+          🏁 {t('game.continue.title', { n: stagesFor(pet.species).findIndex((x) => x.id === continueStage.id) + 1, stage: t(continueStage.nameKey) })}
+        </Text>
+        <Text style={s.photoSub}>{t('game.continue.sub')}</Text>
+        <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+          <StickerButton label={t('game.continue.play', { stage: t(continueStage.nameKey) })} emoji="▶️" color={C.paper} onPress={() => startStage(continueStage)} />
+        </View>
+      </Sticker>
 
       <Sticker radius={22} color={C.sky} style={{ marginTop: 14 }} innerStyle={s.photoCard}>
         <Text style={s.photoTitle}>🌅 {t('game.daily.title')}</Text>
@@ -354,7 +367,12 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       </View>
 
       <Text style={s.section}>{t('game.map.title')}</Text>
-      <StageMap species={pet.species} progress={game.progress} onPlay={startStage} />
+      <StageMap
+        species={pet.species}
+        progress={game.progress}
+        onPlay={startStage}
+        onLocked={(stage, before) => showNotice(t('game.map.lockedNotice', { stage: t(stage.nameKey), before: t(before.nameKey) }))}
+      />
 
       <View style={[s.row, { marginTop: 18 }]}>
         <StickerButton

@@ -18,7 +18,7 @@ export function Stars({ n, size = 16 }) {
 
 // A winding path of stages. Open stages can be played (and replayed) any
 // time; a locked one opens when the stage before it is finished.
-export default function StageMap({ species, progress, onPlay }) {
+export default function StageMap({ species, progress, onPlay, onLocked }) {
   const { t } = useI18n();
   const list = stagesFor(species);
   return (
@@ -30,8 +30,7 @@ export default function StageMap({ species, progress, onPlay }) {
         return (
           <View key={stage.id} style={[s.row, { justifyContent: left ? 'flex-start' : 'flex-end' }]}>
             <Pressable
-              onPress={() => open && onPlay(stage)}
-              disabled={!open}
+              onPress={() => (open ? onPlay(stage) : onLocked?.(stage, list[i - 1]))}
               style={[s.node, { backgroundColor: open ? THEMES[stage.theme].ground : '#DDD6F0', opacity: open ? 1 : 0.75 }]}
               accessibilityRole="button"
               accessibilityState={{ disabled: !open }}
