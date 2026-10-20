@@ -16,10 +16,12 @@ export default function StageEnd({ pet, species, wardrobe, faceUri, result, stag
       <Sticker radius={26} color={C.butter} innerStyle={s.card}>
         {faceUri ? <Image source={{ uri: faceUri }} style={s.face} accessibilityIgnoresInvertColors /> : <PetPreview species={pet.species} wardrobe={wardrobe} size={110} />}
         <Text style={s.title} maxFontSizeMultiplier={1.5}>
-          {result.daily ? t('game.end.dailyDone') : t('game.end.goalAt', { stage: t(stage.nameKey) })}
+          {result.daily ? t('game.end.dailyDone') : result.failed ? t('game.end.outOfHearts') : t('game.end.goalAt', { stage: t(stage.nameKey) })}
         </Text>
         {result.daily ? (
           <Text style={s.big}>{t('game.end.score', { n: result.score })}</Text>
+        ) : result.failed ? (
+          <Text style={s.line}>{t('game.end.outSub', { stage: t(stage.nameKey) })}</Text>
         ) : (
           <Stars n={result.stars} size={34} />
         )}
@@ -31,8 +33,9 @@ export default function StageEnd({ pet, species, wardrobe, faceUri, result, stag
       </Sticker>
 
       <View style={s.buttons}>
-        {next ? <StickerButton label={t('game.end.next', { stage: t(next.nameKey) })} emoji="▶️" onPress={onNext} /> : null}
-        <StickerButton label={t('game.end.again')} emoji="🔁" color={C.paper} onPress={onReplay} />
+        {result.failed ? <StickerButton label={t('game.end.tryAgain')} emoji="🔁" onPress={onReplay} /> : null}
+        {next ? <StickerButton label={t('game.end.next', { stage: t(next.nameKey) })} emoji="▶️" color={result.failed ? C.paper : C.butter} onPress={onNext} /> : null}
+        {!result.failed ? <StickerButton label={t('game.end.again')} emoji="🔁" color={C.paper} onPress={onReplay} /> : null}
         <StickerButton label={t('game.end.map')} emoji="🗺️" color={C.paper} onPress={onMap} />
       </View>
 

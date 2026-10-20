@@ -71,13 +71,14 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
   const finish = useCallback(
     (result) => {
-      if (!result.daily) count('stagesFinished');
+      if (!result.daily && !result.failed) count('stagesFinished');
+      if (result.failed) count('stagesLost');
       const day = dayKey();
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
       const { challenge, justDone } = advanceChallenge(current, result);
       updateGame((g) => ({
         ...g,
-        progress: result.daily ? g.progress : recordStage(g.progress, result),
+        progress: result.daily || result.failed ? g.progress : recordStage(g.progress, result),
         bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0),
         lifetimeTreats: g.lifetimeTreats + result.treats,
         streak: updateStreak(g.streak, day).streak,
@@ -257,7 +258,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
   if (screen.name === 'end') {
     // After a daily run the next thing is the stage to continue with (the daily run is a bonus, not a stage).
-    const next = screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
+    const after = screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
+    const next = after && isUnlocked(game.progress, pet.species, after.id) ? after : null;
     return (
       <StageEnd
         pet={pet}

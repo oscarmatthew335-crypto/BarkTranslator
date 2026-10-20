@@ -107,7 +107,7 @@ function play(stage, seed, pilot = () => ({})) {
   return run;
 }
 
-test('a stage always reaches its goal, and careful play earns more stars than doing nothing', () => {
+test('careful play does better than doing nothing', () => {
   const idle = play(garden, 3);
   assert.equal(idle.done, true);
   assert.ok(idle.hits > 3);
@@ -119,12 +119,48 @@ test('a stage always reaches its goal, and careful play earns more stars than do
   assert.ok(good.t >= 40 && good.t <= 95, `took ${good.t}s`);
 });
 
-test('stars: 1 for finishing, 2 for half the treats, 3 for most treats and at most one bump', () => {
-  assert.equal(starsFor({ collected: 0, totalTreats: 50, hits: 9 }), 1);
-  assert.equal(starsFor({ collected: 25, totalTreats: 50, hits: 3 }), 2);
-  assert.equal(starsFor({ collected: 25, totalTreats: 50, hits: 4 }), 1);
-  assert.equal(starsFor({ collected: 40, totalTreats: 50, hits: 1 }), 3);
-  assert.equal(starsFor({ collected: 40, totalTreats: 50, hits: 2 }), 2);
+test('stars: 1 for finishing, 2 for most treats with at most two bumps, 3 for nearly all with no bumps', () => {
+  assert.equal(starsFor({ collected: 0, totalTreats: 50, hits: 4 }), 1);
+  assert.equal(starsFor({ collected: 30, totalTreats: 50, hits: 2 }), 2);
+  assert.equal(starsFor({ collected: 30, totalTreats: 50, hits: 3 }), 1);
+  assert.equal(starsFor({ collected: 25, totalTreats: 50, hits: 0 }), 1);
+  assert.equal(starsFor({ collected: 43, totalTreats: 50, hits: 0 }), 3);
+  assert.equal(starsFor({ collected: 43, totalTreats: 50, hits: 1 }), 2);
+});
+
+test('hearts: each bump costs one; out of hearts loses the stage (no stars), treats are kept', () => {
+  const idle = play(garden, 3);
+  assert.equal(idle.done, true);
+  assert.equal(idle.failed, true);
+  assert.equal(idle.hearts, 0);
+  assert.equal(idle.hits, garden.hearts);
+  assert.ok(idle.dist < idle.length, 'stopped before the goal');
+  const res = resultOf(idle);
+  assert.equal(res.failed, true);
+  assert.equal(res.stars, 0);
+  assert.equal(res.treats, idle.treats);
+});
+
+test('harder stages: fewer hearts, faster, busier, and jump-then-duck pairs later on', () => {
+  const [g, park, beach, , , home] = STAGES.dog;
+  assert.equal(g.hearts, 5);
+  assert.equal(park.hearts, 4);
+  assert.equal(home.hearts, 3);
+  assert.ok(home.speed > g.speed && home.density > g.density);
+  assert.equal(g.combo, 0);
+  const obs = buildLevel(beach, 4).entities.filter((e) => e.kind === 'obstacle');
+  const close = obs.filter((e, i) => i > 0 && e.lane !== obs[i - 1].lane && e.x - (obs[i - 1].x + obs[i - 1].w) < 400);
+  assert.ok(close.length > 0, 'Beach has some pairs');
+});
+
+test('every stage can be cleared: the autopilot finishes them all without running out of hearts', () => {
+  for (const stage of [...STAGES.dog, ...STAGES.cat]) {
+    for (const seed of [1, 2, 3]) {
+      const run = play(stage, seed, autopilot);
+      assert.equal(run.failed, false, `${stage.id} seed ${seed}: ${run.hits} bumps`);
+      assert.ok(run.dist >= run.length, stage.id);
+    }
+  }
 });
 
 test('collecting a treat counts it once, double treats count twice', () => {
@@ -221,13 +257,22 @@ test('start power-ups from a treat round are on from the first frame', () => {
 });
 
 test('the daily run ends on time and scores treats, distance and bumps', () => {
-  const run = play(dailyStage('dog'), 11);
+  const run = play(dailyStage('dog'), 11, autopilot);
   assert.ok(run.t >= 75 && run.t < 75.1);
   const res = resultOf(run);
   assert.equal(res.daily, true);
   assert.equal(res.score, scoreFor(run));
   assert.equal(scoreFor({ treats: 10, dist: 2500, hits: 2 }), 100 + 100 - 30);
   assert.equal(scoreFor({ treats: 0, dist: 0, hits: 9 }), 0);
+});
+
+test('the daily run ends early when the hearts run out, and still gets a score', () => {
+  const run = play(dailyStage('dog'), 11);
+  assert.ok(run.done && run.t < 75);
+  assert.equal(run.hearts, 0);
+  const res = resultOf(run);
+  assert.equal(res.failed, false);
+  assert.equal(res.score, scoreFor(run));
 });
 
 test('stages open by playing: finishing one opens the next', () => {

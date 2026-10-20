@@ -106,8 +106,8 @@ export function advanceChallenge(challenge, result) {
   if (challenge.type === 'treats') add = result.treats;
   else if (challenge.type === 'stars3') add = !result.daily && result.stageId === challenge.stageId && result.stars >= 3 ? 1 : 0;
   else if (challenge.type === 'daily') add = result.daily ? 1 : 0;
-  else if (challenge.type === 'stages') add = result.daily ? 0 : 1;
-  else if (challenge.type === 'clean') add = !result.daily && result.hits === 0 ? 1 : 0;
+  else if (challenge.type === 'stages') add = result.daily || result.failed ? 0 : 1;
+  else if (challenge.type === 'clean') add = !result.daily && !result.failed && result.hits === 0 ? 1 : 0;
   const count = Math.min(challenge.target, challenge.count + add);
   const done = count >= challenge.target;
   return { challenge: { ...challenge, count, done }, justDone: done };

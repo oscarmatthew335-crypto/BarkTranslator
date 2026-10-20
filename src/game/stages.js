@@ -29,13 +29,14 @@ export const COLLECTIBLES = {
 
 export const POWER_UPS = ['speed', 'shield', 'magnet', 'double'];
 
+// hearts: bumps allowed before the stage is lost. combo: chance of a jump-then-duck (or duck-then-jump) pair.
 const PLACES = [
-  { place: 'garden', seconds: 45, speed: 190, ramp: 30, density: 0.9 },
-  { place: 'park', seconds: 55, speed: 205, ramp: 35, density: 1.05 },
-  { place: 'beach', seconds: 60, speed: 220, ramp: 40, density: 1.2 },
-  { place: 'braai', seconds: 70, speed: 235, ramp: 45, density: 1.35 },
-  { place: 'vet', seconds: 80, speed: 250, ramp: 50, density: 1.5 },
-  { place: 'home', seconds: 90, speed: 265, ramp: 55, density: 1.65 }
+  { place: 'garden', seconds: 45, speed: 210, ramp: 45, density: 1.1, hearts: 5, combo: 0 },
+  { place: 'park', seconds: 55, speed: 230, ramp: 55, density: 1.3, hearts: 4, combo: 0.1 },
+  { place: 'beach', seconds: 60, speed: 250, ramp: 65, density: 1.5, hearts: 3, combo: 0.2 },
+  { place: 'braai', seconds: 70, speed: 270, ramp: 75, density: 1.7, hearts: 3, combo: 0.28 },
+  { place: 'vet', seconds: 80, speed: 290, ramp: 85, density: 1.9, hearts: 3, combo: 0.35 },
+  { place: 'home', seconds: 90, speed: 310, ramp: 95, density: 2.1, hearts: 3, combo: 0.42 }
 ];
 
 const DOG_MIX = {
@@ -66,6 +67,8 @@ const build = (species, mix) =>
     speed: p.speed,
     ramp: p.ramp,
     density: p.density,
+    hearts: p.hearts,
+    combo: p.combo,
     obstacles: mix[p.place],
     powerUps: i === 0 ? ['shield'] : i === 1 ? ['shield', 'magnet'] : POWER_UPS
   }));
@@ -91,9 +94,11 @@ export function dailyStage(species) {
     nameKey: 'game.daily.title',
     theme: 'park',
     seconds: DAILY_SECONDS,
-    speed: 200,
-    ramp: 120,
-    density: 1.3,
+    speed: 220,
+    ramp: 150,
+    density: 1.6,
+    hearts: 3,
+    combo: 0.25,
     obstacles,
     powerUps: POWER_UPS,
     daily: true

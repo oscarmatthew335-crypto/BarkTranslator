@@ -104,7 +104,21 @@ export function buildLevel(stage, seed) {
       }
     }
 
-    const minGap = jumpDistance(speed) * 1.25 + o.w + 40;
+    // A pair: jump one, then duck the next (or the other way round) soon after. The gap is the jump plus about
+    // a third of a second on the ground to react, so it is always possible.
+    let pair = 0;
+    if (stage.combo && rng() < stage.combo && x > 900) {
+      const other = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane !== o.lane && !OBSTACLES[k].move);
+      if (other.length) {
+        const t2 = pick(rng, other);
+        const o2 = OBSTACLES[t2];
+        const x2 = x + o.w + jumpDistance(speed) * (o.lane === 'low' ? 1 : 0.5) + speed * 0.34;
+        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
+        pair = x2 + o2.w - (x + o.w);
+      }
+    }
+
+    const minGap = jumpDistance(speed) * 1.25 + o.w + 40 + pair;
     const gap = minGap + (rng() * 260) / stage.density;
     const mid = x + o.w + gap / 2;
 
@@ -134,7 +148,7 @@ export function buildLevel(stage, seed) {
 export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = false } = {}) {
   const level = buildLevel(stage, seed);
   const run = {
-    stage: { id: stage.id, speed: stage.speed, ramp: stage.ramp, seconds: stage.seconds, daily: Boolean(stage.daily) },
+    stage: { id: stage.id, speed: stage.speed, ramp: stage.ramp, seconds: stage.seconds, daily: Boolean(stage.daily), hearts: stage.hearts || 3 },
     seed,
     t: 0,
     dist: 0,
@@ -148,6 +162,8 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     treats: 0,
     collected: 0,
     hits: 0,
+    hearts: stage.hearts || 3,
+    failed: false,
     invuln: 0,
     slow: 0,
     power: { speed: 0, magnet: 0, double: 0, shield: false },
@@ -184,7 +200,7 @@ export function step(run, dt, input = {}) {
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, hits, invuln, slow } = run;
+  let { treats, collected, hits, invuln, slow, hearts } = run;
 
   // timers
   for (const k of Object.keys(POWER_DURATION)) power[k] = Math.max(0, power[k] - dt);
@@ -267,6 +283,7 @@ export function step(run, dt, input = {}) {
         events.push('shield');
       } else {
         hits += 1;
+        hearts = Math.max(0, hearts - 1);
         invuln = HIT_INVULN_S;
         slow = HIT_SLOW_S;
         events.push('hit');
@@ -279,8 +296,10 @@ export function step(run, dt, input = {}) {
     changed.forEach((e, i) => (nextEntities[i] = e));
   }
 
-  const done = run.stage.daily ? t >= run.stage.seconds : dist >= run.length;
-  if (done) events.push('finish');
+  // Out of hearts: the stage is lost (treats picked up are kept). The daily run just ends there.
+  const failed = hearts <= 0;
+  const done = failed || (run.stage.daily ? t >= run.stage.seconds : dist >= run.length);
+  if (done) events.push(failed ? 'out' : 'finish');
   return {
     ...run,
     t,
@@ -291,6 +310,8 @@ export function step(run, dt, input = {}) {
     treats,
     collected,
     hits,
+    hearts,
+    failed: failed && !run.stage.daily,
     invuln,
     slow,
     cursor,
@@ -316,12 +337,12 @@ export function visible(run) {
 
 // --- results ----------------------------------------------------------------
 
-// 1 star for reaching the goal, 2 for half the treats with few bumps,
-// 3 for most of the treats and at most one bump.
+// 1 star for reaching the goal, 2 for most of the treats with at most two
+// bumps, 3 for nearly all the treats without a single bump.
 export function starsFor({ collected, totalTreats, hits }) {
   const ratio = totalTreats > 0 ? collected / totalTreats : 1;
-  if (ratio >= 0.8 && hits <= 1) return 3;
-  if (ratio >= 0.5 && hits <= 3) return 2;
+  if (ratio >= 0.85 && hits === 0) return 3;
+  if (ratio >= 0.6 && hits <= 2) return 2;
   return 1;
 }
 
@@ -338,8 +359,9 @@ export function resultOf(run) {
     collected: run.collected,
     totalTreats: run.totalTreats,
     hits: run.hits,
+    failed: Boolean(run.failed),
     seconds: Math.round(run.t),
-    stars: run.stage.daily ? 0 : starsFor(run),
+    stars: run.stage.daily || run.failed ? 0 : starsFor(run),
     score: run.stage.daily ? scoreFor(run) : 0
   };
 }

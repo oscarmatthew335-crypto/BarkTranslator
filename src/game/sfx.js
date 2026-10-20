@@ -75,6 +75,7 @@ export function gameEvent(event) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       break;
     case 'hit':
+    case 'out':
       play('hit');
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
       break;

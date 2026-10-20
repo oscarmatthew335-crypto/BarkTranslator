@@ -133,6 +133,10 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         <View style={s.progressTrack} accessibilityLabel={t('game.progressA11y', { pct: Math.round(progress * 100) })}>
           <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
         </View>
+        <Text style={s.hearts} accessibilityLabel={t('game.heartsA11y', { n: run.hearts })} maxFontSizeMultiplier={1.3}>
+          {'❤️'.repeat(run.hearts)}
+          {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
+        </Text>
         <Text style={s.treats} accessibilityLabel={t('game.treatsA11y', { n: run.treats })}>
           {pet.species === 'cat' ? '🐟' : '🦴'} {run.treats}
         </Text>
@@ -191,7 +195,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         {paused && (
           <View style={s.overlay}>
             <Text style={s.overlayTitle}>{started ? t('game.paused') : t(stage.nameKey)}</Text>
-            {!started && <Text style={s.overlaySub}>{t('game.howTo')}</Text>}
+            {!started && <Text style={s.overlaySub}>{t('game.howTo')} {t('game.howToHearts')}</Text>}
             <View style={s.overlayButtons}>
               <StickerButton label={started ? t('game.resume') : t('game.go')} emoji="▶️" onPress={begin} />
               <StickerButton label={t('game.quit')} color={C.paper} onPress={onQuit} />
@@ -259,6 +263,7 @@ const s = StyleSheet.create({
   hud: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
   hudBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center' },
   hudBtnText: { fontSize: 18 },
+  hearts: { fontSize: 17, letterSpacing: -1 },
   progressTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: C.mint },
   treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 60, textAlign: 'right' },
