@@ -66,20 +66,27 @@ export const rate = (part, whole) => (whole > 0 ? part / whole : null);
 let cache = null;
 let saving = Promise.resolve();
 
-export async function loadCounters() {
-  if (cache) return cache;
-  try {
-    const raw = await AsyncStorage.getItem(KEY);
-    cache = { ...emptyCounters(), ...(raw ? JSON.parse(raw) : {}) };
-  } catch (_) {
-    cache = emptyCounters();
-  }
-  return cache;
+let loading = null;
+export function loadCounters() {
+  if (cache) return Promise.resolve(cache);
+  if (!loading)
+    loading = (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(KEY);
+        cache = { ...emptyCounters(), ...(raw ? JSON.parse(raw) : {}) };
+      } catch (_) {
+        cache = emptyCounters();
+      }
+      return cache;
+    })();
+  return loading;
 }
 
+// Counts made at the same moment must all land: each one applies to the
+// current copy after loading, never to a copy read before another count.
 async function update(fn) {
-  const c = await loadCounters();
-  cache = fn(c);
+  await loadCounters();
+  cache = fn(cache);
   saving = saving.then(() => AsyncStorage.setItem(KEY, JSON.stringify(cache)).catch(() => {}));
   return cache;
 }

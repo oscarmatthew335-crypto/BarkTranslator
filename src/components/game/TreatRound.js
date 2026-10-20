@@ -12,7 +12,7 @@ import { PowerIcon } from './Things';
 
 // The optional treat round: one question at a time, "Not sure" always
 // offered and rewarded the same as any answer, and a way out on every card.
-export default function TreatRound({ pet, species, items, onPlayClip, onAnswer, onFinish }) {
+export default function TreatRound({ pet, species, items, nextName, onPlayClip, onAnswer, onFinish }) {
   const { t } = useI18n();
   const [index, setIndex] = useState(0);
   const [answered, setAnswered] = useState(0);
@@ -34,7 +34,7 @@ export default function TreatRound({ pet, species, items, onPlayClip, onAnswer, 
       <ScrollView style={s.container} contentContainerStyle={s.content}>
         <Sticker radius={24} color={C.butter} innerStyle={s.card}>
           <Text style={s.title}>{earned ? t('game.round.thanks', { petName: pet.name }) : t('game.round.noAnswers')}</Text>
-          {earned > 0 && <Text style={s.sub}>{t('game.round.pick', { n: earned })}</Text>}
+          {earned > 0 && <Text style={s.sub}>{earned === 1 ? t('game.round.pickOne') : t('game.round.pick', { n: earned })}</Text>}
           {earned > 0 && (
             <View style={s.chips}>
               {POWER_UPS.map((p) => {
@@ -62,11 +62,22 @@ export default function TreatRound({ pet, species, items, onPlayClip, onAnswer, 
         </Sticker>
         <View style={{ marginTop: 16 }}>
           <StickerButton
-            label={t('game.round.backToGame')}
+            label={nextName ? t('game.round.playNext', { stage: nextName }) : t('game.round.backToGame')}
             emoji="▶️"
             disabled={earned > 0 && picked.length === 0}
-            onPress={() => onFinish({ answered, powerUps: picked })}
+            onPress={() => onFinish({ answered, powerUps: picked, go: nextName ? 'next' : 'end' })}
           />
+          {nextName ? (
+            <View style={{ marginTop: 10 }}>
+              <StickerButton
+                label={t('game.round.backToResults')}
+                color={C.paper}
+                small
+                disabled={earned > 0 && picked.length === 0}
+                onPress={() => onFinish({ answered, powerUps: picked, go: 'end' })}
+              />
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     );

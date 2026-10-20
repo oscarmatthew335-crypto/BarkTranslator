@@ -199,3 +199,13 @@ test('the Play tab sends nothing by itself: no fetch or analytics anywhere in it
     }
   }
 });
+
+test('counts made at the same moment are all kept (none overwrite another)', async () => {
+  const c = await import('../src/game/counters.js');
+  await c.resetCounters();
+  await Promise.all([c.count('stagesFinished'), c.count('treatRoundsOffered'), c.count('stagesFinished'), c.count('questionsAsked', 3)]);
+  const now = await c.loadCounters();
+  assert.equal(now.stagesFinished, 2);
+  assert.equal(now.treatRoundsOffered, 1);
+  assert.equal(now.questionsAsked, 3);
+});

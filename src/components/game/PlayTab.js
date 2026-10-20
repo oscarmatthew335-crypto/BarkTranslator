@@ -57,10 +57,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   // Power-ups waiting from a treat round or photo challenge go into the
   // next stage played.
   const startStage = useCallback(
-    (stage) => {
+    (stage, extraPowerUps = []) => {
       count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
-      const powerUps = game?.powerUps || [];
-      if (powerUps.length) updateGame((g) => ({ ...g, powerUps: [] }));
+      const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
+      if (game?.powerUps?.length) updateGame((g) => ({ ...g, powerUps: [] }));
       // The daily run is the same course for everyone with this pet type today.
       const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
       setScreen({ name: 'run', stage, seed, powerUps, key: Date.now() });
@@ -129,12 +129,19 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     setScreen((sc) => ({ ...sc, name: 'treat' }));
   }, [screen.roundItems, updateGame]);
 
+  // "Play <next stage>" goes straight into it with the power-ups just earned;
+  // "Back to the results" keeps them waiting for whatever is played next.
   const finishRound = useCallback(
-    ({ powerUps }) => {
+    ({ powerUps, go }) => {
+      const next = screen.stage && !screen.stage.daily ? nextStageAfter(pet.species, screen.stage.id) : null;
+      if (go === 'next' && next) {
+        startStage(next, powerUps);
+        return;
+      }
       if (powerUps.length) updateGame((g) => ({ ...g, powerUps: [...g.powerUps, ...powerUps].slice(-MAX_WAITING_POWER_UPS) }));
       setScreen((sc) => ({ ...sc, name: 'end', roundItems: [] }));
     },
-    [updateGame]
+    [updateGame, startStage, screen.stage, pet.species]
   );
 
   // Save a photo-challenge photo (EXIF stripped first), share it only with
@@ -240,6 +247,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         pet={pet}
         species={species}
         items={screen.roundItems}
+        nextName={screen.stage && !screen.stage.daily && nextStageAfter(pet.species, screen.stage.id) ? t(nextStageAfter(pet.species, screen.stage.id).nameKey) : null}
         onPlayClip={(entry) => playFile(entry.audioUri)}
         onAnswer={answerRound}
         onFinish={finishRound}
