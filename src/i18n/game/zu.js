@@ -120,5 +120,17 @@ export default {
   'game.colour.grey': "Okumpunga",
   'game.colour.ginger': "Okusawolintshi",
   'game.colour.white': "Okumhlophe",
-  'game.colour.spotty': "Okunamabala"
+  'game.colour.spotty': "Okunamabala",
+  'game.round.thanks': "Ngiyabonga! Lokho kusiza i-Pawlingo ifunde ngo-{petName}.",
+  'game.round.noAnswers': "Ayikho imibuzo ephenduliwe kulokhu, futhi kulungile.",
+  'game.round.pick': "Khetha amandla angu-{n} esigaba esilandelayo.",
+  'game.round.backToGame': "Buyela emdlalweni",
+  'game.round.clipQuestion': "Bekwenzekani ngesikhathi u-{petName} enza lo msindo?",
+  'game.round.playClip': "Dlala umsindo",
+  'game.round.counter': "Umbuzo {n} kwemi-{total}",
+  'game.round.notSure': "Angiqinisekile",
+  'game.round.sameReward': "Yonke impendulo ithola okufanayo, nokuthi \"Angiqinisekile\". Phendula kuphela uma wazi.",
+  'game.round.skipRest': "Yeqa okusele",
+  'pets.profileTitle': "Mayelana no-{petName} (kusuka emzuliswaneni wokudla okumnandi, konke kungokuzikhethela)",
+  'pets.profileCheck': "(izimpendulo bezihlukile, sicela uhlole)"
 };

@@ -119,5 +119,17 @@ export default {
   'game.colour.grey': "Grey",
   'game.colour.ginger': "Ginger",
   'game.colour.white': "White",
-  'game.colour.spotty': "Spotty"
+  'game.colour.spotty': "Spotty",
+  'game.round.thanks': "Thanks! That helps Pawlingo learn {petName}.",
+  'game.round.noAnswers': "No questions answered this time, and that's fine.",
+  'game.round.pick': "Pick {n} power-up(s) for the next stage.",
+  'game.round.backToGame': "Back to the game",
+  'game.round.clipQuestion': "What was going on when {petName} made this sound?",
+  'game.round.playClip': "Play the sound",
+  'game.round.counter': "Question {n} of {total}",
+  'game.round.notSure': "Not sure",
+  'game.round.sameReward': "Every answer earns the same, \"Not sure\" too. Only answer if you know.",
+  'game.round.skipRest': "Skip the rest",
+  'pets.profileTitle': "About {petName} (from the treat round, all optional)",
+  'pets.profileCheck': "(answers differed, please check)"
 };

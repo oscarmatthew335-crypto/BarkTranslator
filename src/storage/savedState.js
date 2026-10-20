@@ -1,5 +1,7 @@
 // Everything Pawlingo keeps on the phone, in one saved object:
-//   pets         [{ id, name, species, breedId, personality, contextId, contextSetAt, home: 'indoor'|'garden', createdAt }]
+//   pets         [{ id, name, species, breedId, personality, contextId, contextSetAt, home: 'indoor'|'garden', createdAt,
+//                   answers? }]  answers: Play tab treat-round profile/habit answers,
+//                   { [questionId]: { value, at, lowConfidence?, earlier?, edited? } } (see src/game/treatRound.js)
 //   activePetId  which pet the Translate screen is for
 //   history      the journal (newest first, capped)
 //   shareClips   true / false / null (not asked yet)

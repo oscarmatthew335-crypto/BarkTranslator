@@ -13,10 +13,17 @@ import PetPreview from './PetPreview';
 import StageMap from './StageMap';
 import StageEnd from './StageEnd';
 import { PowerIcon } from './Things';
+import TreatRound from './TreatRound';
+import { pickQuestions, recordAnswer, petChangesFor, rememberAskedClip, usableAnswer } from '../../game/treatRound';
+import { UNSURE } from '../../game/questions';
+import { fileExists } from '../../storage/photos';
+import { playFile } from '../../audio/sounds';
+
+const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species }) {
+export default function PlayTab({ pet, species, history, onTeach, onUpdatePet }) {
   const { t } = useI18n();
   const reduceMotion = useReduceMotion();
   const { ready, game, options, updateGame } = useGame(pet);
@@ -43,7 +50,54 @@ export default function PlayTab({ pet, species }) {
         bank: g.bank + result.treats,
         lifetimeTreats: g.lifetimeTreats + result.treats
       }));
-      setScreen((sc) => ({ name: 'end', result, stage: sc.stage }));
+      // Questions for the optional treat round, worked out once per end card.
+      const roundItems = pickQuestions({
+        pet,
+        history,
+        roundIndex: game?.round.rounds || 0,
+        askedClipIds: game?.round.askedClipIds || [],
+        hasAudio: (e) => fileExists(e.audioUri)
+      });
+      if (roundItems.length) count('treatRoundsOffered');
+      setScreen((sc) => ({ name: 'end', result, stage: sc.stage, roundItems }));
+    },
+    [updateGame, pet, history, game]
+  );
+
+  // A treat-round answer. Recordings go through the same path as the
+  // journal's "teach" sheet (this pet's learning, plus the shared model only
+  // if the owner shares clips). "Not sure" teaches nothing.
+  const answerRound = useCallback(
+    (item, value) => {
+      count('questionsAnswered');
+      if (value === UNSURE) count('notSure');
+      if (item.kind === 'clip') {
+        if (value !== UNSURE) {
+          count('clipsLabelled');
+          onTeach(item.entry, { contextId: value });
+        }
+        updateGame((g) => ({ ...g, round: rememberAskedClip(g.round, item.entry.id) }));
+        return;
+      }
+      const answers = recordAnswer(pet.answers || {}, item, value);
+      const id = item.question.id;
+      const usable = usableAnswer(answers, id);
+      onUpdatePet(pet.id, { answers, ...(usable ? petChangesFor(id, usable) : {}) });
+    },
+    [onTeach, onUpdatePet, pet, updateGame]
+  );
+
+  const startRound = useCallback(() => {
+    count('treatRoundsStarted');
+    count('questionsAsked', screen.roundItems.length);
+    updateGame((g) => ({ ...g, round: { ...g.round, rounds: g.round.rounds + 1 } }));
+    setScreen((sc) => ({ ...sc, name: 'treat' }));
+  }, [screen.roundItems, updateGame]);
+
+  const finishRound = useCallback(
+    ({ powerUps }) => {
+      if (powerUps.length) updateGame((g) => ({ ...g, powerUps: [...g.powerUps, ...powerUps].slice(-MAX_WAITING_POWER_UPS) }));
+      setScreen((sc) => ({ ...sc, name: 'end', roundItems: [] }));
     },
     [updateGame]
   );
@@ -67,6 +121,18 @@ export default function PlayTab({ pet, species }) {
       />
     );
 
+  if (screen.name === 'treat')
+    return (
+      <TreatRound
+        pet={pet}
+        species={species}
+        items={screen.roundItems}
+        onPlayClip={(entry) => playFile(entry.audioUri)}
+        onAnswer={answerRound}
+        onFinish={finishRound}
+      />
+    );
+
   if (screen.name === 'end') {
     const next = screen.stage.daily ? null : nextStageAfter(pet.species, screen.stage.id);
     return (
@@ -77,7 +143,8 @@ export default function PlayTab({ pet, species }) {
         result={screen.result}
         stage={screen.stage}
         next={next}
-        treatRoundCount={0}
+        treatRoundCount={screen.roundItems?.length || 0}
+        onTreatRound={startRound}
         onNext={() => startStage(next)}
         onReplay={() => startStage(screen.stage)}
         onMap={() => setScreen({ name: 'hub' })}

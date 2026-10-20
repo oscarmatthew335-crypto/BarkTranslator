@@ -163,7 +163,9 @@ function PetApp() {
             onGoScan={() => setActiveTab('scanner')}
           />
         )}
-        {activeTab === 'play' && <PlayTab pet={pet} species={species} />}
+        {activeTab === 'play' && (
+          <PlayTab pet={pet} species={species} history={data.history} onTeach={t.teach} onUpdatePet={data.updatePet} />
+        )}
       </View>
 
       <TabBar active={activeTab} onChange={setActiveTab} disabled={listening} species={species} journalCount={data.history.length} />

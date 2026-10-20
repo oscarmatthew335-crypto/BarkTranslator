@@ -120,5 +120,17 @@ export default {
   'game.colour.grey': "Grys",
   'game.colour.ginger': "Rooibruin",
   'game.colour.white': "Wit",
-  'game.colour.spotty': "Gekol"
+  'game.colour.spotty': "Gekol",
+  'game.round.thanks': "Dankie! Dit help Pawlingo om {petName} te leer ken.",
+  'game.round.noAnswers': "Geen vrae hierdie keer beantwoord nie, en dis reg so.",
+  'game.round.pick': "Kies {n} krag(te) vir die volgende vlak.",
+  'game.round.backToGame': "Terug na die speletjie",
+  'game.round.clipQuestion': "Wat het aangegaan toe {petName} hierdie geluid gemaak het?",
+  'game.round.playClip': "Speel die geluid",
+  'game.round.counter': "Vraag {n} van {total}",
+  'game.round.notSure': "Nie seker nie",
+  'game.round.sameReward': "Elke antwoord verdien dieselfde, \"Nie seker nie\" ook. Antwoord net as jy weet.",
+  'game.round.skipRest': "Slaan die res oor",
+  'pets.profileTitle': "Oor {petName} (uit die lekkerny-rondte, alles opsioneel)",
+  'pets.profileCheck': "(antwoorde het verskil, kyk asseblief)"
 };
