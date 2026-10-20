@@ -1,38 +1,51 @@
 import React, { useCallback, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import Svg from 'react-native-svg';
 import { C, F } from '../../theme';
 import { useI18n } from '../../i18n';
-import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
+import { Sticker, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
-import { stagesFor } from '../../game/stages';
-import { recordStage } from '../../game/progress';
+import { recordStage, nextStageAfter, totalStars } from '../../game/progress';
 import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
 import PetPreview from './PetPreview';
+import StageMap from './StageMap';
+import StageEnd from './StageEnd';
+import { PowerIcon } from './Things';
 
-// The Play tab: a little runner starring the active pet.
+// The Play tab: a little runner starring the active pet. Screens:
+// hub (map and extras) -> run -> end card -> next stage / map.
 export default function PlayTab({ pet, species }) {
   const { t } = useI18n();
   const reduceMotion = useReduceMotion();
   const { ready, game, options, updateGame } = useGame(pet);
   const [screen, setScreen] = useState({ name: 'hub' });
 
+  // Power-ups waiting from a treat round or photo challenge go into the
+  // next stage played.
   const startStage = useCallback(
     (stage) => {
       count('stagesPlayed');
-      setScreen({ name: 'run', stage, seed: hashString(`${stage.id}:${Date.now()}`), key: Date.now() });
+      const powerUps = game?.powerUps || [];
+      if (powerUps.length) updateGame((g) => ({ ...g, powerUps: [] }));
+      setScreen({ name: 'run', stage, seed: hashString(`${stage.id}:${Date.now()}`), powerUps, key: Date.now() });
     },
-    []
+    [game, updateGame]
   );
 
   const finish = useCallback(
     (result) => {
       count('stagesFinished');
-      updateGame((g) => ({ ...g, progress: recordStage(g.progress, result), bank: g.bank + result.treats, lifetimeTreats: g.lifetimeTreats + result.treats }));
-      setScreen({ name: 'end', result, stage: screen.stage });
+      updateGame((g) => ({
+        ...g,
+        progress: recordStage(g.progress, result),
+        bank: g.bank + result.treats,
+        lifetimeTreats: g.lifetimeTreats + result.treats
+      }));
+      setScreen((sc) => ({ name: 'end', result, stage: sc.stage }));
     },
-    [screen.stage, updateGame]
+    [updateGame]
   );
 
   if (!ready || !game) return <View style={s.container} />;
@@ -45,6 +58,7 @@ export default function PlayTab({ pet, species }) {
         pet={pet}
         wardrobe={game.wardrobe}
         seed={screen.seed}
+        startPowerUps={screen.powerUps}
         reduceMotion={reduceMotion}
         soundOn={options.sound}
         onFinish={finish}
@@ -53,26 +67,50 @@ export default function PlayTab({ pet, species }) {
       />
     );
 
-  const first = stagesFor(pet.species)[0];
+  if (screen.name === 'end') {
+    const next = screen.stage.daily ? null : nextStageAfter(pet.species, screen.stage.id);
+    return (
+      <StageEnd
+        pet={pet}
+        species={species}
+        wardrobe={game.wardrobe}
+        result={screen.result}
+        stage={screen.stage}
+        next={next}
+        treatRoundCount={0}
+        onNext={() => startStage(next)}
+        onReplay={() => startStage(screen.stage)}
+        onMap={() => setScreen({ name: 'hub' })}
+      />
+    );
+  }
 
+  const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
       <Sticker radius={24} innerStyle={s.hero}>
-        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={110} />
-        <Text style={s.bank}>
-          {species.id === 'cat' ? '🐟' : '🦴'} {game.bank}
-        </Text>
+        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} />
+        <View style={{ flex: 1, gap: 4 }}>
+          <Text style={s.heroLine} accessibilityLabel={t('game.treatsA11y', { n: game.bank })}>
+            {treatEmoji} {game.bank}
+          </Text>
+          <Text style={s.heroLine}>⭐ {totalStars(game.progress)}</Text>
+          {game.powerUps.length > 0 && (
+            <View style={s.ready}>
+              <Text style={s.readyText}>{t('game.readyPowerUps')}</Text>
+              {game.powerUps.map((p, i) => (
+                <Svg key={`${p}${i}`} width={22} height={22} viewBox="0 0 28 28" accessibilityLabel={t(`game.power.${p}`)}>
+                  <PowerIcon type={p} />
+                </Svg>
+              ))}
+            </View>
+          )}
+        </View>
       </Sticker>
-      {screen.name === 'end' && (
-        <Sticker radius={22} color={C.butter} style={{ marginTop: 14 }} innerStyle={s.card}>
-          <Text style={s.cardTitle}>{t('game.end.goal')}</Text>
-          <Text style={s.cardSub}>{t('game.end.treats', { n: screen.result.treats })}</Text>
-        </Sticker>
-      )}
-      <View style={{ marginTop: 16 }}>
-        <StickerButton label={t('game.playStage', { stage: t(first.nameKey) })} emoji="▶️" onPress={() => startStage(first)} />
-      </View>
+
+      <Text style={s.section}>{t('game.map.title')}</Text>
+      <StageMap species={pet.species} progress={game.progress} onPlay={startStage} />
     </ScrollView>
   );
 }
@@ -80,9 +118,9 @@ export default function PlayTab({ pet, species }) {
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
   content: { padding: 18, paddingBottom: 36 },
-  hero: { padding: 16, alignItems: 'center' },
-  bank: { fontFamily: F.bold, fontSize: 20, color: C.ink, marginTop: 6 },
-  card: { padding: 16 },
-  cardTitle: { fontFamily: F.bold, fontSize: 20, color: C.ink },
-  cardSub: { fontFamily: F.regular, fontSize: 15, color: C.ink, marginTop: 4, lineHeight: 21 }
+  hero: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  heroLine: { fontFamily: F.bold, fontSize: 20, color: C.ink },
+  ready: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
+  readyText: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft },
+  section: { fontFamily: F.bold, fontSize: 20, color: C.ink, marginTop: 18, marginBottom: 10 }
 });
