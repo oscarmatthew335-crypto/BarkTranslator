@@ -10,7 +10,8 @@ export default function TabBar({ active, onChange, disabled, species, journalCou
     { id: 'scanner', icon: '🎙️', label: t('tab.translate') },
     { id: 'speak', icon: species.emoji, label: species.speakTab },
     { id: 'decoder', icon: '🧠', label: t('tab.decoder') },
-    { id: 'journal', icon: '📒', label: journalCount ? t('tab.journalCount', { count: journalCount }) : t('tab.journal') }
+    { id: 'journal', icon: '📒', label: journalCount ? t('tab.journalCount', { count: journalCount }) : t('tab.journal') },
+    { id: 'play', icon: '🎮', label: t('tab.play') }
   ];
   return (
     <View style={s.bar}>
@@ -52,7 +53,7 @@ const s = StyleSheet.create({
     paddingBottom: 6
   },
   item: { flex: 1, alignItems: 'center' },
-  pill: { paddingHorizontal: 16, paddingVertical: 3, borderRadius: 999, borderWidth: 2, borderColor: 'transparent' },
+  pill: { paddingHorizontal: 12, paddingVertical: 3, borderRadius: 999, borderWidth: 2, borderColor: 'transparent' },
   pillOn: { backgroundColor: C.butter, borderColor: C.ink },
   icon: { fontSize: 20 },
   label: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, marginTop: 3 },

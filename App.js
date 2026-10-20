@@ -24,6 +24,7 @@ import ClipPickerSheet from './src/components/ClipPickerSheet';
 import ShareCard from './src/components/ShareCard';
 import ShareSheet from './src/components/ShareSheet';
 import TabBar from './src/components/TabBar';
+import PlayTab from './src/components/game/PlayTab';
 import { getSpecies } from './src/species';
 import useIncomingShareClip from './src/share/incomingShare';
 import { I18nProvider, translate } from './src/i18n';
@@ -162,6 +163,7 @@ function PetApp() {
             onGoScan={() => setActiveTab('scanner')}
           />
         )}
+        {activeTab === 'play' && <PlayTab pet={pet} species={species} />}
       </View>
 
       <TabBar active={activeTab} onChange={setActiveTab} disabled={listening} species={species} journalCount={data.history.length} />
