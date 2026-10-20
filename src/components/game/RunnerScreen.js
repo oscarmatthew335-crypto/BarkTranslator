@@ -23,7 +23,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   const [paused, setPaused] = useState(true);
   const [started, setStarted] = useState(false);
   const [, setTick] = useState(0);
-  const [width, setWidth] = useState(0);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const finishRef = useRef(onFinish);
   finishRef.current = onFinish;
   const fpsRef = useRef(onFps);
@@ -83,6 +83,8 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   }, []);
 
   const begin = () => {
+    // Forget presses made while the overlay was up, so the pet doesn't jump on start.
+    input.current = { jump: false, duck: false, swipeDuck: false };
     setStarted(true);
     setPause(false);
   };
@@ -115,7 +117,9 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   const petTop = GROUND - run.player.height - 44;
   const goalX = run.stage.daily ? null : run.length - run.dist + PLAYER_X + 40;
   const progress = run.stage.daily ? Math.min(1, run.t / run.stage.seconds) : Math.min(1, run.dist / run.length);
-  const height = width ? (width * VIEW_H) / VIEW_W : 0;
+  // The world is VIEW_W wide; a taller screen just shows more sky above it.
+  const { width, height } = size;
+  const viewH = width ? Math.max(VIEW_H, (VIEW_W * height) / width) : VIEW_H;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
 
@@ -135,13 +139,13 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
 
       <View
         style={s.stage}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
         {...pan.panHandlers}
         accessible
         accessibilityLabel={t('game.playAreaA11y')}
       >
         {width > 0 && (
-          <Svg width={width} height={height} viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}>
+          <Svg width={width} height={height} viewBox={`0 ${VIEW_H - viewH} ${VIEW_W} ${viewH}`} preserveAspectRatio="xMidYMax meet">
             <Defs>
               <ClipPath id="face">
                 <Circle cx={0} cy={0} r={9} />
@@ -257,13 +261,14 @@ const s = StyleSheet.create({
   progressTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: C.mint },
   treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 60, textAlign: 'right' },
-  stage: { borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper, minHeight: 120 },
+  // A little sky above the 400 x 220 world, so jumps have room on screen.
+  stage: { aspectRatio: VIEW_W / 330, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(238,231,255,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   overlayTitle: { fontFamily: F.bold, fontSize: 26, color: C.ink, textAlign: 'center' },
   overlaySub: { fontFamily: F.regular, fontSize: 15, color: C.inkSoft, textAlign: 'center', marginTop: 6, lineHeight: 20 },
   overlayButtons: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' },
-  controls: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, alignItems: 'stretch', minHeight: 110 },
-  ctrl: { flex: 1, borderRadius: 24, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
+  controls: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, alignItems: 'flex-end', minHeight: 110 },
+  ctrl: { flex: 1, height: '100%', maxHeight: 170, minHeight: 80, borderRadius: 24, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
   ctrlText: { fontFamily: F.bold, fontSize: 20, color: C.ink, textAlign: 'center' }
 });

@@ -78,8 +78,11 @@ export const Backdrop = memo(function Backdrop({ theme }) {
   const th = THEMES[theme] || THEMES.garden;
   return (
     <G>
-      <Rect x={0} y={0} width={VIEW_W} height={VIEW_H} fill={th.sky} />
-      <Circle cx={VIEW_W - 50} cy={36} r={18} fill={C.butter} stroke={INK} strokeWidth={2} />
+      {/* sky reaches far up: tall screens show more of it */}
+      <Rect x={0} y={-1200} width={VIEW_W} height={VIEW_H + 1200} fill={th.sky} />
+      <Ellipse cx={80} cy={-30} rx={34} ry={12} fill={C.paper} opacity={0.8} />
+      <Ellipse cx={230} cy={-80} rx={44} ry={14} fill={C.paper} opacity={0.8} />
+      <Circle cx={VIEW_W - 50} cy={-70} r={18} fill={C.butter} stroke={INK} strokeWidth={2} />
       <Ellipse cx={90} cy={GROUND + 6} rx={140} ry={60} fill={th.far} />
       <Ellipse cx={320} cy={GROUND + 10} rx={160} ry={50} fill={th.far} />
     </G>
