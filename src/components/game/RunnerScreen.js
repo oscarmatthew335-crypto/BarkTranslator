@@ -142,7 +142,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         style={[s.stage, { maxHeight: Math.round(winWidth * 0.95) }]}
         onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
         {...pan.panHandlers}
-        accessible
+        accessible={!paused}
         accessibilityLabel={t('game.playAreaA11y')}
       >
         {width > 0 && (
@@ -265,7 +265,7 @@ const s = StyleSheet.create({
   // A little sky above the 400 x 220 world, so jumps have room on screen.
   stage: { flex: 1, minHeight: 260, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(238,231,255,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10, backgroundColor: 'rgba(238,231,255,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   overlayTitle: { fontFamily: F.bold, fontSize: 26, color: C.ink, textAlign: 'center' },
   overlaySub: { fontFamily: F.regular, fontSize: 15, color: C.inkSoft, textAlign: 'center', marginTop: 6, lineHeight: 20 },
   overlayButtons: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' },
