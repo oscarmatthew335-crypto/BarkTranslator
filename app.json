@@ -58,9 +58,10 @@
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
-        "android.permission.VIBRATE"
+        "android.permission.VIBRATE",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 3,
+      "versionCode": 4,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -113,7 +114,9 @@
           ],
           "iosShareExtensionName": "Pawlingo Share"
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-sharing"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
@@ -121,6 +124,7 @@
     "extra": {
       "appStoreUrl": null,
       "eas": {
+        "projectId": "ab595123-dc45-41ff-9d51-ab8666de6142",
         "build": {
           "experimental": {
             "ios": {
