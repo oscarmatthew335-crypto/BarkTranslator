@@ -57,6 +57,31 @@ jobs:
           echo "systemProp.org.gradle.internal.repository.max.retries=5" >> gradle.properties
           cat "$f"
 
+      - name: Look in Google's copy of Maven Central first
+        # On 8 Nov 2026 Maven Central sent kotlin-compiler-embeddable to a GitHub
+        # link that kept returning 504. Google's mirror serves the same files.
+        # An init script reaches every build, including the Expo and React Native
+        # Gradle plugin builds.
+        run: |
+          d="${GRADLE_USER_HOME:-$HOME/.gradle}/init.d"
+          mkdir -p "$d"
+          cat > "$d/maven-central-mirror.gradle" <<'GRADLE'
+          allprojects {
+            repositories {
+              maven {
+                name = 'GoogleMavenCentralMirror'
+                url = 'https://maven-central.storage-download.googleapis.com/maven2/'
+                content {
+                  excludeGroupByRegex 'androidx\\..*'
+                  excludeGroupByRegex 'com\\.android(\\..*)?'
+                  excludeGroupByRegex 'com\\.google\\.android\\..*'
+                }
+              }
+            }
+          }
+          GRADLE
+          cat "$d/maven-central-mirror.gradle"
+
       - name: Build Standalone APK
         working-directory: ./android
         # Downloads (Gradle, Kotlin compiler) sometimes time out with a 504.
