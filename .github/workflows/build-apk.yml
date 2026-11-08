@@ -43,16 +43,55 @@ jobs:
       - name: Generate native Android folder
         run: npx expo prebuild --platform android --clean
 
+      - name: Download Gradle from GitHub, with longer timeouts
+        working-directory: ./android
+        # services.gradle.org kept timing out (504 / 10 s timeout) on 8 Nov 2026,
+        # while the same file on GitHub's release page downloaded fine.
+        run: |
+          f=gradle/wrapper/gradle-wrapper.properties
+          sed -i -E 's#^distributionUrl=.*services\.gradle\.org/distributions/gradle-([0-9.]+)-(bin|all)\.zip#distributionUrl=https\\://github.com/gradle/gradle-distributions/releases/download/v\1/gradle-\1-\2.zip#' "$f"
+          sed -i -E 's#^networkTimeout=.*#networkTimeout=120000#' "$f"
+          grep -q '^networkTimeout=' "$f" || echo 'networkTimeout=120000' >> "$f"
+          echo "systemProp.org.gradle.internal.http.connectionTimeout=120000" >> gradle.properties
+          echo "systemProp.org.gradle.internal.http.socketTimeout=120000" >> gradle.properties
+          echo "systemProp.org.gradle.internal.repository.max.retries=5" >> gradle.properties
+          cat "$f"
+
+      - name: Look in Google's copy of Maven Central first
+        # On 8 Nov 2026 Maven Central sent kotlin-compiler-embeddable to a GitHub
+        # link that kept returning 504. Google's mirror serves the same files.
+        # An init script reaches every build, including the Expo and React Native
+        # Gradle plugin builds.
+        run: |
+          d="${GRADLE_USER_HOME:-$HOME/.gradle}/init.d"
+          mkdir -p "$d"
+          cat > "$d/maven-central-mirror.gradle" <<'GRADLE'
+          allprojects {
+            repositories {
+              maven {
+                name = 'GoogleMavenCentralMirror'
+                url = 'https://maven-central.storage-download.googleapis.com/maven2/'
+                content {
+                  excludeGroupByRegex 'androidx\\..*'
+                  excludeGroupByRegex 'com\\.android(\\..*)?'
+                  excludeGroupByRegex 'com\\.google\\.android\\..*'
+                }
+              }
+            }
+          }
+          GRADLE
+          cat "$d/maven-central-mirror.gradle"
+
       - name: Build Standalone APK
         working-directory: ./android
         # Downloads (Gradle, Kotlin compiler) sometimes time out with a 504.
-        # Retry up to 3 times; finished downloads are kept between tries.
+        # Retry up to 4 times; finished downloads are kept between tries.
         run: |
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4; do
             if ./gradlew assembleRelease -x lint -x test; then exit 0; fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "::warning::Build attempt $attempt failed; retrying in 60 s"
-              sleep 60
+            if [ "$attempt" -lt 4 ]; then
+              echo "::warning::Build attempt $attempt failed; retrying in 120 s"
+              sleep 120
             fi
           done
           exit 1
