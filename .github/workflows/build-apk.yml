@@ -45,7 +45,17 @@ jobs:
 
       - name: Build Standalone APK
         working-directory: ./android
-        run: ./gradlew assembleRelease -x lint -x test
+        # Downloads (Gradle, Kotlin compiler) sometimes time out with a 504.
+        # Retry up to 3 times; finished downloads are kept between tries.
+        run: |
+          for attempt in 1 2 3; do
+            if ./gradlew assembleRelease -x lint -x test; then exit 0; fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "::warning::Build attempt $attempt failed; retrying in 60 s"
+              sleep 60
+            fi
+          done
+          exit 1
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
