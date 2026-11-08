@@ -16,10 +16,10 @@ export function Stars({ n, size = 16 }) {
   );
 }
 
-// Stage select: Endless and Chase at the top, followed by the winding path of stages.
-export default function StageMap({ species, progress, bestScores = {}, onPlay, onLocked }) {
+// The two score modes, shown at the top of the Play tab so they are the first
+// thing a player sees.
+export function ModeCards({ species, bestScores = {}, onPlay }) {
   const { t } = useI18n();
-  const list = stagesFor(species);
   const endless = endlessStage(species);
   const chase = chaseStage(species);
   const chaser = chaserFor(species);
@@ -61,6 +61,17 @@ export default function StageMap({ species, progress, bestScores = {}, onPlay, o
         </View>
       </Pressable>
 
+    </View>
+  );
+}
+
+// A winding path of stages. Open stages can be played (and replayed) any
+// time; a locked one opens when the stage before it is finished.
+export default function StageMap({ species, progress, onPlay, onLocked }) {
+  const { t } = useI18n();
+  const list = stagesFor(species);
+  return (
+    <View style={s.map}>
       {list.map((stage, i) => {
         const open = isUnlocked(progress, species, stage.id);
         const stars = progress.stars[stage.id] || 0;
