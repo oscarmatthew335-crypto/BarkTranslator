@@ -7,6 +7,8 @@
 // fits exactly where its English line does.
 
 import { localizeLine } from './data/i18n/index';
+import { PERSONALITY_PACKS as DOG_PACKS } from './data/personalityPacks';
+import { CAT_PERSONALITY_PACKS } from './data/cat/personalityPacks';
 
 export const CHAT_CONTEXT = 'chat';
 export const CONTEXT_MINUTES = 20; // a picked situation wears off after this
@@ -63,4 +65,44 @@ export function pickLocalizedLine({ species, pack, lang = 'en', pool, recent = [
   const recentKeys = [...(pool.short || []), ...(pool.long || [])].filter((l) => said.has(l) || said.has(tr(l)));
   const key = pickLine({ ...opts, pool, recent: recentKeys });
   return { key, text: tr(key) };
+}
+
+// Short celebratory pet line when beating a best score in the runner.
+export function pickRewardLine(pet = {}, { lang = 'en', random = Math.random, now = new Date() } = {}) {
+  const species = pet?.species === 'cat' ? 'cat' : 'dog';
+  const packs = species === 'cat' ? CAT_PERSONALITY_PACKS : DOG_PACKS;
+  const pack = packs[pet?.personality] ? pet.personality : 'boet';
+  const lines = packs[pack].lines;
+  const pool = lines.zoomies || lines.play || Object.values(lines)[0];
+  return pickLocalizedLine({
+    species,
+    pack,
+    lang,
+    pool,
+    size: 'short',
+    home: pet?.home || (species === 'cat' ? 'indoor' : 'garden'),
+    contextId: 'zoomies',
+    now,
+    random
+  });
+}
+
+// Short funny protest line when caught in Chase mode (bath time for dogs, dog for cats).
+export function pickCaughtLine(pet = {}, { lang = 'en', random = Math.random, now = new Date() } = {}) {
+  const species = pet?.species === 'cat' ? 'cat' : 'dog';
+  const packs = species === 'cat' ? CAT_PERSONALITY_PACKS : DOG_PACKS;
+  const pack = packs[pet?.personality] ? pet.personality : 'boet';
+  const lines = packs[pack].lines;
+  const pool = lines.vet || Object.values(lines)[0];
+  return pickLocalizedLine({
+    species,
+    pack,
+    lang,
+    pool,
+    size: 'short',
+    home: pet?.home || (species === 'cat' ? 'indoor' : 'garden'),
+    contextId: 'vet',
+    now,
+    random
+  });
 }

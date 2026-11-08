@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadGame, saveGame, petGame, emptyGameState } from './gameStore';
+import { loadGame, saveGame, petGame, emptyGameState, emptyBestScores } from './gameStore';
 
 // The Play tab's saved data for the active pet, with an updater that saves.
 export default function useGame(pet) {
@@ -28,7 +28,17 @@ export default function useGame(pet) {
     (fn) =>
       setState((s) => {
         const base = s || emptyGameState();
-        return { ...base, pets: { ...base.pets, [pet.id]: fn(petGame(base, pet)) } };
+        const nextPet = fn(petGame(base, pet));
+        const sp = pet.species === 'cat' ? 'cat' : 'dog';
+        const spBests = {
+          endless: Math.max(base.bestScores?.[sp]?.endless || 0, nextPet.bestScores?.endless || 0),
+          chase: Math.max(base.bestScores?.[sp]?.chase || 0, nextPet.bestScores?.chase || 0)
+        };
+        return {
+          ...base,
+          bestScores: { ...(base.bestScores || emptyBestScores()), [sp]: spBests },
+          pets: { ...base.pets, [pet.id]: { ...nextPet, bestScores: spBests } }
+        };
       }),
     [pet]
   );

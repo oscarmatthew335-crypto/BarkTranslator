@@ -28,6 +28,7 @@ import { dayKey, dailySeed, updateStreak, streakShown, saverAvailable, challenge
 import { dailyStage } from '../../game/stages';
 import { buy, toggleWear, setColour } from '../../game/wardrobe';
 import { setGameSound } from '../../game/sfx';
+import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
 
 const MAX_WAITING_POWER_UPS = 4;
@@ -35,7 +36,7 @@ const MAX_WAITING_POWER_UPS = 4;
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
 export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const { ready, game, options, updateGame, setOptions } = useGame(pet);
   const [screen, setScreen] = useState({ name: 'hub' });
@@ -71,18 +72,34 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
   const finish = useCallback(
     (result) => {
-      if (!result.daily && !result.failed) count('stagesFinished');
+      const isMode = Boolean(result.daily || result.endless || result.chase);
+      if (!isMode && !result.failed) count('stagesFinished');
       if (result.failed) count('stagesLost');
       const day = dayKey();
+      const prevBest = result.endless
+        ? game.bestScores?.endless || 0
+        : result.chase
+        ? game.bestScores?.chase || 0
+        : result.daily && game.daily.day === day
+        ? game.daily.best || 0
+        : 0;
+      const newBest = isMode && result.score > prevBest && result.score > 0;
+      const bestScore = isMode ? Math.max(prevBest, result.score || 0) : 0;
+      const rewardLine = newBest ? pickRewardLine(pet, { lang }).text : null;
+      const caughtLine = result.chase ? pickCaughtLine(pet, { lang }).text : null;
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
       const { challenge, justDone } = advanceChallenge(current, result);
       updateGame((g) => ({
         ...g,
-        progress: result.daily || result.failed ? g.progress : recordStage(g.progress, result),
+        progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
         bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0),
         lifetimeTreats: g.lifetimeTreats + result.treats,
         streak: updateStreak(g.streak, day).streak,
         challenge,
+        bestScores: {
+          endless: Math.max(g.bestScores?.endless || 0, result.endless ? result.score : 0),
+          chase: Math.max(g.bestScores?.chase || 0, result.chase ? result.score : 0)
+        },
         daily: result.daily
           ? { day, best: g.daily.day === day ? Math.max(g.daily.best, result.score) : result.score, plays: (g.daily.day === day ? g.daily.plays : 0) + 1 }
           : g.daily
@@ -96,9 +113,19 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         hasAudio: (e) => fileExists(e.audioUri)
       });
       if (roundItems.length) count('treatRoundsOffered');
-      setScreen((sc) => ({ name: 'end', result, stage: sc.stage, roundItems, challengeDone: justDone }));
+      setScreen((sc) => ({
+        name: 'end',
+        result,
+        stage: sc.stage,
+        bestScore,
+        newBest,
+        rewardLine,
+        caughtLine,
+        roundItems,
+        challengeDone: justDone
+      }));
     },
-    [updateGame, pet, history, game]
+    [updateGame, pet, history, game, lang]
   );
 
   // A treat-round answer. Recordings go through the same path as the
@@ -235,6 +262,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         faceUri={faceUri}
         seed={screen.seed}
         startPowerUps={screen.powerUps}
+        bestScore={
+          screen.stage.endless
+            ? game.bestScores?.endless || 0
+            : screen.stage.chase
+            ? game.bestScores?.chase || 0
+            : game.daily.day === today
+            ? game.daily.best || 0
+            : 0
+        }
         reduceMotion={reduceMotion}
         soundOn={options.sound}
         onFinish={finish}
@@ -249,7 +285,11 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         pet={pet}
         species={species}
         items={screen.roundItems}
-        nextName={screen.stage && !screen.stage.daily && nextStageAfter(pet.species, screen.stage.id) ? t(nextStageAfter(pet.species, screen.stage.id).nameKey) : null}
+        nextName={
+          screen.stage && !screen.stage.daily && !screen.stage.endless && !screen.stage.chase && nextStageAfter(pet.species, screen.stage.id)
+            ? t(nextStageAfter(pet.species, screen.stage.id).nameKey)
+            : null
+        }
         onPlayClip={(entry) => playFile(entry.audioUri)}
         onAnswer={answerRound}
         onFinish={finishRound}
@@ -258,7 +298,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
   if (screen.name === 'end') {
     // After a daily run the next thing is the stage to continue with (the daily run is a bonus, not a stage).
-    const after = screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
+    const isEndlessOrChase = Boolean(screen.stage.endless || screen.stage.chase);
+    const after = isEndlessOrChase ? null : screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
     const next = after && isUnlocked(game.progress, pet.species, after.id) ? after : null;
     return (
       <StageEnd
@@ -269,6 +310,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         result={screen.result}
         stage={screen.stage}
         next={next}
+        bestScore={screen.bestScore}
+        newBest={screen.newBest}
+        rewardLine={screen.rewardLine}
+        caughtLine={screen.caughtLine}
         challengeDone={screen.challengeDone}
         treatRoundCount={screen.roundItems?.length || 0}
         onTreatRound={startRound}
@@ -372,6 +417,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       <StageMap
         species={pet.species}
         progress={game.progress}
+        bestScores={game.bestScores}
         onPlay={startStage}
         onLocked={(stage, before) => showNotice(t('game.map.lockedNotice', { stage: t(stage.nameKey), before: t(before.nameKey) }))}
       />

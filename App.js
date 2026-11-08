@@ -48,7 +48,7 @@ function PetApp() {
   const [cameraWanted, setCameraWanted] = useState(true);
   const [facing, setFacing] = useState('back');
   const [torch, setTorch] = useState(false);
-  const [activeTab, setActiveTab] = useState('scanner');
+  const [activeTab, setActiveTab] = useState('play');
   const [petsOpen, setPetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const cameraRef = useRef(null);

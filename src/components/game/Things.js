@@ -140,4 +140,38 @@ function PowerBox({ type }) {
   return <PowerIcon type={type} />;
 }
 
+// The chaser drawn behind the pet on the left of the screen in Chase mode.
+export function Chaser({ chaser }) {
+  const id = chaser?.id || 'bath';
+  if (id === 'dog') {
+    // Chasing dog facing right toward the cat.
+    return (
+      <G>
+        <Path d="M4 20 L-4 10" stroke={INK} strokeWidth={4} strokeLinecap="round" />
+        <Ellipse cx={22} cy={24} rx={18} ry={10} fill="#C98B4B" stroke={INK} strokeWidth={SW} />
+        <Circle cx={38} cy={16} r={10} fill="#C98B4B" stroke={INK} strokeWidth={SW} />
+        <Ellipse cx={45} cy={19} rx={4} ry={3.5} fill="#C98B4B" stroke={INK} strokeWidth={1.8} />
+        <Circle cx={47} cy={18} r={1.8} fill={INK} />
+        <Circle cx={39} cy={13} r={1.6} fill={INK} />
+        <Path d="M34 8 C 28 8, 28 18, 31 20" fill={INK} />
+        <Line x1={12} y1={32} x2={10} y2={38} stroke={INK} strokeWidth={4} strokeLinecap="round" />
+        <Line x1={32} y1={32} x2={34} y2={38} stroke={INK} strokeWidth={4} strokeLinecap="round" />
+      </G>
+    );
+  }
+  // Rolling bathtub with soap bubbles (bath time).
+  return (
+    <G>
+      <Circle cx={10} cy={4} r={5} fill="#BDEBFF" stroke={C.sky} strokeWidth={1.6} />
+      <Circle cx={22} cy={0} r={6} fill="#BDEBFF" stroke={C.sky} strokeWidth={1.6} />
+      <Circle cx={33} cy={5} r={4.5} fill="#BDEBFF" stroke={C.sky} strokeWidth={1.6} />
+      <Circle cx={6} cy={-5} r={3.5} fill="#E3F6FF" stroke={C.sky} strokeWidth={1.4} />
+      <Path d="M2 12 L44 12 Q 42 32 23 32 Q 4 32 2 12 Z" fill={C.paper} stroke={INK} strokeWidth={SW} />
+      <Rect x={0} y={9} width={46} height={5} rx={2.5} fill={C.sky} stroke={INK} strokeWidth={1.8} />
+      <Circle cx={11} cy={35} r={4.5} fill={C.butter} stroke={INK} strokeWidth={2} />
+      <Circle cx={35} cy={35} r={4.5} fill={C.butter} stroke={INK} strokeWidth={2} />
+    </G>
+  );
+}
+
 export default memo(Thing);

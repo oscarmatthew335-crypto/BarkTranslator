@@ -3,7 +3,7 @@
     "name": "Pawlingo",
     "slug": "pawlingo",
     "scheme": "pawlingo",
-    "version": "2.4.0",
+    "version": "2.5.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -61,7 +61,7 @@
         "android.permission.VIBRATE",
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
-      "versionCode": 4,
+      "versionCode": 5,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"

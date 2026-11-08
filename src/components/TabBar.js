@@ -7,11 +7,11 @@ import { useI18n } from '../i18n';
 export default function TabBar({ active, onChange, disabled, species, journalCount }) {
   const { t } = useI18n();
   const tabs = [
+    { id: 'play', icon: '🎮', label: t('tab.play') },
     { id: 'scanner', icon: '🎙️', label: t('tab.translate') },
     { id: 'speak', icon: species.emoji, label: species.speakTab },
     { id: 'decoder', icon: '🧠', label: t('tab.decoder') },
-    { id: 'journal', icon: '📒', label: journalCount ? t('tab.journalCount', { count: journalCount }) : t('tab.journal') },
-    { id: 'play', icon: '🎮', label: t('tab.play') }
+    { id: 'journal', icon: '📒', label: journalCount ? t('tab.journalCount', { count: journalCount }) : t('tab.journal') }
   ];
   return (
     <View style={s.bar}>

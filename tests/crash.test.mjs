@@ -31,7 +31,7 @@ test('crash reporter sends appVersion and platform, scrubs personal data, dedupl
   assert.equal(calls[0].opts.headers['X-App-Key'], 'test-key');
   assert.match(calls[0].opts.headers['X-Install-Id'], /^[0-9a-f]{32}$/);
   assert.equal(calls[0].body.platform, 'android');
-  assert.equal(calls[0].body.appVersion, '2.4.0');
+  assert.equal(calls[0].body.appVersion, '2.5.0');
   assert.equal(calls[0].body.fatal, true);
   assert.equal(calls[0].body.where, 'render');
   assert.ok(!calls[0].body.message.includes('owner@example.com'));

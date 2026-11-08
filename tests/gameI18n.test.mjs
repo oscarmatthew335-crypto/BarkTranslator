@@ -7,7 +7,7 @@ import zu from '../src/i18n/game/zu.js';
 import { DICTS } from '../src/i18n/index.js';
 import { ALL_QUESTIONS } from '../src/game/questions.js';
 import { ITEMS, BODY_COLOURS } from '../src/game/wardrobe.js';
-import { POWER_UPS, STAGES } from '../src/game/stages.js';
+import { POWER_UPS, STAGES, CHASER_OPTIONS, modesFor } from '../src/game/stages.js';
 
 const root = new URL('../', import.meta.url);
 
@@ -49,5 +49,6 @@ test('data-driven names have strings: questions, answers, wardrobe, power-ups, p
   for (const i of ITEMS) assert.ok(en[`game.item.${i.id}`], i.id);
   for (const c of BODY_COLOURS) assert.ok(en[`game.colour.${c.id}`], c.id);
   for (const p of POWER_UPS) assert.ok(en[`game.power.${p}`], p);
-  for (const s of [...STAGES.dog, ...STAGES.cat]) assert.ok(en[s.nameKey], s.nameKey);
+  for (const s of [...STAGES.dog, ...STAGES.cat, ...modesFor('dog'), ...modesFor('cat')]) assert.ok(en[s.nameKey], s.nameKey);
+  for (const ch of Object.values(CHASER_OPTIONS)) assert.ok(en[ch.nameKey], ch.nameKey);
 });

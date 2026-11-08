@@ -11,6 +11,18 @@ import {
   currentSpeed,
   starsFor,
   scoreFor,
+  modeScore,
+  DIST_PER_POINT,
+  TREAT_POINTS,
+  multiplierFor,
+  COMBO_THRESHOLDS,
+  buildChunk,
+  ensureChunks,
+  stepChaseGap,
+  CHASE_GAP_START,
+  CHASE_GAP_MAX,
+  JUMP_V,
+  DOUBLE_JUMP_V,
   resultOf,
   visible,
   PLAYER_H,
@@ -19,8 +31,10 @@ import {
   SPEED_BOOST,
   REDUCED_MOTION_SPEED
 } from '../src/game/engine.js';
-import { STAGES, stagesFor, dailyStage } from '../src/game/stages.js';
+import { STAGES, stagesFor, dailyStage, endlessStage, chaseStage, modesFor, chaserFor, ENDLESS_MAX_SPEED } from '../src/game/stages.js';
 import { emptyProgress, isUnlocked, recordStage, suggestedStage, nextStageAfter } from '../src/game/progress.js';
+import { emptyBestScores, bestScoreFor, recordBestScore, loadBestScores, saveBestScore, emptyGameState, saveGame } from '../src/game/gameStore.js';
+import { pickRewardLine, pickCaughtLine } from '../src/lines.js';
 
 const DT = 1 / 60;
 const garden = STAGES.dog[0];
@@ -291,4 +305,192 @@ test('stages open by playing: finishing one opens the next', () => {
   assert.equal(suggestedStage(p, 'cat').id, b.id);
   assert.equal(nextStageAfter('cat', a.id).id, b.id);
   assert.equal(nextStageAfter('cat', STAGES.cat[5].id), null);
+});
+
+test('endless chunk generation never runs out and caps speed so it stays playable', () => {
+  for (const sp of ['dog', 'cat']) {
+    const stage = endlessStage(sp);
+    let r = newRun(stage, { seed: 99 });
+    assert.equal(r.length, Infinity);
+    assert.ok(r.entities.length > 0);
+
+    // Run for a long distance (with invulnerability so hearts never run out during the course check).
+    for (let i = 0; i < 60 * 120; i++) {
+      r = step({ ...r, invuln: 2 }, DT);
+      const furthest = r.entities[r.entities.length - 1];
+      assert.ok(furthest && furthest.x > r.dist + 400, `course ahead at step ${i}`);
+    }
+    assert.ok(r.dist > 30000);
+    assert.ok(r.chunkIndex >= 10);
+    assert.ok(currentSpeed(r) <= ENDLESS_MAX_SPEED + 1e-6);
+
+    // Same seed + chunkIndex builds the exact same chunk.
+    assert.deepEqual(buildChunk(stage, { seed: 7, chunkIndex: 2 }), buildChunk(stage, { seed: 7, chunkIndex: 2 }));
+  }
+});
+
+test('score and multiplier maths: 1x -> 2x -> 3x -> 5x at combo thresholds, and combo resets on hit', () => {
+  assert.deepEqual(
+    COMBO_THRESHOLDS.map((t) => t.multiplier),
+    [1, 2, 3, 5]
+  );
+  assert.equal(multiplierFor(0), 1);
+  assert.equal(multiplierFor(COMBO_THRESHOLDS[1].combo), 2);
+  assert.equal(multiplierFor(COMBO_THRESHOLDS[2].combo), 3);
+  assert.equal(multiplierFor(COMBO_THRESHOLDS[3].combo), 5);
+  assert.equal(modeScore({ dist: 2508, treatPoints: 180 }), Math.floor(2508 / DIST_PER_POINT) + 180);
+
+  // Collect treats in a run to reach 5x, then take a hit and verify reset to 1x.
+  let r = newRun(endlessStage('dog'), { seed: 5 });
+  const need = COMBO_THRESHOLDS[3].combo;
+  for (let i = 0; i < need; i++) {
+    const treat = { id: 1000 + i, kind: 'treat', type: 'bone', x: r.dist + 10, y: 2, w: 22, h: 22 };
+    r = step({ ...r, entities: [treat], cursor: 0 }, DT);
+  }
+  assert.equal(r.combo, need);
+  assert.equal(r.multiplier, 5);
+  // Each treat is banked at the multiplier it was collected at.
+  let banked = 0;
+  for (let c = 1; c <= need; c++) banked += TREAT_POINTS * multiplierFor(c);
+  assert.equal(r.treatPoints, banked);
+  assert.equal(r.score, Math.floor(r.dist / DIST_PER_POINT) + banked);
+  const before = r.score;
+
+  const obstacle = { id: 2000, kind: 'obstacle', type: 'puddle', lane: 'low', x: r.dist + 10, y: 0, w: 52, h: 10, move: 0 };
+  r = step({ ...r, entities: [obstacle], cursor: 0 }, DT);
+  assert.equal(r.hits, 1);
+  assert.equal(r.combo, 0);
+  assert.equal(r.multiplier, 1);
+  assert.equal(r.treatPoints, banked, 'a hit keeps the treat points already banked');
+  assert.ok(r.score >= before, 'a hit never lowers the score');
+});
+
+test('treats and combos matter: a minute of running is worth about as much as a good combo streak', () => {
+  // ~60 s at ~300 units/s of distance vs 60 treats at an average ~3x.
+  const distPts = modeScore({ dist: 300 * 60 });
+  const treatPts = 60 * TREAT_POINTS * 3;
+  assert.ok(treatPts >= distPts * 0.5 && treatPts <= distPts * 2, `distance ${distPts} vs treats ${treatPts}`);
+});
+
+test('double jump: second tap in the air gives one smaller extra jump and resets on landing', () => {
+  assert.ok(DOUBLE_JUMP_V < JUMP_V && DOUBLE_JUMP_V > 0);
+  let r = newRun(garden, { seed: 1 });
+  r = step({ ...r, entities: [] }, DT, { jump: true });
+  assert.ok(r.player.height > 0);
+  assert.equal(r.player.doubleJumped, false);
+
+  // Step a few frames into the jump, then tap jump again for the double jump.
+  for (let i = 0; i < 8; i++) r = step({ ...r, entities: [] }, DT);
+  r = step({ ...r, entities: [] }, DT, { jump: true });
+  assert.equal(r.player.doubleJumped, true);
+  assert.ok(r.events.includes('doubleJump'));
+  const vyAfterDouble = r.player.vy;
+  assert.ok(vyAfterDouble > 0 && vyAfterDouble < JUMP_V);
+
+  // A third tap while still in the air does not jump again.
+  r = step({ ...r, entities: [] }, DT);
+  r = step({ ...r, entities: [] }, DT, { jump: true });
+  assert.ok(!r.events.includes('doubleJump'));
+
+  // Landing resets doubleJumped so the pet can double-jump again on the next jump.
+  while (r.player.height > 0) r = step({ ...r, entities: [] }, DT);
+  assert.equal(r.player.doubleJumped, false);
+  r = step({ ...r, entities: [] }, DT, { jump: true });
+  for (let i = 0; i < 6; i++) r = step({ ...r, entities: [] }, DT);
+  r = step({ ...r, entities: [] }, DT, { jump: true });
+  assert.equal(r.player.doubleJumped, true);
+  assert.ok(r.events.includes('doubleJump'));
+});
+
+test('chase mode: gap shrinks over time and sharply on hit, grows on treats/streak/speed, and caught at 0', () => {
+  assert.equal(chaserFor('dog').emoji, '🛁');
+  assert.equal(chaserFor('cat').emoji, '🐕');
+
+  // 1) Pure gap maths: shrinks over time, drops sharply on hit, grows on treats, clean streak and speed boost.
+  const shrunk = stepChaseGap(70, 1, {});
+  assert.ok(shrunk < 70 && shrunk > 60);
+  const hitDrop = stepChaseGap(70, DT, { hits: 1 });
+  assert.ok(70 - hitDrop >= 20, 'sharp drop on hit');
+  const treatGrow = stepChaseGap(70, DT, { treats: 1 });
+  assert.ok(treatGrow > 70, 'treat grows the gap');
+  const streakGrow = stepChaseGap(70, 1, { cleanStreak: true });
+  assert.ok(streakGrow > 70, 'clean streak grows the gap');
+  const speedGrow = stepChaseGap(70, 1, { speedBoost: true });
+  assert.ok(speedGrow > streakGrow, 'speed power-up grows it more');
+  assert.equal(stepChaseGap(99, 2, { speedBoost: true }), CHASE_GAP_MAX);
+  assert.equal(stepChaseGap(10, 1, { hits: 1 }), 0);
+
+  // 2) Full Chase run: hits and time shrink the gap to 0 -> caught -> run over.
+  let r = newRun(chaseStage('dog'), { seed: 3 });
+  assert.equal(r.chaseGap, CHASE_GAP_START);
+  r = step({ ...r, entities: [] }, 0.05);
+  assert.ok(r.chaseGap < CHASE_GAP_START);
+
+  // Speed boost in a run grows the gap.
+  let boosted = applyPowerUp({ ...r, entities: [] }, 'speed');
+  const beforeBoost = boosted.chaseGap;
+  for (let i = 0; i < 20; i++) boosted = step({ ...boosted, entities: [] }, DT);
+  assert.ok(boosted.chaseGap > beforeBoost);
+
+  // Repeated hits catch the pet (gap reaches 0).
+  let caughtRun = newRun(chaseStage('cat'), { seed: 4 });
+  let guard = 0;
+  while (!caughtRun.done && guard++ < 600) {
+    const obs = { id: 5000 + guard, kind: 'obstacle', type: 'cucumber', lane: 'low', x: caughtRun.dist + 10, y: 0, w: 46, h: 16, move: 0 };
+    caughtRun = step({ ...caughtRun, invuln: 0, entities: [obs], cursor: 0 }, 0.05);
+  }
+  assert.equal(caughtRun.done, true);
+  assert.equal(caughtRun.caught, true);
+  assert.equal(caughtRun.chaseGap, 0);
+  assert.ok(caughtRun.events.includes('caught'));
+  const res = resultOf(caughtRun);
+  assert.equal(res.chase, true);
+  assert.equal(res.caught, true);
+});
+
+test('reduce motion still slows endless and chase modes', () => {
+  for (const stage of [...modesFor('dog'), ...modesFor('cat')]) {
+    const normal = newRun(stage, { seed: 1 });
+    const calm = newRun(stage, { seed: 1, reduceMotion: true });
+    assert.ok(Math.abs(currentSpeed(calm) - currentSpeed(normal) * REDUCED_MOTION_SPEED) < 1e-9, stage.id);
+  }
+});
+
+test('best score is saved and loaded per species per mode, and reward/caught pet lines work', async () => {
+  await saveGame(emptyGameState());
+  assert.deepEqual(await loadBestScores(), emptyBestScores());
+
+  const r1 = await saveBestScore('dog', 'endless', 320);
+  assert.equal(r1.best, 320);
+  assert.equal(r1.isNewBest, true);
+
+  const r2 = await saveBestScore('dog', 'endless', 200);
+  assert.equal(r2.best, 320, 'lower score does not overwrite best');
+  assert.equal(r2.isNewBest, false);
+
+  const r3 = await saveBestScore('dog', 'chase', 510);
+  assert.equal(r3.best, 510);
+  assert.equal(r3.isNewBest, true);
+
+  const r4 = await saveBestScore('cat', 'endless', 440);
+  assert.equal(r4.best, 440);
+  assert.equal(r4.isNewBest, true);
+
+  const loaded = await loadBestScores();
+  assert.equal(loaded.dog.endless, 320);
+  assert.equal(loaded.dog.chase, 510);
+  assert.equal(loaded.cat.endless, 440);
+  assert.equal(loaded.cat.chase, 0);
+  assert.equal(bestScoreFor({ bestScores: loaded }, 'dog', 'chase'), 510);
+  assert.equal(recordBestScore({ bestScores: loaded }, 'cat', 'chase', 150).isNewBest, true);
+
+  // Translator reward line and caught line per species in en, af and zu.
+  for (const species of ['dog', 'cat']) {
+    for (const lang of ['en', 'af', 'zu']) {
+      const reward = pickRewardLine({ species, personality: 'boet' }, { lang });
+      const caught = pickCaughtLine({ species, personality: 'boet' }, { lang });
+      assert.ok(reward.text && reward.text.length > 3, `reward ${species} ${lang}`);
+      assert.ok(caught.text && caught.text.length > 3, `caught ${species} ${lang}`);
+    }
+  }
 });
