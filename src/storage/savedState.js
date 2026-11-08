@@ -103,3 +103,5 @@ export async function saveState(state) {
     await AsyncStorage.setItem(KEY, JSON.stringify(trimmed));
   } catch (_) {}
 }
+
+export { emptyBestScores, bestScoreFor, recordBestScore, loadBestScores, saveBestScore } from '../game/gameStore';

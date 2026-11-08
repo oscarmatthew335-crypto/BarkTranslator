@@ -79,18 +79,89 @@ export const STAGES = {
 };
 
 export const stagesFor = (species) => STAGES[species] || STAGES.dog;
-export const getStage = (species, id) => stagesFor(species).find((s) => s.id === id) || null;
+
+// Chasers for Chase mode, kept as data (emoji + nameKey) so they are easy to swap.
+export const CHASER_OPTIONS = {
+  bath: { id: 'bath', emoji: '🛁', nameKey: 'game.chaser.bath' },
+  dog: { id: 'dog', emoji: '🐕', nameKey: 'game.chaser.dog' },
+  vetVan: { id: 'vetVan', emoji: '🚐', nameKey: 'game.chaser.vetVan' },
+  catcher: { id: 'catcher', emoji: '🥅', nameKey: 'game.chaser.catcher' }
+};
+
+export const CHASERS = {
+  dog: CHASER_OPTIONS.bath,
+  cat: CHASER_OPTIONS.dog
+};
+
+export const chaserFor = (species) => CHASERS[species] || CHASERS.dog;
+
+export const ENDLESS_MAX_SPEED = 420;
+
+function mixedObstacles(species) {
+  const list = stagesFor(species);
+  const obstacles = {};
+  list.forEach((s) => Object.entries(s.obstacles).forEach(([k, w]) => (obstacles[k] = (obstacles[k] || 0) + w)));
+  return obstacles;
+}
+
+// Endless mode: run until out of hearts, no finish line, course generated in chunks.
+export function endlessStage(species) {
+  const sp = STAGES[species] ? species : 'dog';
+  return {
+    id: `${sp}-endless`,
+    mode: 'endless',
+    endless: true,
+    index: -2,
+    species: sp,
+    nameKey: 'game.endless.title',
+    theme: 'garden',
+    speed: 220,
+    ramp: 200,
+    maxSpeed: ENDLESS_MAX_SPEED,
+    density: 1.5,
+    hearts: 3,
+    combo: 0.3,
+    doubleJumpCombo: 0.25,
+    obstacles: mixedObstacles(sp),
+    powerUps: POWER_UPS
+  };
+}
+
+// Chase mode: chased by bath time (dog) or a dog (cat); caught when the gap hits 0.
+export function chaseStage(species) {
+  const sp = STAGES[species] ? species : 'dog';
+  return {
+    id: `${sp}-chase`,
+    mode: 'chase',
+    chase: true,
+    chaser: chaserFor(sp),
+    index: -3,
+    species: sp,
+    nameKey: 'game.chase.title',
+    theme: 'park',
+    speed: 225,
+    ramp: 200,
+    maxSpeed: ENDLESS_MAX_SPEED,
+    density: 1.55,
+    hearts: 99,
+    combo: 0.3,
+    doubleJumpCombo: 0.25,
+    obstacles: mixedObstacles(sp),
+    powerUps: POWER_UPS
+  };
+}
+
+export const modesFor = (species) => [endlessStage(species), chaseStage(species)];
 
 // The daily run: one endless-style run (75 s) that mixes every place.
 export const DAILY_SECONDS = 75;
 export function dailyStage(species) {
-  const list = stagesFor(species);
-  const obstacles = {};
-  list.forEach((s) => Object.entries(s.obstacles).forEach(([k, w]) => (obstacles[k] = (obstacles[k] || 0) + w)));
+  const sp = STAGES[species] ? species : 'dog';
   return {
-    id: `${species}-daily`,
+    id: `${sp}-daily`,
+    mode: 'daily',
     index: -1,
-    species,
+    species: sp,
     nameKey: 'game.daily.title',
     theme: 'park',
     seconds: DAILY_SECONDS,
@@ -99,8 +170,17 @@ export function dailyStage(species) {
     density: 1.6,
     hearts: 3,
     combo: 0.25,
-    obstacles,
+    obstacles: mixedObstacles(sp),
     powerUps: POWER_UPS,
     daily: true
   };
+}
+
+export function getStage(species, id) {
+  const found = stagesFor(species).find((s) => s.id === id);
+  if (found) return found;
+  if (id === `${species}-endless`) return endlessStage(species);
+  if (id === `${species}-chase`) return chaseStage(species);
+  if (id === `${species}-daily`) return dailyStage(species);
+  return null;
 }

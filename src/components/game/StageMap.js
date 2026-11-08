@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
-import { stagesFor } from '../../game/stages';
+import { stagesFor, endlessStage, chaseStage, chaserFor } from '../../game/stages';
 import { isUnlocked } from '../../game/progress';
 import { THEMES } from './Scenery';
 
@@ -16,13 +16,51 @@ export function Stars({ n, size = 16 }) {
   );
 }
 
-// A winding path of stages. Open stages can be played (and replayed) any
-// time; a locked one opens when the stage before it is finished.
-export default function StageMap({ species, progress, onPlay, onLocked }) {
+// Stage select: Endless and Chase at the top, followed by the winding path of stages.
+export default function StageMap({ species, progress, bestScores = {}, onPlay, onLocked }) {
   const { t } = useI18n();
   const list = stagesFor(species);
+  const endless = endlessStage(species);
+  const chase = chaseStage(species);
+  const chaser = chaserFor(species);
   return (
     <View style={s.map}>
+      <Pressable
+        onPress={() => onPlay(endless)}
+        style={[s.modeNode, { backgroundColor: C.butter }]}
+        accessibilityRole="button"
+        accessibilityLabel={t('game.endless.title')}
+      >
+        <Text style={s.emoji}>♾️</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.name} maxFontSizeMultiplier={1.6}>
+            {t('game.endless.title')}
+          </Text>
+          <Text style={s.locked}>
+            {bestScores.endless > 0 ? `${t('game.endless.sub')} · ${t('game.bestScore', { n: bestScores.endless })}` : t('game.endless.sub')}
+          </Text>
+        </View>
+      </Pressable>
+
+      <Pressable
+        onPress={() => onPlay(chase)}
+        style={[s.modeNode, { backgroundColor: C.pink }]}
+        accessibilityRole="button"
+        accessibilityLabel={t('game.chase.title')}
+      >
+        <Text style={s.emoji}>{chaser.emoji}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={s.name} maxFontSizeMultiplier={1.6}>
+            {t('game.chase.title')}
+          </Text>
+          <Text style={s.locked}>
+            {bestScores.chase > 0
+              ? `${t('game.chase.sub', { chaser: t(chaser.nameKey) })} · ${t('game.bestScore', { n: bestScores.chase })}`
+              : t('game.chase.sub', { chaser: t(chaser.nameKey) })}
+          </Text>
+        </View>
+      </Pressable>
+
       {list.map((stage, i) => {
         const open = isUnlocked(progress, species, stage.id);
         const stars = progress.stars[stage.id] || 0;
@@ -54,8 +92,19 @@ export default function StageMap({ species, progress, onPlay, onLocked }) {
 }
 
 const s = StyleSheet.create({
-  map: { gap: 6 },
+  map: { gap: 8 },
   row: { flexDirection: 'row' },
+  modeNode: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: INK_WIDTH,
+    borderColor: C.ink,
+    borderRadius: 22,
+    paddingVertical: 12,
+    paddingHorizontal: 14
+  },
   node: {
     width: '78%',
     flexDirection: 'row',

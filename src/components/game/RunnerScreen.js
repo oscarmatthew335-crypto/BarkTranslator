@@ -3,18 +3,18 @@ import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDim
 import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle } from 'react-native-svg';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, newRun, step, visible, resultOf } from '../../game/engine';
+import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, newRun, step, visible, resultOf } from '../../game/engine';
 import { startGameAudio, gameEvent } from '../../game/sfx';
 import PetSprite from './PetSprite';
-import Thing, { PowerIcon } from './Things';
+import Thing, { PowerIcon, Chaser } from './Things';
 import { Backdrop, Midground, Goal } from './Scenery';
 import { StickerButton } from '../ui';
 
 const SWIPE_PX = 22;
 
-// One stage or daily run: the game loop, the drawing and the controls.
-// Tap (or the Jump button) to jump; swipe down (or hold Duck) to duck.
-export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, startPowerUps = [], reduceMotion, soundOn, onFinish, onQuit, onFps }) {
+// One stage, daily, endless or chase run: the game loop, the drawing and the controls.
+// Tap (or the Jump button) to jump (and double-jump in the air); swipe down (or hold Duck) to duck.
+export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, startPowerUps = [], bestScore = 0, reduceMotion, soundOn, onFinish, onQuit, onFps }) {
   const { t } = useI18n();
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
@@ -116,13 +116,20 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   const blink = run.invuln > 0 && (reduceMotion ? true : Math.floor(run.t * 12) % 2 === 0);
   const pose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
   const petTop = GROUND - run.player.height - 44;
-  const goalX = run.stage.daily ? null : run.length - run.dist + PLAYER_X + 40;
-  const progress = run.stage.daily ? Math.min(1, run.t / run.stage.seconds) : Math.min(1, run.dist / run.length);
+  const isScoreMode = Boolean(run.stage.endless || run.stage.chase);
+  const goalX = run.stage.daily || isScoreMode ? null : run.length - run.dist + PLAYER_X + 40;
+  const progress = run.stage.chase
+    ? Math.max(0, Math.min(1, (run.chaseGap ?? CHASE_GAP_MAX) / CHASE_GAP_MAX))
+    : run.stage.daily
+    ? Math.min(1, run.t / run.stage.seconds)
+    : Math.min(1, run.dist / run.length);
+  const chaserX = run.stage.chase ? Math.round(2 + (1 - progress) * (PLAYER_X - 24)) : 0;
   // The world is VIEW_W wide; a taller screen just shows more sky above it.
   const { width, height } = size;
   const viewH = width ? Math.max(VIEW_H, (VIEW_W * height) / width) : VIEW_H;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
+  const shownBest = Math.max(bestScore || 0, run.score || 0);
 
   return (
     <View style={s.wrap}>
@@ -130,13 +137,35 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         <Pressable onPress={() => setPause(true)} style={s.hudBtn} accessibilityRole="button" accessibilityLabel={t('game.pause')} hitSlop={8}>
           <Text style={s.hudBtnText}>⏸</Text>
         </Pressable>
-        <View style={s.progressTrack} accessibilityLabel={t('game.progressA11y', { pct: Math.round(progress * 100) })}>
-          <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
-        </View>
-        <Text style={s.hearts} accessibilityLabel={t('game.heartsA11y', { n: run.hearts })} maxFontSizeMultiplier={1.3}>
-          {'❤️'.repeat(run.hearts)}
-          {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
-        </Text>
+        {run.stage.chase ? (
+          <View style={s.chaseMeterWrap}>
+            <Text style={s.chaserEmoji}>{stage.chaser?.emoji || '🛁'}</Text>
+            <View style={s.progressTrack} accessibilityLabel={t('game.chase.gapA11y', { pct: Math.round(progress * 100) })}>
+              <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: progress < 0.3 ? C.tomato : C.mint }]} />
+            </View>
+          </View>
+        ) : !run.stage.endless ? (
+          <View style={s.progressTrack} accessibilityLabel={t('game.progressA11y', { pct: Math.round(progress * 100) })}>
+            <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          </View>
+        ) : null}
+        {isScoreMode && (
+          <View style={s.scoreBox}>
+            <Text style={s.scoreLive}>{t('game.hud.score', { n: run.score })}</Text>
+            <Text style={s.scoreBest}>{t('game.hud.best', { n: shownBest })}</Text>
+          </View>
+        )}
+        {!run.stage.chase && (
+          <Text style={s.hearts} accessibilityLabel={t('game.heartsA11y', { n: run.hearts })} maxFontSizeMultiplier={1.3}>
+            {'❤️'.repeat(run.hearts)}
+            {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
+          </Text>
+        )}
+        {run.multiplier > 1 && (
+          <View style={s.multPill} accessibilityLabel={t('game.multiplierA11y', { n: run.multiplier })}>
+            <Text style={s.multText}>{t('game.multiplier', { n: run.multiplier })}</Text>
+          </View>
+        )}
         <Text style={s.treats} accessibilityLabel={t('game.treatsA11y', { n: run.treats })}>
           {pet.species === 'cat' ? '🐟' : '🦴'} {run.treats}
         </Text>
@@ -169,6 +198,11 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
                   <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
                 </G>
               ))}
+              {run.stage.chase && (
+                <G transform={`translate(${chaserX} ${GROUND - 38})`}>
+                  <Chaser chaser={stage.chaser} />
+                </G>
+              )}
               <G transform={`translate(${PLAYER_X - 6} ${petTop})`} opacity={blink ? 0.5 : 1}>
                 {run.power.shield ? <Circle cx={28} cy={24} r={30} fill="rgba(92,200,255,0.25)" stroke={C.sky} strokeWidth={2} /> : null}
                 <PetSprite
@@ -195,7 +229,16 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         {paused && (
           <View style={s.overlay}>
             <Text style={s.overlayTitle}>{started ? t('game.paused') : t(stage.nameKey)}</Text>
-            {!started && <Text style={s.overlaySub}>{t('game.howTo')} {t('game.howToHearts')}</Text>}
+            {!started && (
+              <Text style={s.overlaySub}>
+                {t('game.howTo')}{' '}
+                {stage.chase
+                  ? t('game.chase.howTo', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
+                  : stage.endless
+                  ? t('game.endless.howTo')
+                  : t('game.howToHearts')}
+              </Text>
+            )}
             <View style={s.overlayButtons}>
               <StickerButton label={started ? t('game.resume') : t('game.go')} emoji="▶️" onPress={begin} />
               <StickerButton label={t('game.quit')} color={C.paper} onPress={onQuit} />
@@ -260,13 +303,20 @@ const NameTag = React.memo(function NameTag({ name, faceUri }) {
 
 const s = StyleSheet.create({
   wrap: { flex: 1, backgroundColor: C.bg },
-  hud: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  hud: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
   hudBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center' },
   hudBtnText: { fontSize: 18 },
   hearts: { fontSize: 17, letterSpacing: -1 },
+  chaseMeterWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chaserEmoji: { fontSize: 18 },
   progressTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: C.mint },
-  treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 60, textAlign: 'right' },
+  scoreBox: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  scoreLive: { fontFamily: F.bold, fontSize: 17, color: C.ink },
+  scoreBest: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft },
+  multPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 2, borderColor: C.ink, backgroundColor: C.butter },
+  multText: { fontFamily: F.bold, fontSize: 15, color: C.ink },
+  treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 50, textAlign: 'right' },
   // A little sky above the 400 x 220 world, so jumps have room on screen.
   stage: { flex: 1, minHeight: 260, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },

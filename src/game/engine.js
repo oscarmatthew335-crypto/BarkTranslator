@@ -5,8 +5,8 @@
 // GROUND. Heights are measured upward from the ground. The pet stays at the
 // same spot on screen while the world scrolls by `dist`.
 
-import { makeRng, pick } from './random';
-import { OBSTACLES, COLLECTIBLES } from './stages';
+import { makeRng, pick, hashString } from './random';
+import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED } from './stages';
 
 export const VIEW_W = 400;
 export const VIEW_H = 220;
@@ -17,6 +17,7 @@ export const PLAYER_H = 40;
 export const DUCK_H = 22;
 export const GRAVITY = 1900;
 export const JUMP_V = 700;
+export const DOUBLE_JUMP_V = 540; // smaller second jump while in the air
 export const JUMP_BUFFER = 0.12; // a tap just before landing still jumps
 export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
 export const HIT_INVULN_S = 1.2;
@@ -27,6 +28,27 @@ export const SPEED_BOOST = 1.4;
 export const MAGNET_RANGE = 150;
 export const MAGNET_PULL = 520;
 export const REDUCED_MOTION_SPEED = 0.8;
+
+// Combo thresholds for the multiplier: 1x -> 2x -> 3x -> 5x.
+export const COMBO_THRESHOLDS = [
+  { combo: 0, multiplier: 1 },
+  { combo: 3, multiplier: 2 },
+  { combo: 6, multiplier: 3 },
+  { combo: 10, multiplier: 5 }
+];
+
+export const CHUNK_LENGTH = 2200;
+export const CHUNK_LOOKAHEAD = 1600;
+
+// Chase mode gap rules (0 = caught, 100 = max lead).
+export const CHASE_GAP_MAX = 100;
+export const CHASE_GAP_START = 70;
+export const CHASE_SHRINK_RATE = 3; // shrinks slowly over time (per second)
+export const CHASE_HIT_DROP = 26; // shrinks sharply on each hit
+export const CHASE_TREAT_GAIN = 4; // each treat grows the gap
+export const CHASE_STREAK_GAIN = 5; // clean streak grows the gap (per second)
+export const CHASE_SPEED_GAIN = 12; // speed power-up grows it more (per second)
+export const CHASE_CLEAN_STREAK_S = 3;
 
 const TREAT_W = 22;
 const POWER_W = 28;
@@ -143,12 +165,155 @@ export function buildLevel(stage, seed) {
   return { entities, length, totalTreats };
 }
 
+// Build one chunk of an endless or chase course. Deterministic per (seed, chunkIndex).
+export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, nextId = 0 } = {}) {
+  const rng = makeRng(hashString(`${seed}:chunk:${chunkIndex}`));
+  const treatTypes = COLLECTIBLES[stage.species] || COLLECTIBLES.dog;
+  const entities = [];
+  let id = nextId;
+  let x = startX;
+  const endX = startX + CHUNK_LENGTH;
+  const maxSpeed = stage.maxSpeed || ENDLESS_MAX_SPEED;
+  let powerPlaced = false;
+
+  while (x < endX) {
+    const progress = Math.min(1, x / 18000);
+    const speed = Math.min(maxSpeed, stage.speed + (stage.ramp || 180) * progress);
+    const type = weighted(rng, stage.obstacles);
+    const o = OBSTACLES[type];
+    entities.push({ id: id++, kind: 'obstacle', type, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
+
+    const treat = pick(rng, treatTypes);
+    if (rng() < 0.8) {
+      const jd = jumpDistance(speed);
+      const centre = x + o.w / 2;
+      for (let k = -1; k <= 1; k++) {
+        if (o.lane === 'low') {
+          const tt = (jd / 2 + k * jd * 0.28) / speed;
+          const h = JUMP_V * tt - (GRAVITY / 2) * tt * tt;
+          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
+        } else {
+          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
+        }
+      }
+    }
+
+    let pair = 0;
+    // Obstacle combos in endless and chase: either a close high+low double-jump pair, or a jump-then-duck pair.
+    if (stage.doubleJumpCombo && rng() < stage.doubleJumpCombo && (chunkIndex > 0 || x > 650)) {
+      const lowKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'low' && !OBSTACLES[k].move);
+      const highKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'high' && !OBSTACLES[k].move);
+      const pool = o.lane === 'high' && lowKeys.length ? lowKeys : highKeys.length ? highKeys : lowKeys;
+      if (pool.length) {
+        const t2 = pick(rng, pool);
+        const o2 = OBSTACLES[t2];
+        const x2 = x + o.w + Math.round(jumpDistance(speed) * 0.62);
+        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0, doubleJumpPair: true });
+        // High treats along the double-jump arc
+        entities.push({ id: id++, kind: 'treat', type: treat, x: x2 + o2.w / 2 - TREAT_W / 2, y: 88, w: TREAT_W, h: TREAT_W });
+        pair = x2 + o2.w - (x + o.w);
+      }
+    } else if (stage.combo && rng() < stage.combo && (chunkIndex > 0 || x > 900)) {
+      const other = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane !== o.lane && !OBSTACLES[k].move);
+      if (other.length) {
+        const t2 = pick(rng, other);
+        const o2 = OBSTACLES[t2];
+        const x2 = x + o.w + jumpDistance(speed) * (o.lane === 'low' ? 1 : 0.5) + speed * 0.34;
+        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
+        pair = x2 + o2.w - (x + o.w);
+      }
+    }
+
+    const minGap = jumpDistance(speed) * 1.25 + o.w + 40 + pair;
+    const gap = minGap + (rng() * 260) / (stage.density || 1.5);
+    const mid = x + o.w + gap / 2;
+
+    if (rng() < 0.55) {
+      for (let k = 0; k < 3; k++) {
+        entities.push({ id: id++, kind: 'treat', type: treat, x: mid - 40 + k * 28, y: 2, w: TREAT_W, h: TREAT_W });
+      }
+    }
+    if (!powerPlaced && stage.powerUps?.length && x - startX >= CHUNK_LENGTH * 0.45 && rng() < 0.65) {
+      powerPlaced = true;
+      entities.push({ id: id++, kind: 'power', type: pick(rng, stage.powerUps), x: mid + 50, y: 46, w: POWER_W, h: POWER_W });
+    }
+    x += o.w + gap;
+  }
+  entities.sort((a, b) => a.x - b.x);
+  const treatsInChunk = entities.filter((e) => e.kind === 'treat').length;
+  return { entities, nextX: x, nextId: id, chunkIndex: chunkIndex + 1, treatsInChunk };
+}
+
+export function ensureChunks(run) {
+  if (!run.stage.endless && !run.stage.chase) return run;
+  let { entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats } = run;
+  if (generatedTo - run.dist >= CHUNK_LOOKAHEAD) return run;
+  entities = entities.slice();
+  if (cursor > 60) {
+    entities = entities.slice(cursor);
+    cursor = 0;
+  }
+  while (generatedTo - run.dist < CHUNK_LOOKAHEAD) {
+    const chunk = buildChunk(run.stage, { seed: run.seed, chunkIndex, startX: generatedTo, nextId: nextEntityId });
+    entities.push(...chunk.entities);
+    generatedTo = chunk.nextX;
+    chunkIndex = chunk.chunkIndex;
+    nextEntityId = chunk.nextId;
+    totalTreats += chunk.treatsInChunk;
+  }
+  return { ...run, entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats };
+}
+
+// --- combos, multiplier and chase gap --------------------------------------
+
+export function multiplierFor(combo = 0) {
+  let m = 1;
+  for (const t of COMBO_THRESHOLDS) {
+    if (combo >= t.combo) m = t.multiplier;
+  }
+  return m;
+}
+
+// Endless and chase score: distance + treats * multiplier.
+export function modeScore({ dist = 0, distance, treats = 0, multiplier = 1 } = {}) {
+  const d = Math.floor(distance != null ? distance : dist);
+  return Math.max(0, d + treats * multiplier);
+}
+
+export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false } = {}) {
+  let next = gap - CHASE_SHRINK_RATE * dt;
+  if (cleanStreak) next += CHASE_STREAK_GAIN * dt;
+  if (speedBoost) next += CHASE_SPEED_GAIN * dt;
+  if (treats > 0) next += treats * CHASE_TREAT_GAIN;
+  if (hits > 0) next -= hits * CHASE_HIT_DROP;
+  return Math.max(0, Math.min(CHASE_GAP_MAX, next));
+}
+
 // --- running ---------------------------------------------------------------
 
 export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = false } = {}) {
-  const level = buildLevel(stage, seed);
-  const run = {
-    stage: { id: stage.id, speed: stage.speed, ramp: stage.ramp, seconds: stage.seconds, daily: Boolean(stage.daily), hearts: stage.hearts || 3 },
+  const isChunked = Boolean(stage.endless || stage.chase);
+  const level = isChunked ? { entities: [], length: Infinity, totalTreats: 0 } : buildLevel(stage, seed);
+  let run = {
+    stage: {
+      id: stage.id,
+      mode: stage.mode || (stage.daily ? 'daily' : stage.endless ? 'endless' : stage.chase ? 'chase' : 'stage'),
+      species: stage.species || 'dog',
+      speed: stage.speed,
+      ramp: stage.ramp,
+      maxSpeed: stage.maxSpeed || ENDLESS_MAX_SPEED,
+      density: stage.density || 1.5,
+      combo: stage.combo || 0,
+      doubleJumpCombo: stage.doubleJumpCombo || 0,
+      obstacles: stage.obstacles,
+      powerUps: stage.powerUps || [],
+      seconds: stage.seconds,
+      daily: Boolean(stage.daily),
+      endless: Boolean(stage.endless),
+      chase: Boolean(stage.chase),
+      chaser: stage.chaser || null,
+      hearts: stage.hearts || 3
+    },
     seed,
     t: 0,
     dist: 0,
@@ -158,11 +323,21 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     totalTreats: level.totalTreats,
     entities: level.entities,
     cursor: 0,
-    player: { height: 0, vy: 0, ducking: false, duckTimer: 0, jumpBuffer: 0 },
+    generatedTo: isChunked ? 420 : level.length,
+    chunkIndex: 0,
+    nextEntityId: isChunked ? 0 : level.entities.length,
+    player: { height: 0, vy: 0, ducking: false, duckTimer: 0, jumpBuffer: 0, doubleJumped: false },
     treats: 0,
     collected: 0,
+    combo: 0,
+    maxCombo: 0,
+    multiplier: 1,
+    score: 0,
     hits: 0,
     hearts: stage.hearts || 3,
+    chaseGap: stage.chase ? CHASE_GAP_START : null,
+    cleanTime: 0,
+    caught: false,
     failed: false,
     invuln: 0,
     slow: 0,
@@ -171,6 +346,7 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     done: false,
     events: []
   };
+  if (isChunked) run = ensureChunks(run);
   return startPowerUps.reduce((r, p) => applyPowerUp(r, p), run);
 }
 
@@ -182,11 +358,19 @@ export function applyPowerUp(run, type) {
   return { ...run, power, powerUpsUsed: run.powerUpsUsed + 1 };
 }
 
-// Current running speed: the stage ramps up toward the end; a speed boost is
-// faster; a hit slows the pet briefly; reduce-motion runs a little slower.
+// Current running speed: the stage ramps up toward the end (capped in endless
+// and chase modes so it stays playable); a speed boost is faster; a hit slows
+// the pet briefly; reduce-motion runs a little slower.
 export function currentSpeed(run) {
-  const progress = run.stage.daily ? Math.min(1, run.t / run.stage.seconds) : Math.min(1, run.dist / run.length);
-  let v = run.stage.speed + run.stage.ramp * progress;
+  let v;
+  if (run.stage.endless || run.stage.chase) {
+    const progress = Math.min(1, run.t / 90);
+    const maxSpeed = run.stage.maxSpeed || ENDLESS_MAX_SPEED;
+    v = Math.min(maxSpeed, run.stage.speed + (run.stage.ramp || 180) * progress);
+  } else {
+    const progress = run.stage.daily ? Math.min(1, run.t / run.stage.seconds) : Math.min(1, run.dist / run.length);
+    v = run.stage.speed + run.stage.ramp * progress;
+  }
   if (run.power.speed > 0) v *= SPEED_BOOST;
   if (run.slow > 0) v *= 0.6;
   return v * run.speedScale;
@@ -197,10 +381,11 @@ export function currentSpeed(run) {
 export function step(run, dt, input = {}) {
   if (run.done) return run;
   dt = Math.min(Math.max(dt, 0), 1 / 20);
+  if (run.stage.endless || run.stage.chase) run = ensureChunks(run);
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, hits, invuln, slow, hearts } = run;
+  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, hits, invuln, slow, hearts, cleanTime = 0 } = run;
 
   // timers
   for (const k of Object.keys(POWER_DURATION)) power[k] = Math.max(0, power[k] - dt);
@@ -208,23 +393,40 @@ export function step(run, dt, input = {}) {
   slow = Math.max(0, slow - dt);
 
   // pet movement
-  if (input.jump) player.jumpBuffer = JUMP_BUFFER;
-  else player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
   if (input.swipeDuck) player.duckTimer = SWIPE_DUCK_S;
   else player.duckTimer = Math.max(0, player.duckTimer - dt);
   const wantDuck = Boolean(input.duck) || player.duckTimer > 0;
+
+  // Check if the pet is just about to land on this frame, so a pre-landing tap
+  // buffers a full ground jump instead of consuming the air double-jump.
+  const nextVy = player.vy - GRAVITY * dt * (wantDuck ? 2 : 1);
+  const landsThisStep = player.height > 0 && player.height + nextVy * dt <= 0;
+
+  if (input.jump) player.jumpBuffer = JUMP_BUFFER;
+  else player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
 
   if (player.height <= 0 && player.jumpBuffer > 0) {
     player.vy = JUMP_V;
     player.jumpBuffer = 0;
     player.duckTimer = 0;
+    player.doubleJumped = false;
     events.push('jump');
+  } else if (input.jump && player.height > 0 && !landsThisStep && !player.doubleJumped) {
+    player.vy = DOUBLE_JUMP_V;
+    player.doubleJumped = true;
+    player.jumpBuffer = 0;
+    player.duckTimer = 0;
+    events.push('jump');
+    events.push('doubleJump');
   }
   if (player.height > 0 || player.vy > 0) {
     // Ducking in the air drops the pet faster.
     player.vy -= GRAVITY * dt * (wantDuck ? 2 : 1);
     player.height = Math.max(0, player.height + player.vy * dt);
-    if (player.height === 0) player.vy = 0;
+    if (player.height === 0) {
+      player.vy = 0;
+      player.doubleJumped = false;
+    }
   }
   player.ducking = wantDuck && player.height <= 0;
 
@@ -238,6 +440,8 @@ export function step(run, dt, input = {}) {
   while (cursor < entities.length && entities[cursor].x + entities[cursor].w < dist - PLAYER_X - 40) cursor++;
   const pBox = playerBox(player, dist);
   const changed = new Map();
+  let frameTreats = 0;
+  let frameHits = 0;
   for (let i = cursor; i < entities.length; i++) {
     let e = entities[i];
     if (e.x > dist + VIEW_W + 60) break;
@@ -261,6 +465,10 @@ export function step(run, dt, input = {}) {
       const value = power.double > 0 ? 2 : 1;
       treats += value;
       collected += 1;
+      frameTreats += 1;
+      combo += 1;
+      maxCombo = Math.max(maxCombo, combo);
+      multiplier = multiplierFor(combo);
       changed.set(i, { ...e, gone: true });
       events.push('collect');
     } else if (e.kind === 'power') {
@@ -283,24 +491,55 @@ export function step(run, dt, input = {}) {
         events.push('shield');
       } else {
         hits += 1;
-        hearts = Math.max(0, hearts - 1);
+        frameHits += 1;
+        combo = 0;
+        multiplier = 1;
+        cleanTime = 0;
+        if (!run.stage.chase) hearts = Math.max(0, hearts - 1);
         invuln = HIT_INVULN_S;
         slow = HIT_SLOW_S;
         events.push('hit');
       }
     }
   }
+  if (frameHits === 0) cleanTime += dt;
+
   let nextEntities = entities;
   if (changed.size) {
     nextEntities = entities.slice();
     changed.forEach((e, i) => (nextEntities[i] = e));
   }
 
-  // Out of hearts: the stage is lost (treats picked up are kept). The daily run just ends there.
-  const failed = hearts <= 0;
-  const done = failed || (run.stage.daily ? t >= run.stage.seconds : dist >= run.length);
-  if (done) events.push(failed ? 'out' : 'finish');
-  return {
+  let chaseGap = run.chaseGap;
+  let caught = false;
+  if (run.stage.chase) {
+    const cleanStreak = cleanTime >= CHASE_CLEAN_STREAK_S && combo >= 2;
+    chaseGap = stepChaseGap(chaseGap ?? CHASE_GAP_START, dt, {
+      hits: frameHits,
+      treats: frameTreats,
+      cleanStreak,
+      speedBoost: power.speed > 0
+    });
+    caught = chaseGap <= 0;
+  }
+
+  const score = modeScore({ dist, treats, multiplier });
+
+  // Out of hearts: the stage is lost (treats picked up are kept). Endless ends on hearts <= 0; Chase ends when caught.
+  const outOfHearts = !run.stage.chase && hearts <= 0;
+  let done = false;
+  if (run.stage.chase) done = caught;
+  else if (run.stage.endless) done = outOfHearts;
+  else if (run.stage.daily) done = outOfHearts || t >= run.stage.seconds;
+  else done = outOfHearts || dist >= run.length;
+
+  if (done) {
+    if (caught) events.push('caught');
+    else if (outOfHearts) events.push('out');
+    else events.push('finish');
+  }
+
+  let nextRun = {
     ...run,
     t,
     dist,
@@ -309,9 +548,16 @@ export function step(run, dt, input = {}) {
     power,
     treats,
     collected,
+    combo,
+    maxCombo,
+    multiplier,
+    score,
     hits,
     hearts,
-    failed: failed && !run.stage.daily,
+    chaseGap,
+    cleanTime,
+    caught,
+    failed: outOfHearts && !run.stage.daily && !run.stage.endless,
     invuln,
     slow,
     cursor,
@@ -320,6 +566,8 @@ export function step(run, dt, input = {}) {
     powerUpsUsed: run.powerUpsUsed + events.filter((e) => e === 'power').length,
     events
   };
+  if (!done && (run.stage.endless || run.stage.chase)) nextRun = ensureChunks(nextRun);
+  return nextRun;
 }
 
 // Entities to draw this frame, with their position on screen.
@@ -352,16 +600,24 @@ export function scoreFor({ treats, dist, hits }) {
 }
 
 export function resultOf(run) {
+  const isEndlessOrChase = Boolean(run.stage.endless || run.stage.chase);
   return {
     stageId: run.stage.id,
-    daily: run.stage.daily,
+    mode: run.stage.mode || (run.stage.daily ? 'daily' : 'stage'),
+    daily: Boolean(run.stage.daily),
+    endless: Boolean(run.stage.endless),
+    chase: Boolean(run.stage.chase),
+    caught: Boolean(run.caught),
     treats: run.treats,
     collected: run.collected,
     totalTreats: run.totalTreats,
+    combo: run.combo || 0,
+    maxCombo: run.maxCombo || 0,
+    multiplier: run.multiplier || 1,
     hits: run.hits,
     failed: Boolean(run.failed),
     seconds: Math.round(run.t),
-    stars: run.stage.daily || run.failed ? 0 : starsFor(run),
-    score: run.stage.daily ? scoreFor(run) : 0
+    stars: run.stage.daily || isEndlessOrChase || run.failed ? 0 : starsFor(run),
+    score: isEndlessOrChase ? modeScore(run) : run.stage.daily ? scoreFor(run) : 0
   };
 }
