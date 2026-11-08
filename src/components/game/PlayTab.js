@@ -11,7 +11,7 @@ import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
 import PetPreview from './PetPreview';
-import StageMap from './StageMap';
+import StageMap, { ModeCards } from './StageMap';
 import StageEnd from './StageEnd';
 import { PowerIcon } from './Things';
 import TreatRound from './TreatRound';
@@ -358,6 +358,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         </View>
       </Sticker>
 
+      <View style={{ marginTop: 14 }}>
+        <ModeCards species={pet.species} bestScores={game.bestScores} onPlay={startStage} />
+      </View>
+
       {screen.notice ? (
         <Sticker radius={18} color={C.mint} style={{ marginTop: 12 }} innerStyle={s.notice}>
           <Text style={s.noticeText}>{screen.notice}</Text>
@@ -417,7 +421,6 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       <StageMap
         species={pet.species}
         progress={game.progress}
-        bestScores={game.bestScores}
         onPlay={startStage}
         onLocked={(stage, before) => showNotice(t('game.map.lockedNotice', { stage: t(stage.nameKey), before: t(before.nameKey) }))}
       />

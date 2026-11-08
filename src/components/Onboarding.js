@@ -81,7 +81,7 @@ export default function Onboarding({ onDone }) {
           keyboardDismissMode="on-drag"
         >
           {step === 1 && (
-            <Pressable onPress={Keyboard.dismiss} accessible={false}>
+            <View>
               <Text style={s.title} maxFontSizeMultiplier={1.3}>
                 {t('onboarding.title')}
               </Text>
@@ -140,7 +140,7 @@ export default function Onboarding({ onDone }) {
               <View style={{ marginTop: 20 }}>
                 <Checkbox checked={ageOk} onToggle={() => setAgeOk((v) => !v)} label={t('onboarding.ageLabel', { minAge: MIN_AGE })} />
               </View>
-            </Pressable>
+            </View>
           )}
           {step === 2 && (
             <View>
