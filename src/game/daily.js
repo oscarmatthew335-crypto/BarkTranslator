@@ -102,12 +102,15 @@ export function challengeFor(today, species, progress) {
 // Update the challenge after a run. Returns { challenge, justDone }.
 export function advanceChallenge(challenge, result) {
   if (!challenge || challenge.done) return { challenge, justDone: false };
+  // Endless and chase runs count for treats only: they are not stages, and a
+  // short run with no bumps should not pass as a clean stage.
+  const stageRun = !result.daily && !result.endless && !result.chase;
   let add = 0;
   if (challenge.type === 'treats') add = result.treats;
-  else if (challenge.type === 'stars3') add = !result.daily && result.stageId === challenge.stageId && result.stars >= 3 ? 1 : 0;
+  else if (challenge.type === 'stars3') add = stageRun && result.stageId === challenge.stageId && result.stars >= 3 ? 1 : 0;
   else if (challenge.type === 'daily') add = result.daily ? 1 : 0;
-  else if (challenge.type === 'stages') add = result.daily || result.failed ? 0 : 1;
-  else if (challenge.type === 'clean') add = !result.daily && !result.failed && result.hits === 0 ? 1 : 0;
+  else if (challenge.type === 'stages') add = stageRun && !result.failed ? 1 : 0;
+  else if (challenge.type === 'clean') add = stageRun && !result.failed && result.hits === 0 ? 1 : 0;
   const count = Math.min(challenge.target, challenge.count + add);
   const done = count >= challenge.target;
   return { challenge: { ...challenge, count, done }, justDone: done };

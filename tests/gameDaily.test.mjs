@@ -139,6 +139,12 @@ test('daily challenge: one per day, picks only open stages, completes once, and 
   assert.equal(advanceChallenge(clean, { hits: 1 }).justDone, false);
   assert.equal(advanceChallenge(clean, { hits: 0 }).justDone, true);
   assert.equal(advanceChallenge(clean, { hits: 0, daily: true }).justDone, false);
+  // Endless and chase runs are not stages: they only count toward the treats challenge.
+  for (const mode of [{ endless: true }, { chase: true }]) {
+    assert.equal(advanceChallenge(clean, { hits: 0, ...mode }).justDone, false, 'a no-bump endless/chase run is not a clean stage');
+    assert.equal(advanceChallenge({ type: 'stages', target: 1, count: 0, done: false }, { hits: 3, ...mode }).justDone, false, 'an endless/chase run is not a finished stage');
+    assert.equal(advanceChallenge({ type: 'treats', target: 5, count: 0, done: false }, { treats: 6, ...mode }).justDone, true, 'treats still count');
+  }
   const opened = recordStage(p, { stageId: STAGES.cat[0].id, stars: 1, treats: 1 });
   assert.ok(challengeFor('2026-10-20', 'cat', opened));
 });

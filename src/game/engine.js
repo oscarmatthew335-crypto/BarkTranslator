@@ -37,6 +37,12 @@ export const COMBO_THRESHOLDS = [
   { combo: 10, multiplier: 5 }
 ];
 
+// Endless and chase score: one point per DIST_PER_POINT of distance, plus
+// TREAT_POINTS for each treat times the multiplier at the moment it was
+// collected. Treat points are banked, so a later hit never lowers the score.
+export const DIST_PER_POINT = 10;
+export const TREAT_POINTS = 10;
+
 export const CHUNK_LENGTH = 2200;
 export const CHUNK_LOOKAHEAD = 1600;
 
@@ -274,10 +280,13 @@ export function multiplierFor(combo = 0) {
   return m;
 }
 
-// Endless and chase score: distance + treats * multiplier.
-export function modeScore({ dist = 0, distance, treats = 0, multiplier = 1 } = {}) {
-  const d = Math.floor(distance != null ? distance : dist);
-  return Math.max(0, d + treats * multiplier);
+// Points for picking up treats now: banked at the current multiplier.
+export const treatPointsFor = (value = 1, multiplier = 1) => value * TREAT_POINTS * multiplier;
+
+// Endless and chase score: distance points + banked treat points.
+export function modeScore({ dist = 0, distance, treatPoints = 0 } = {}) {
+  const d = distance != null ? distance : dist;
+  return Math.max(0, Math.floor(d / DIST_PER_POINT) + Math.floor(treatPoints));
 }
 
 export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false } = {}) {
@@ -332,6 +341,7 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     combo: 0,
     maxCombo: 0,
     multiplier: 1,
+    treatPoints: 0,
     score: 0,
     hits: 0,
     hearts: stage.hearts || 3,
@@ -385,7 +395,7 @@ export function step(run, dt, input = {}) {
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, hits, invuln, slow, hearts, cleanTime = 0 } = run;
+  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, invuln, slow, hearts, cleanTime = 0 } = run;
 
   // timers
   for (const k of Object.keys(POWER_DURATION)) power[k] = Math.max(0, power[k] - dt);
@@ -469,6 +479,7 @@ export function step(run, dt, input = {}) {
       combo += 1;
       maxCombo = Math.max(maxCombo, combo);
       multiplier = multiplierFor(combo);
+      treatPoints += treatPointsFor(value, multiplier);
       changed.set(i, { ...e, gone: true });
       events.push('collect');
     } else if (e.kind === 'power') {
@@ -523,7 +534,7 @@ export function step(run, dt, input = {}) {
     caught = chaseGap <= 0;
   }
 
-  const score = modeScore({ dist, treats, multiplier });
+  const score = modeScore({ dist, treatPoints });
 
   // Out of hearts: the stage is lost (treats picked up are kept). Endless ends on hearts <= 0; Chase ends when caught.
   const outOfHearts = !run.stage.chase && hearts <= 0;
@@ -551,6 +562,7 @@ export function step(run, dt, input = {}) {
     combo,
     maxCombo,
     multiplier,
+    treatPoints,
     score,
     hits,
     hearts,
@@ -614,6 +626,7 @@ export function resultOf(run) {
     combo: run.combo || 0,
     maxCombo: run.maxCombo || 0,
     multiplier: run.multiplier || 1,
+    treatPoints: run.treatPoints || 0,
     hits: run.hits,
     failed: Boolean(run.failed),
     seconds: Math.round(run.t),

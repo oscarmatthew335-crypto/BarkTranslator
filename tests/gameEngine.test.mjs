@@ -12,6 +12,8 @@ import {
   starsFor,
   scoreFor,
   modeScore,
+  DIST_PER_POINT,
+  TREAT_POINTS,
   multiplierFor,
   COMBO_THRESHOLDS,
   buildChunk,
@@ -336,7 +338,7 @@ test('score and multiplier maths: 1x -> 2x -> 3x -> 5x at combo thresholds, and 
   assert.equal(multiplierFor(COMBO_THRESHOLDS[1].combo), 2);
   assert.equal(multiplierFor(COMBO_THRESHOLDS[2].combo), 3);
   assert.equal(multiplierFor(COMBO_THRESHOLDS[3].combo), 5);
-  assert.equal(modeScore({ dist: 250.8, treats: 6, multiplier: 3 }), 250 + 18);
+  assert.equal(modeScore({ dist: 2508, treatPoints: 180 }), Math.floor(2508 / DIST_PER_POINT) + 180);
 
   // Collect treats in a run to reach 5x, then take a hit and verify reset to 1x.
   let r = newRun(endlessStage('dog'), { seed: 5 });
@@ -347,14 +349,27 @@ test('score and multiplier maths: 1x -> 2x -> 3x -> 5x at combo thresholds, and 
   }
   assert.equal(r.combo, need);
   assert.equal(r.multiplier, 5);
-  assert.equal(r.score, Math.floor(r.dist) + r.treats * 5);
+  // Each treat is banked at the multiplier it was collected at.
+  let banked = 0;
+  for (let c = 1; c <= need; c++) banked += TREAT_POINTS * multiplierFor(c);
+  assert.equal(r.treatPoints, banked);
+  assert.equal(r.score, Math.floor(r.dist / DIST_PER_POINT) + banked);
+  const before = r.score;
 
   const obstacle = { id: 2000, kind: 'obstacle', type: 'puddle', lane: 'low', x: r.dist + 10, y: 0, w: 52, h: 10, move: 0 };
   r = step({ ...r, entities: [obstacle], cursor: 0 }, DT);
   assert.equal(r.hits, 1);
   assert.equal(r.combo, 0);
   assert.equal(r.multiplier, 1);
-  assert.equal(r.score, Math.floor(r.dist) + r.treats * 1);
+  assert.equal(r.treatPoints, banked, 'a hit keeps the treat points already banked');
+  assert.ok(r.score >= before, 'a hit never lowers the score');
+});
+
+test('treats and combos matter: a minute of running is worth about as much as a good combo streak', () => {
+  // ~60 s at ~300 units/s of distance vs 60 treats at an average ~3x.
+  const distPts = modeScore({ dist: 300 * 60 });
+  const treatPts = 60 * TREAT_POINTS * 3;
+  assert.ok(treatPts >= distPts * 0.5 && treatPts <= distPts * 2, `distance ${distPts} vs treats ${treatPts}`);
 });
 
 test('double jump: second tap in the air gives one smaller extra jump and resets on landing', () => {
