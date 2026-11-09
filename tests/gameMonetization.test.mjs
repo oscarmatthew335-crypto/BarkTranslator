@@ -30,7 +30,17 @@ import {
 import { endlessStage, chaseStage, stagesFor } from '../src/game/stages.js';
 import { emptyCounters, count, loadCounters, resetCounters } from '../src/game/counters.js';
 import { PREMIUM_PRODUCT_ID, isPremiumPurchase, isPendingPurchase } from '../src/game/purchases.js';
-import { ADS_NON_PERSONALISED, AD_CONTENT_RATING, adUnitIds, adRequestOptions } from '../src/game/ads.js';
+import {
+  ADS_NON_PERSONALISED,
+  AD_CONTENT_RATING,
+  TEST_ANDROID_APP_ID,
+  TEST_REWARDED_ID,
+  TEST_INTERSTITIAL_ID,
+  adUnitIds,
+  adRequestOptions
+} from '../src/game/ads.js';
+import appConfigFn from '../app.config.js';
+import { readFileSync } from 'node:fs';
 
 test('lives: first 24 hours are unlimited, then refills 1 life every 20 minutes up to 5', () => {
   const t0 = 1_700_000_000_000;
@@ -225,4 +235,61 @@ test('purchases and ads config helpers + new counters', async () => {
   const updated = await loadCounters();
   assert.equal(updated.endlessRuns, 1);
   assert.equal(updated.purchases, 1);
+});
+
+test('build without AdMob env values uses Google test IDs only (and real IDs live only in eas.json production)', () => {
+  const keys = [
+    'EXPO_PUBLIC_ADMOB_ANDROID_APP_ID',
+    'EXPO_PUBLIC_ADMOB_IOS_APP_ID',
+    'EXPO_PUBLIC_ADMOB_REWARDED_LIFE',
+    'EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE',
+    'EXPO_PUBLIC_ADMOB_INTERSTITIAL'
+  ];
+  const saved = {};
+  for (const k of keys) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+  try {
+    const cfg = appConfigFn();
+    const adsPlugin = cfg.plugins.find((p) => Array.isArray(p) && p[0] === 'react-native-google-mobile-ads');
+    assert.ok(adsPlugin, 'react-native-google-mobile-ads plugin must be configured');
+    assert.equal(adsPlugin[1].androidAppId, TEST_ANDROID_APP_ID);
+    assert.equal(adsPlugin[1].androidAppId, 'ca-app-pub-3940256099942544~3347511713');
+
+    const units = adUnitIds(process.env);
+    assert.equal(units.rewardedLife, TEST_REWARDED_ID);
+    assert.equal(units.rewardedContinue, TEST_REWARDED_ID);
+    assert.equal(units.interstitial, TEST_INTERSTITIAL_ID);
+    assert.ok(units.rewardedLife.startsWith('ca-app-pub-3940256099942544/'));
+    assert.ok(units.rewardedContinue.startsWith('ca-app-pub-3940256099942544/'));
+    assert.ok(units.interstitial.startsWith('ca-app-pub-3940256099942544/'));
+
+    // Verify eas.json has the production env values and the GitHub APK workflow does not
+    const eas = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
+    assert.equal(eas.build.production.android.buildType, 'app-bundle');
+    assert.ok(eas.build.production.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID);
+    assert.ok(eas.build.production.env.EXPO_PUBLIC_ADMOB_REWARDED_LIFE);
+    assert.ok(eas.build.production.env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE);
+    assert.ok(eas.build.production.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL);
+    assert.notEqual(eas.build.production.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID, TEST_ANDROID_APP_ID);
+
+    // When production env vars are present, app.config.js and adUnitIds read them
+    process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID = eas.build.production.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID;
+    const prodCfg = appConfigFn();
+    const prodPlugin = prodCfg.plugins.find((p) => Array.isArray(p) && p[0] === 'react-native-google-mobile-ads');
+    assert.equal(prodPlugin[1].androidAppId, eas.build.production.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID);
+    const prodUnits = adUnitIds(eas.build.production.env);
+    assert.equal(prodUnits.rewardedLife, eas.build.production.env.EXPO_PUBLIC_ADMOB_REWARDED_LIFE);
+    assert.equal(prodUnits.rewardedContinue, eas.build.production.env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE);
+    assert.equal(prodUnits.interstitial, eas.build.production.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL);
+
+    const wf = readFileSync(new URL('../.github/workflows/build-apk.yml', import.meta.url), 'utf8');
+    assert.ok(!wf.includes('EXPO_PUBLIC_ADMOB_'), 'GitHub APK workflow must not set AdMob env vars');
+  } finally {
+    for (const k of keys) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
 });
