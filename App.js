@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View, StatusBar, Linking, AppState } from 'react-native';
+import { StyleSheet, View, StatusBar, Linking, AppState, BackHandler } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermissions } from 'expo-camera';
 import { useFonts, Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
@@ -103,6 +103,27 @@ function PetApp() {
       });
   };
 
+  // Android back: on another tab, go back to Play; on Play, let the game step
+  // back through its own screens (run -> pause, end/wardrobe/photo -> hub).
+  // Only on the Play hub does back leave the app. Pop-up sheets close
+  // themselves first (their Modal onRequestClose). While a recording is in
+  // progress, back is ignored so the clip isn't cut off.
+  const playBackRef = useRef(null);
+  const backState = useRef({});
+  backState.current = { activeTab, busy: t.bark.phase !== 'idle' || t.importingClip };
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const { activeTab: tab, busy } = backState.current;
+      if (busy) return true;
+      if (tab !== 'play') {
+        setActiveTab('play');
+        return true;
+      }
+      return Boolean(playBackRef.current?.());
+    });
+    return () => sub.remove();
+  }, []);
+
   if (!data.loaded) return <View style={styles.blank} />;
   if (!pet)
     return (
@@ -199,6 +220,7 @@ function PetApp() {
             settings={data.settings}
             onUpdateSettings={data.updateSettings}
             onRunningChange={setGameRunning}
+            backRef={playBackRef}
           />
         )}
       </View>
