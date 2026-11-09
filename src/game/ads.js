@@ -96,6 +96,21 @@ export function isInterstitialReady() {
   return Boolean(slots.interstitial.loaded && slots.interstitial.ad);
 }
 
+// A failed load (no fill is common for a new AdMob account) is retried after
+// 30 s, 1 min, 2 min, 4 min, then every 5 min. A successful load resets it.
+export const RETRY_BASE_MS = 30000;
+export const RETRY_MAX_MS = 300000;
+export const retryDelayMs = (attempt) => Math.min(RETRY_BASE_MS * 2 ** Math.max(0, attempt), RETRY_MAX_MS);
+const retries = { life: 0, continue: 0, interstitial: 0 };
+const retryTimers = {};
+
+function scheduleRetry(key, load) {
+  clearTimeout(retryTimers[key]);
+  const wait = retryDelayMs(retries[key]);
+  retries[key] += 1;
+  retryTimers[key] = setTimeout(() => load(key), wait);
+}
+
 function clearSlot(key) {
   const slot = slots[key];
   if (!slot) return;
@@ -107,6 +122,18 @@ function clearSlot(key) {
   slot.cleanups = [];
   slot.ad = null;
   slot.loaded = false;
+  clearTimeout(retryTimers[key]);
+}
+
+// While an ad is showing, its load listeners are no longer needed (and a show
+// error must not also schedule a load retry).
+function dropLoadListeners(slot) {
+  slot.cleanups.forEach((fn) => {
+    try {
+      fn?.();
+    } catch (_) {}
+  });
+  slot.cleanups = [];
 }
 
 function preloadRewarded(key) {
@@ -118,11 +145,15 @@ function preloadRewarded(key) {
     const ad = RewardedAd.createForAdRequest(unitId, adRequestOptions());
     const unsubLoad = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
       slots[key].loaded = true;
+      retries[key] = 0;
       notify();
     });
     const unsubErr = ad.addAdEventListener(AdEventType.ERROR, () => {
+      // Errors while showing are handled in showRewardedAd; only retry a failed load.
+      if (slots[key].ad !== ad || slots[key].loaded) return;
       slots[key].loaded = false;
       notify();
+      scheduleRetry(key, preloadRewarded);
     });
     slots[key].ad = ad;
     slots[key].cleanups = [unsubLoad, unsubErr];
@@ -140,11 +171,14 @@ function preloadInterstitial() {
     const ad = InterstitialAd.createForAdRequest(ids.interstitial, adRequestOptions());
     const unsubLoad = ad.addAdEventListener(AdEventType.LOADED, () => {
       slots.interstitial.loaded = true;
+      retries.interstitial = 0;
       notify();
     });
     const unsubErr = ad.addAdEventListener(AdEventType.ERROR, () => {
+      if (slots.interstitial.ad !== ad || slots.interstitial.loaded) return;
       slots.interstitial.loaded = false;
       notify();
+      scheduleRetry('interstitial', () => preloadInterstitial());
     });
     slots.interstitial.ad = ad;
     slots.interstitial.cleanups = [unsubLoad, unsubErr];
@@ -174,7 +208,9 @@ export async function initAds() {
       }
       // Only load ads when UMP consent says we can request ads (or if consent Info
       // reports canRequestAds === true).
-      canRequest = Boolean(consentInfo ? consentInfo.canRequestAds : true);
+      // If the consent check failed (no answer at all), don't request ads:
+      // initAds() runs again on the next app start.
+      canRequest = Boolean(consentInfo ? consentInfo.canRequestAds : !AdsConsent);
       privacyOptionsAvailable = Boolean(
         consentInfo?.privacyOptionsRequirementStatus === 'REQUIRED'
       );
@@ -230,6 +266,7 @@ export function showRewardedAd(kind = 'life') {
   return new Promise((resolve) => {
     const ad = slot.ad;
     slot.loaded = false;
+    dropLoadListeners(slot);
     notify();
 
     let earned = false;
@@ -276,6 +313,7 @@ export function showInterstitialAd() {
   return new Promise((resolve) => {
     const ad = slot.ad;
     slot.loaded = false;
+    dropLoadListeners(slot);
     notify();
 
     let settled = false;

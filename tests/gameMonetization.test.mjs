@@ -37,7 +37,10 @@ import {
   TEST_REWARDED_ID,
   TEST_INTERSTITIAL_ID,
   adUnitIds,
-  adRequestOptions
+  adRequestOptions,
+  retryDelayMs,
+  RETRY_BASE_MS,
+  RETRY_MAX_MS
 } from '../src/game/ads.js';
 import appConfigFn from '../app.config.js';
 import { readFileSync } from 'node:fs';
@@ -292,4 +295,12 @@ test('build without AdMob env values uses Google test IDs only (and real IDs liv
       else process.env[k] = saved[k];
     }
   }
+});
+
+test('a failed ad load is retried with a growing wait, capped at 5 minutes', () => {
+  assert.equal(retryDelayMs(0), RETRY_BASE_MS);
+  assert.equal(retryDelayMs(1), RETRY_BASE_MS * 2);
+  assert.equal(retryDelayMs(2), RETRY_BASE_MS * 4);
+  assert.equal(retryDelayMs(10), RETRY_MAX_MS);
+  assert.equal(RETRY_MAX_MS, 5 * 60 * 1000);
 });
