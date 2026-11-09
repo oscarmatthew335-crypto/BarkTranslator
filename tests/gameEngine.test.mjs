@@ -19,8 +19,13 @@ import {
   buildChunk,
   ensureChunks,
   stepChaseGap,
+  chaseShrinkRate,
   CHASE_GAP_START,
   CHASE_GAP_MAX,
+  CHASE_SHRINK_START,
+  CHASE_SHRINK_END,
+  CHASE_RAMP_SECONDS,
+  CHASE_HIT_DROP,
   JUMP_V,
   DOUBLE_JUMP_V,
   resultOf,
@@ -31,9 +36,34 @@ import {
   SPEED_BOOST,
   REDUCED_MOTION_SPEED
 } from '../src/game/engine.js';
-import { STAGES, stagesFor, dailyStage, endlessStage, chaseStage, modesFor, chaserFor, ENDLESS_MAX_SPEED } from '../src/game/stages.js';
+import {
+  STAGES,
+  stagesFor,
+  dailyStage,
+  endlessStage,
+  chaseStage,
+  modesFor,
+  chaserFor,
+  ENDLESS_MAX_SPEED,
+  MILESTONES,
+  milestonesReached,
+  earnedMilestones,
+  milestoneReward
+} from '../src/game/stages.js';
 import { emptyProgress, isUnlocked, recordStage, suggestedStage, nextStageAfter } from '../src/game/progress.js';
-import { emptyBestScores, bestScoreFor, recordBestScore, loadBestScores, saveBestScore, emptyGameState, saveGame } from '../src/game/gameStore.js';
+import {
+  emptyBestScores,
+  bestScoreFor,
+  recordBestScore,
+  loadBestScores,
+  saveBestScore,
+  emptyGameState,
+  saveGame,
+  HOW_TO_RUN_LIMIT,
+  emptyModeRuns,
+  shouldShowHowTo,
+  recordModeRun
+} from '../src/game/gameStore.js';
 import { pickRewardLine, pickCaughtLine } from '../src/lines.js';
 
 const DT = 1 / 60;
@@ -402,15 +432,32 @@ test('double jump: second tap in the air gives one smaller extra jump and resets
   assert.ok(r.events.includes('doubleJump'));
 });
 
-test('chase mode: gap shrinks over time and sharply on hit, grows on treats/streak/speed, and caught at 0', () => {
+test('chase mode: gap shrinks faster over time and drops on hit, grows on treats/streak/speed, and caught at 0', () => {
   assert.equal(chaserFor('dog').emoji, '🛁');
   assert.equal(chaserFor('cat').emoji, '🐕');
+  assert.equal(CHASE_HIT_DROP, 20);
+  assert.equal(CHASE_SHRINK_START, 2);
+  assert.equal(CHASE_SHRINK_END, 6);
+  assert.equal(CHASE_RAMP_SECONDS, 90);
 
-  // 1) Pure gap maths: shrinks over time, drops sharply on hit, grows on treats, clean streak and speed boost.
-  const shrunk = stepChaseGap(70, 1, {});
-  assert.ok(shrunk < 70 && shrunk > 60);
+  // Shrink rate ramps from 2/s at start to 6/s at 90s.
+  assert.equal(chaseShrinkRate(0), CHASE_SHRINK_START);
+  assert.equal(chaseShrinkRate(CHASE_RAMP_SECONDS / 2), (CHASE_SHRINK_START + CHASE_SHRINK_END) / 2);
+  assert.equal(chaseShrinkRate(CHASE_RAMP_SECONDS), CHASE_SHRINK_END);
+  assert.equal(chaseShrinkRate(180), CHASE_SHRINK_END);
+
+  // 1) Pure gap maths: shrinks over time (faster later), drops on hit, grows on treats, clean streak and speed boost.
+  const shrunkStart = stepChaseGap(70, 1, { t: 0 });
+  const shrunkLate = stepChaseGap(70, 1, { t: CHASE_RAMP_SECONDS });
+  assert.equal(shrunkStart, 70 - CHASE_SHRINK_START);
+  assert.equal(shrunkLate, 70 - CHASE_SHRINK_END);
+  assert.ok(shrunkLate < shrunkStart, 'gap shrinks faster later in the run');
   const hitDrop = stepChaseGap(70, DT, { hits: 1 });
-  assert.ok(70 - hitDrop >= 20, 'sharp drop on hit');
+  assert.ok(70 - hitDrop >= CHASE_HIT_DROP && 70 - hitDrop < CHASE_HIT_DROP + 1, 'hit drops by CHASE_HIT_DROP');
+  // 3 quick bumps at the start of Chase leave the pet with gap > 0 (unlike Endless 3 hearts).
+  let afterThreeBumps = CHASE_GAP_START;
+  for (let i = 0; i < 3; i++) afterThreeBumps = stepChaseGap(afterThreeBumps, DT, { hits: 1, t: 1 });
+  assert.ok(afterThreeBumps > 0, '3 early bumps do not immediately end Chase');
   const treatGrow = stepChaseGap(70, DT, { treats: 1 });
   assert.ok(treatGrow > 70, 'treat grows the gap');
   const streakGrow = stepChaseGap(70, 1, { cleanStreak: true });
@@ -493,4 +540,65 @@ test('best score is saved and loaded per species per mode, and reward/caught pet
       assert.ok(caught.text && caught.text.length > 3, `caught ${species} ${lang}`);
     }
   }
+});
+
+test('score milestones: three tiers per mode, reached only on first crossing, with one-off rewards', () => {
+  assert.equal(MILESTONES.endless.length, 3);
+  assert.equal(MILESTONES.chase.length, 3);
+  assert.deepEqual(
+    MILESTONES.endless.map((m) => m.score),
+    [300, 800, 1500]
+  );
+  assert.deepEqual(
+    MILESTONES.chase.map((m) => m.score),
+    [250, 600, 1200]
+  );
+
+  // Below bronze -> none
+  assert.deepEqual(milestonesReached('endless', 0, 299), []);
+  // Exact bronze -> bronze
+  const b = milestonesReached('endless', 0, 300);
+  assert.deepEqual(
+    b.map((m) => m.id),
+    ['bronze']
+  );
+  assert.equal(milestoneReward(b), 20);
+  // Already had 350, scored 380 -> none (bronze already earned)
+  assert.deepEqual(milestonesReached('endless', 350, 380), []);
+  // Crosses silver and gold in one big run
+  const both = milestonesReached('endless', 350, 1600);
+  assert.deepEqual(
+    both.map((m) => m.id),
+    ['silver', 'gold']
+  );
+  assert.equal(milestoneReward(both), 150);
+  // Chase tiers
+  assert.deepEqual(
+    milestonesReached('chase', 200, 650).map((m) => m.id),
+    ['bronze', 'silver']
+  );
+  assert.deepEqual(
+    earnedMilestones('chase', 650).map((m) => m.id),
+    ['bronze', 'silver']
+  );
+});
+
+test('instructions overlay shows only for the first 2 runs of each mode', () => {
+  assert.equal(HOW_TO_RUN_LIMIT, 2);
+  let runs = emptyModeRuns();
+  const endless = endlessStage('dog');
+  const chase = chaseStage('dog');
+
+  // Run 1 of endless: show how-to
+  assert.equal(shouldShowHowTo(runs, endless), true);
+  runs = recordModeRun(runs, endless);
+  // Run 2 of endless: still show how-to
+  assert.equal(shouldShowHowTo(runs, endless), true);
+  runs = recordModeRun(runs, endless);
+  // Run 3 of endless: skip how-to (go straight to 3-2-1 countdown)
+  assert.equal(shouldShowHowTo(runs, endless), false);
+  // Chase is still on run 1 -> shows how-to independently
+  assert.equal(shouldShowHowTo(runs, chase), true);
+  runs = recordModeRun(recordModeRun(runs, chase), chase);
+  assert.equal(shouldShowHowTo(runs, chase), false);
 });

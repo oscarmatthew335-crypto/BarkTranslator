@@ -83,7 +83,9 @@ export function streakShown(streak, today) {
 export const CHALLENGE_REWARD = 30; // bonus treats for the wardrobe
 
 // type: treats (collect N in any runs today), stars3 (3 stars on a stage),
-// daily (play the daily run), stages (finish N stages), clean (a stage with no bumps)
+// daily (play the daily run), stages (finish N stages), clean (a stage with no bumps),
+// endlessScore (score N in Endless), chaseSeconds (survive N seconds in Chase),
+// combo5 (reach a x5 combo)
 export function challengeFor(today, species, progress) {
   const rng = makeRng(hashString(`pawlingo-challenge:${today}:${species}`));
   const open = stagesFor(species).filter((s) => isUnlocked(progress, species, s.id));
@@ -93,7 +95,10 @@ export function challengeFor(today, species, progress) {
     { type: 'stars3', target: 1, stageId: stage.id },
     { type: 'daily', target: 1 },
     { type: 'stages', target: 2 },
-    { type: 'clean', target: 1 }
+    { type: 'clean', target: 1 },
+    { type: 'endlessScore', target: [250, 400, 600][Math.floor(rng() * 3)] },
+    { type: 'chaseSeconds', target: [30, 45, 60][Math.floor(rng() * 3)] },
+    { type: 'combo5', target: 1 }
   ];
   const c = options[Math.floor(rng() * options.length)];
   return { day: today, id: `${today}:${c.type}`, ...c, count: 0, done: false };
@@ -102,16 +107,21 @@ export function challengeFor(today, species, progress) {
 // Update the challenge after a run. Returns { challenge, justDone }.
 export function advanceChallenge(challenge, result) {
   if (!challenge || challenge.done) return { challenge, justDone: false };
-  // Endless and chase runs count for treats only: they are not stages, and a
-  // short run with no bumps should not pass as a clean stage.
   const stageRun = !result.daily && !result.endless && !result.chase;
-  let add = 0;
-  if (challenge.type === 'treats') add = result.treats;
-  else if (challenge.type === 'stars3') add = stageRun && result.stageId === challenge.stageId && result.stars >= 3 ? 1 : 0;
-  else if (challenge.type === 'daily') add = result.daily ? 1 : 0;
-  else if (challenge.type === 'stages') add = stageRun && !result.failed ? 1 : 0;
-  else if (challenge.type === 'clean') add = stageRun && !result.failed && result.hits === 0 ? 1 : 0;
-  const count = Math.min(challenge.target, challenge.count + add);
+  let nextCount = challenge.count || 0;
+  if (challenge.type === 'treats') nextCount += result.treats || 0;
+  else if (challenge.type === 'stars3') nextCount += stageRun && result.stageId === challenge.stageId && result.stars >= 3 ? 1 : 0;
+  else if (challenge.type === 'daily') nextCount += result.daily ? 1 : 0;
+  else if (challenge.type === 'stages') nextCount += stageRun && !result.failed ? 1 : 0;
+  else if (challenge.type === 'clean') nextCount += stageRun && !result.failed && result.hits === 0 ? 1 : 0;
+  else if (challenge.type === 'endlessScore') {
+    if (result.endless) nextCount = Math.max(nextCount, Math.floor(result.score || 0));
+  } else if (challenge.type === 'chaseSeconds') {
+    if (result.chase) nextCount = Math.max(nextCount, Math.floor(result.seconds || 0));
+  } else if (challenge.type === 'combo5') {
+    if ((result.maxCombo || 0) >= 10 || (result.multiplier || 1) >= 5) nextCount += 1;
+  }
+  const count = Math.min(challenge.target, nextCount);
   const done = count >= challenge.target;
   return { challenge: { ...challenge, count, done }, justDone: done };
 }

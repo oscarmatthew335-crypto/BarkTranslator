@@ -11,20 +11,38 @@ import { Backdrop, Midground, Goal } from './Scenery';
 import { StickerButton } from '../ui';
 
 const SWIPE_PX = 22;
+const COUNTDOWN_STEP_MS = 500;
+const REDUCE_MOTION_START_MS = 400;
 
 // One stage, daily, endless or chase run: the game loop, the drawing and the controls.
 // Tap (or the Jump button) to jump (and double-jump in the air); swipe down (or hold Duck) to duck.
-export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, startPowerUps = [], bestScore = 0, reduceMotion, soundOn, onFinish, onQuit, onFps }) {
+export default function RunnerScreen({
+  stage,
+  pet,
+  wardrobe,
+  faceUri,
+  seed,
+  startPowerUps = [],
+  bestScore = 0,
+  showHowTo = true,
+  reduceMotion,
+  soundOn,
+  vibrationOn = true,
+  onFinish,
+  onQuit,
+  onFps
+}) {
   const { t } = useI18n();
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
   const input = useRef({ jump: false, duck: false, swipeDuck: false });
   const pausedRef = useRef(true);
-  const [paused, setPaused] = useState(true);
-  const [started, setStarted] = useState(false);
+  const [paused, setPaused] = useState(Boolean(showHowTo));
+  const [started, setStarted] = useState(!showHowTo);
+  const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : 3));
   const [, setTick] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const { width: winWidth } = useWindowDimensions(); // a tall phone gets bigger buttons, not a tall empty sky
+  const { height: winHeight } = useWindowDimensions();
   const finishRef = useRef(onFinish);
   finishRef.current = onFinish;
   const fpsRef = useRef(onFps);
@@ -44,8 +62,33 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
   }, []);
 
   useEffect(() => {
-    startGameAudio(soundOn);
-  }, [soundOn]);
+    startGameAudio(soundOn, vibrationOn);
+  }, [soundOn, vibrationOn]);
+
+  // Short 3-2-1 countdown (~1.5 s total) when skipping the "Go!" instructions
+  // overlay. When reduce-motion is on, skip the countdown animation and start
+  // after a short pause.
+  useEffect(() => {
+    if (countdown === null || paused) return;
+    if (reduceMotion) {
+      const tm = setTimeout(() => {
+        input.current = { jump: false, duck: false, swipeDuck: false };
+        setCountdown(null);
+        setStarted(true);
+        pausedRef.current = false;
+      }, REDUCE_MOTION_START_MS);
+      return () => clearTimeout(tm);
+    }
+    if (countdown <= 0) {
+      input.current = { jump: false, duck: false, swipeDuck: false };
+      setCountdown(null);
+      setStarted(true);
+      pausedRef.current = false;
+      return;
+    }
+    const tm = setTimeout(() => setCountdown((c) => (c != null ? c - 1 : null)), COUNTDOWN_STEP_MS);
+    return () => clearTimeout(tm);
+  }, [countdown, paused, reduceMotion]);
 
   useEffect(() => {
     let raf = 0;
@@ -87,7 +130,12 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
     // Forget presses made while the overlay was up, so the pet doesn't jump on start.
     input.current = { jump: false, duck: false, swipeDuck: false };
     setStarted(true);
-    setPause(false);
+    if (countdown !== null) {
+      setPaused(false);
+      pausedRef.current = true;
+    } else {
+      setPause(false);
+    }
   };
 
   const pan = useMemo(() => {
@@ -124,12 +172,16 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
     ? Math.min(1, run.t / run.stage.seconds)
     : Math.min(1, run.dist / run.length);
   const chaserX = run.stage.chase ? Math.round(2 + (1 - progress) * (PLAYER_X - 24)) : 0;
+  const lowGap = Boolean(run.stage.chase && progress < 0.3);
+  const meterFlash = lowGap && !reduceMotion && Math.floor(run.t * 8) % 2 === 1;
+  const chaserBounce = lowGap && !reduceMotion ? Math.abs(Math.sin(run.t * 14)) * 5 : 0;
   // The world is VIEW_W wide; a taller screen just shows more sky above it.
   const { width, height } = size;
   const viewH = width ? Math.max(VIEW_H, (VIEW_W * height) / width) : VIEW_H;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
   const shownBest = Math.max(bestScore || 0, run.score || 0);
+  const stageTargetH = Math.max(260, Math.round(winHeight * 0.6));
 
   return (
     <View style={s.wrap}>
@@ -140,8 +192,21 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
         {run.stage.chase ? (
           <View style={s.chaseMeterWrap}>
             <Text style={s.chaserEmoji}>{stage.chaser?.emoji || '🛁'}</Text>
-            <View style={s.progressTrack} accessibilityLabel={t('game.chase.gapA11y', { pct: Math.round(progress * 100) })}>
-              <View style={[s.progressFill, { width: `${Math.round(progress * 100)}%`, backgroundColor: progress < 0.3 ? C.tomato : C.mint }]} />
+            <Text style={s.gapLabel}>{t('game.chase.gapLabel')}</Text>
+            <View
+              style={[s.progressTrack, meterFlash && { borderColor: C.tomato, backgroundColor: '#FFD6D6' }]}
+              accessibilityLabel={t('game.chase.gapA11y', { pct: Math.round(progress * 100) })}
+            >
+              <View
+                style={[
+                  s.progressFill,
+                  {
+                    width: `${Math.round(progress * 100)}%`,
+                    backgroundColor: lowGap ? C.tomato : C.mint,
+                    opacity: meterFlash ? 0.45 : 1
+                  }
+                ]}
+              />
             </View>
           </View>
         ) : !run.stage.endless ? (
@@ -172,10 +237,10 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
       </View>
 
       <View
-        style={[s.stage, { maxHeight: Math.round(winWidth * 0.95) }]}
+        style={[s.stage, { minHeight: stageTargetH }]}
         onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
         {...pan.panHandlers}
-        accessible={!paused}
+        accessible={!paused && countdown === null}
         accessibilityLabel={t('game.playAreaA11y')}
       >
         {width > 0 && (
@@ -199,7 +264,7 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
                 </G>
               ))}
               {run.stage.chase && (
-                <G transform={`translate(${chaserX} ${GROUND - 38})`}>
+                <G transform={`translate(${chaserX} ${GROUND - 38 - chaserBounce})`}>
                   <Chaser chaser={stage.chaser} />
                 </G>
               )}
@@ -224,6 +289,13 @@ export default function RunnerScreen({ stage, pet, wardrobe, faceUri, seed, star
                 <PowerIcon type={k} />
               </Svg>
             ))}
+          </View>
+        )}
+        {!paused && countdown !== null && !reduceMotion && countdown > 0 && (
+          <View style={s.countdownOverlay} pointerEvents="none">
+            <View style={s.countdownBubble}>
+              <Text style={s.countdownText}>{countdown}</Text>
+            </View>
           </View>
         )}
         {paused && (
@@ -307,8 +379,9 @@ const s = StyleSheet.create({
   hudBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center' },
   hudBtnText: { fontSize: 18 },
   hearts: { fontSize: 17, letterSpacing: -1 },
-  chaseMeterWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  chaseMeterWrap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 5 },
   chaserEmoji: { fontSize: 18 },
+  gapLabel: { fontFamily: F.bold, fontSize: 13, color: C.ink },
   progressTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: C.mint },
   scoreBox: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
@@ -317,14 +390,17 @@ const s = StyleSheet.create({
   multPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 2, borderColor: C.ink, backgroundColor: C.butter },
   multText: { fontFamily: F.bold, fontSize: 15, color: C.ink },
   treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 50, textAlign: 'right' },
-  // A little sky above the 400 x 220 world, so jumps have room on screen.
+  // About 60% of the screen height goes to the game view so jumps have room on screen.
   stage: { flex: 1, minHeight: 260, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },
+  countdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9, elevation: 9, alignItems: 'center', justifyContent: 'center' },
+  countdownBubble: { width: 84, height: 84, borderRadius: 42, borderWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.butter, alignItems: 'center', justifyContent: 'center' },
+  countdownText: { fontFamily: F.bold, fontSize: 44, color: C.ink },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10, backgroundColor: 'rgba(238,231,255,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },
   overlayTitle: { fontFamily: F.bold, fontSize: 26, color: C.ink, textAlign: 'center' },
   overlaySub: { fontFamily: F.regular, fontSize: 15, color: C.inkSoft, textAlign: 'center', marginTop: 6, lineHeight: 20 },
   overlayButtons: { flexDirection: 'row', gap: 10, marginTop: 14, flexWrap: 'wrap', justifyContent: 'center' },
-  controls: { flex: 1, flexDirection: 'row', gap: 12, padding: 14, minHeight: 140 },
-  ctrl: { flex: 1, height: '100%', borderRadius: 24, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 18 },
-  ctrlText: { fontFamily: F.bold, fontSize: 20, color: C.ink, textAlign: 'center' }
+  controls: { flexDirection: 'row', gap: 12, paddingHorizontal: 14, paddingVertical: 10, height: 92 },
+  ctrl: { flex: 1, height: '100%', borderRadius: 22, borderWidth: INK_WIDTH, borderColor: C.ink, alignItems: 'center', justifyContent: 'center', paddingVertical: 10 },
+  ctrlText: { fontFamily: F.bold, fontSize: 19, color: C.ink, textAlign: 'center' }
 });

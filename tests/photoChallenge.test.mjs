@@ -13,7 +13,7 @@ import {
 } from '../src/game/photoChallenge.js';
 import { calls } from './stubs/imagemanip.mjs';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { queuePhoto, queuePhotoDelete, discardQueuedPhotos, getStatus } from '../src/contribute/contributions.js';
+import { queuePhoto, queuePhotoDelete, discardQueuedPhotos, getStatus, canShareClips } from '../src/contribute/contributions.js';
 
 const pet = { id: 'p0123456789abcdef', name: 'Bruno', species: 'dog', breedId: 'golden' };
 const asset = { uri: 'file:///picked/IMG_0001.jpg', width: 4000, height: 3000 };
@@ -67,12 +67,20 @@ test('re-encoding goes through the image manipulator as a fresh JPEG, shrunk whe
   assert.ok(calls.some((c) => c[0] === 'save'));
 });
 
-test('photos upload only with clip sharing AND the separate photo choice', async () => {
+test('photos and clips upload only after explicit opt-in (shareClips === null never uploads)', async () => {
+  assert.equal(canShareClips(null), false, 'shareClips === null (before consent screen) treats sharing as off');
+  assert.equal(canShareClips(false), false);
+  assert.equal(canShareClips(undefined), false);
+  assert.equal(canShareClips(true), true);
   assert.equal(shouldUploadPhoto({ shareClips: true, sharePhotos: true }), true);
   assert.equal(shouldUploadPhoto({ shareClips: true, sharePhotos: false }), false);
   assert.equal(shouldUploadPhoto({ shareClips: false, sharePhotos: true }), false);
   assert.equal(shouldUploadPhoto({ shareClips: null, sharePhotos: true }), false);
   assert.equal(shouldUploadPhoto({ shareClips: true }), false, 'photo sharing defaults to off');
+
+  const unasked = recorder({ canUpload: shouldUploadPhoto({ shareClips: null, sharePhotos: true }) });
+  await saveMoment({ asset, pet, situation: 'door' }, unasked.deps);
+  assert.ok(!unasked.log.some((l) => l[0] === 'upload'), 'shareClips === null never uploads photos');
 
   const off = recorder({ canUpload: shouldUploadPhoto({ shareClips: true, sharePhotos: false }) });
   await saveMoment({ asset, pet, situation: 'door' }, off.deps);

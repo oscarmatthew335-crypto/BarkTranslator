@@ -1,12 +1,13 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
 import Svg from 'react-native-svg';
 import { C, F } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
+import { shouldShowHowTo, recordModeRun } from '../../game/gameStore';
 import { recordStage, nextStageAfter, totalStars, suggestedStage, isUnlocked } from '../../game/progress';
-import { stagesFor } from '../../game/stages';
+import { stagesFor, dailyStage, milestonesReached, milestoneReward } from '../../game/stages';
 import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
@@ -25,9 +26,8 @@ import useMoments from '../../game/useMoments';
 import { challengeSituation, saveMoment, reencodeWithoutMetadata, shouldUploadPhoto, uploadMeta, PHOTO_REWARD } from '../../game/photoChallenge';
 import { queuePhoto } from '../../contribute/contributions';
 import { dayKey, dailySeed, updateStreak, streakShown, saverAvailable, challengeFor, advanceChallenge, CHALLENGE_REWARD } from '../../game/daily';
-import { dailyStage } from '../../game/stages';
 import { buy, toggleWear, setColour } from '../../game/wardrobe';
-import { setGameSound } from '../../game/sfx';
+import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
 
@@ -35,7 +35,7 @@ const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings }) {
+export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const { ready, game, options, updateGame, setOptions } = useGame(pet);
@@ -46,6 +46,12 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const today = dayKey();
   const photosToday = game?.photoDay === today ? game.photosToday || 0 : 0;
   const situation = challengeSituation(today, pet.id, photosToday);
+
+  useEffect(() => {
+    onRunningChange?.(screen.name === 'run');
+    return () => onRunningChange?.(false);
+  }, [screen.name, onRunningChange]);
+
   const showNotice = useCallback(
     (message, action) =>
       Alert.alert(
@@ -59,13 +65,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   // Power-ups waiting from a treat round or photo challenge go into the
   // next stage played.
   const startStage = useCallback(
-    (stage, extraPowerUps = []) => {
+    (stage, extraPowerUps = [], { fromReplay = false } = {}) => {
       count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
       const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
-      if (game?.powerUps?.length) updateGame((g) => ({ ...g, powerUps: [] }));
+      const showHowTo = !fromReplay && shouldShowHowTo(game?.modeRuns, stage);
+      updateGame((g) => ({
+        ...g,
+        powerUps: g.powerUps?.length ? [] : g.powerUps,
+        modeRuns: recordModeRun(g.modeRuns, stage)
+      }));
       // The daily run is the same course for everyone with this pet type today.
       const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
-      setScreen({ name: 'run', stage, seed, powerUps, key: Date.now() });
+      setScreen({ name: 'run', stage, seed, powerUps, showHowTo, key: Date.now() });
     },
     [game, updateGame]
   );
@@ -83,8 +94,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         : result.daily && game.daily.day === day
         ? game.daily.best || 0
         : 0;
-      const newBest = isMode && result.score > prevBest && result.score > 0;
+      const newBest = isMode && prevBest > 0 && result.score > prevBest;
+      if (newBest) gameNewBest();
       const bestScore = isMode ? Math.max(prevBest, result.score || 0) : 0;
+      const reached = result.endless
+        ? milestonesReached('endless', prevBest, result.score)
+        : result.chase
+        ? milestonesReached('chase', prevBest, result.score)
+        : [];
+      const tierBonus = milestoneReward(reached);
       const rewardLine = newBest ? pickRewardLine(pet, { lang }).text : null;
       const caughtLine = result.chase ? pickCaughtLine(pet, { lang }).text : null;
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
@@ -92,8 +110,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       updateGame((g) => ({
         ...g,
         progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
-        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0),
-        lifetimeTreats: g.lifetimeTreats + result.treats,
+        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus,
+        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus,
         streak: updateStreak(g.streak, day).streak,
         challenge,
         bestScores: {
@@ -118,7 +136,9 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         result,
         stage: sc.stage,
         bestScore,
+        previousBest: prevBest,
         newBest,
+        milestones: reached,
         rewardLine,
         caughtLine,
         roundItems,
@@ -271,8 +291,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             ? game.daily.best || 0
             : 0
         }
+        showHowTo={screen.showHowTo}
         reduceMotion={reduceMotion}
         soundOn={options.sound}
+        vibrationOn={options.vibration !== false}
         onFinish={finish}
         onQuit={() => setScreen({ name: 'hub' })}
         onFps={recordFps}
@@ -311,18 +333,20 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         stage={screen.stage}
         next={next}
         bestScore={screen.bestScore}
+        previousBest={screen.previousBest}
         newBest={screen.newBest}
+        milestones={screen.milestones}
         rewardLine={screen.rewardLine}
         caughtLine={screen.caughtLine}
         challengeDone={screen.challengeDone}
         treatRoundCount={screen.roundItems?.length || 0}
         onTreatRound={startRound}
+        onPhotoChallenge={() => setScreen({ name: 'photo' })}
+        photoSituation={situation}
         onNext={() => startStage(next)}
-        onReplay={() => startStage(screen.stage)}
+        onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
         onMap={() => setScreen({ name: 'hub' })}
-      >
-        <PhotoCard pet={pet} situation={situation} onPress={() => setScreen({ name: 'photo' })} />
-      </StageEnd>
+      />
     );
   }
 
@@ -436,8 +460,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             setOptions({ sound: !options.sound });
           }}
         />
+        <StickerButton
+          small
+          color={C.paper}
+          emoji={options.vibration !== false ? '📳' : '📴'}
+          label={options.vibration !== false ? t('game.vibration.on') : t('game.vibration.off')}
+          onPress={() => {
+            const nextVib = !(options.vibration !== false);
+            setGameVibration(nextVib);
+            setOptions({ vibration: nextVib });
+          }}
+        />
       </View>
-      <Text style={s.footnote}>{t('game.footnote')}</Text>
     </ScrollView>
   );
 }

@@ -49,6 +49,7 @@ function PetApp() {
   const [facing, setFacing] = useState('back');
   const [torch, setTorch] = useState(false);
   const [activeTab, setActiveTab] = useState('play');
+  const [gameRunning, setGameRunning] = useState(false);
   const [petsOpen, setPetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const cameraRef = useRef(null);
@@ -62,7 +63,13 @@ function PetApp() {
   }, []);
 
   const cameraOn = Boolean(camPerm?.granted && cameraWanted);
-  const t = useTranslate({ data, cameraRef, cameraOn, shareCardRef, scannerOpen: activeTab === 'scanner' });
+  const t = useTranslate({
+    data,
+    cameraRef,
+    cameraOn,
+    shareCardRef,
+    scannerOpen: activeTab === 'scanner' && data.shareClips !== null
+  });
   const { pet, species } = data;
 
   useIncomingShareClip((clip) => {
@@ -106,52 +113,50 @@ function PetApp() {
         <AgeCheck onConfirm={() => data.updateSettings({ ageConfirmed: true })} />
       </I18nProvider>
     );
-  if (data.shareClips === null)
-    return (
-      <I18nProvider language={data.settings.language}>
-        <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />
-      </I18nProvider>
-    );
 
   const listening = t.bark.phase !== 'idle' || t.importingClip;
+  const hideTabBar = activeTab === 'play' && gameRunning;
 
   return (
     <I18nProvider language={data.settings.language}>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.main}>
-        {activeTab === 'scanner' && (
-          <ScannerScreen
-            pet={pet}
-            pets={data.pets}
-            species={species}
-            breed={data.breed}
-            onOpenPets={() => setPetsOpen(true)}
-            onOpenSettings={() => setSettingsOpen(true)}
-            cameraRef={cameraRef}
-            cameraOn={cameraOn}
-            onToggleCamera={toggleCamera}
-            facing={facing}
-            onFlip={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
-            torch={torch}
-            onTorch={() => setTorch((v) => !v)}
-            recorder={t.bark}
-            onPawPress={t.onPawPress}
-            showPawHint={!data.settings.seen.pawHint}
-            onPawHintSeen={() => data.markSeen('pawHint')}
-            currentResult={t.currentResult}
-            onDismissResult={t.dismissResult}
-            notice={t.notice}
-            onReplay={t.speak}
-            onShare={t.shareResult}
-            onTeach={t.openTeach}
-            onConfirmGuess={t.confirmGuess}
-            onChangeContext={(id) => data.updatePet(pet.id, { contextId: id, contextSetAt: Date.now() })}
-            onChangePersonality={(id) => data.updatePet(pet.id, { personality: id })}
-            progress={t.progress}
-            importingClip={t.importingClip}
-            onOpenClipPicker={t.openClipPicker}
-          />
-        )}
+        {activeTab === 'scanner' &&
+          (data.shareClips === null ? (
+            <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />
+          ) : (
+            <ScannerScreen
+              pet={pet}
+              pets={data.pets}
+              species={species}
+              breed={data.breed}
+              onOpenPets={() => setPetsOpen(true)}
+              onOpenSettings={() => setSettingsOpen(true)}
+              cameraRef={cameraRef}
+              cameraOn={cameraOn}
+              onToggleCamera={toggleCamera}
+              facing={facing}
+              onFlip={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+              torch={torch}
+              onTorch={() => setTorch((v) => !v)}
+              recorder={t.bark}
+              onPawPress={t.onPawPress}
+              showPawHint={!data.settings.seen.pawHint}
+              onPawHintSeen={() => data.markSeen('pawHint')}
+              currentResult={t.currentResult}
+              onDismissResult={t.dismissResult}
+              notice={t.notice}
+              onReplay={t.speak}
+              onShare={t.shareResult}
+              onTeach={t.openTeach}
+              onConfirmGuess={t.confirmGuess}
+              onChangeContext={(id) => data.updatePet(pet.id, { contextId: id, contextSetAt: Date.now() })}
+              onChangePersonality={(id) => data.updatePet(pet.id, { personality: id })}
+              progress={t.progress}
+              importingClip={t.importingClip}
+              onOpenClipPicker={t.openClipPicker}
+            />
+          ))}
         {activeTab === 'speak' && <SpeakTab species={species} petName={pet.name} />}
         {activeTab === 'decoder' && <DecoderTab species={species} />}
         {activeTab === 'journal' && (
@@ -182,11 +187,14 @@ function PetApp() {
             shareClips={data.shareClips}
             settings={data.settings}
             onUpdateSettings={data.updateSettings}
+            onRunningChange={setGameRunning}
           />
         )}
       </View>
 
-      <TabBar active={activeTab} onChange={setActiveTab} disabled={listening} species={species} journalCount={data.history.length} />
+      {!hideTabBar && (
+        <TabBar active={activeTab} onChange={setActiveTab} disabled={listening} species={species} journalCount={data.history.length} />
+      )}
 
       <PetsSheet
         visible={petsOpen}

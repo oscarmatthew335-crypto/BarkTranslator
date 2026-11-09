@@ -115,12 +115,13 @@ test('daily challenge: one per day, picks only open stages, completes once, and 
   const a = challengeFor('2026-10-20', 'dog', p);
   assert.deepEqual(a, challengeFor('2026-10-20', 'dog', p));
   const types = new Set();
-  for (let d = 1; d <= 28; d++) {
+  for (let d = 1; d <= 60; d++) {
     const c = challengeFor(`2026-11-${String(d).padStart(2, '0')}`, 'dog', p);
     types.add(c.type);
     if (c.type === 'stars3') assert.equal(c.stageId, STAGES.dog[0].id, 'only the open stage');
   }
-  assert.ok(types.size >= 4);
+  assert.ok(types.size >= 6);
+  for (const k of ['treats', 'endlessScore', 'chaseSeconds', 'combo5']) assert.ok(types.has(k), `missing challenge type ${k}`);
 
   const treats = { day: 'x', id: 'x', type: 'treats', target: 20, count: 0, done: false };
   let r = advanceChallenge(treats, { treats: 12, daily: false, stars: 1, hits: 2 });
@@ -139,12 +140,39 @@ test('daily challenge: one per day, picks only open stages, completes once, and 
   assert.equal(advanceChallenge(clean, { hits: 1 }).justDone, false);
   assert.equal(advanceChallenge(clean, { hits: 0 }).justDone, true);
   assert.equal(advanceChallenge(clean, { hits: 0, daily: true }).justDone, false);
-  // Endless and chase runs are not stages: they only count toward the treats challenge.
+  // Endless and chase runs are not stages: they do not count as stages or clean stages,
+  // but they DO count toward treats and the new mode challenges (endlessScore, chaseSeconds, combo5).
   for (const mode of [{ endless: true }, { chase: true }]) {
     assert.equal(advanceChallenge(clean, { hits: 0, ...mode }).justDone, false, 'a no-bump endless/chase run is not a clean stage');
     assert.equal(advanceChallenge({ type: 'stages', target: 1, count: 0, done: false }, { hits: 3, ...mode }).justDone, false, 'an endless/chase run is not a finished stage');
     assert.equal(advanceChallenge({ type: 'treats', target: 5, count: 0, done: false }, { treats: 6, ...mode }).justDone, true, 'treats still count');
   }
+
+  // Score N in Endless challenge
+  const endlessScore = { type: 'endlessScore', target: 400, count: 0, done: false };
+  assert.equal(advanceChallenge(endlessScore, { chase: true, score: 500 }).challenge.count, 0, 'Chase score does not count for Endless');
+  let es = advanceChallenge(endlessScore, { endless: true, score: 260 });
+  assert.equal(es.challenge.count, 260);
+  assert.equal(es.justDone, false);
+  es = advanceChallenge(es.challenge, { endless: true, score: 420 });
+  assert.equal(es.challenge.count, 400);
+  assert.equal(es.justDone, true);
+
+  // Survive N seconds in Chase challenge
+  const chaseSeconds = { type: 'chaseSeconds', target: 45, count: 0, done: false };
+  assert.equal(advanceChallenge(chaseSeconds, { endless: true, seconds: 60 }).challenge.count, 0, 'Endless time does not count for Chase');
+  let cs = advanceChallenge(chaseSeconds, { chase: true, seconds: 30 });
+  assert.equal(cs.challenge.count, 30);
+  assert.equal(cs.justDone, false);
+  cs = advanceChallenge(cs.challenge, { chase: true, seconds: 48 });
+  assert.equal(cs.challenge.count, 45);
+  assert.equal(cs.justDone, true);
+
+  // Reach a x5 combo challenge
+  const combo5 = { type: 'combo5', target: 1, count: 0, done: false };
+  assert.equal(advanceChallenge(combo5, { endless: true, maxCombo: 9, multiplier: 3 }).justDone, false);
+  assert.equal(advanceChallenge(combo5, { endless: true, maxCombo: 10, multiplier: 1 }).justDone, true, 'reaching 10 combo (5x) during the run counts even if reset later');
+  assert.equal(advanceChallenge(combo5, { chase: true, maxCombo: 4, multiplier: 5 }).justDone, true);
   const opened = recordStage(p, { stageId: STAGES.cat[0].id, stars: 1, treats: 1 });
   assert.ok(challengeFor('2026-10-20', 'cat', opened));
 });

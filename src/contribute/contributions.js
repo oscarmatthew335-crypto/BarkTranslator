@@ -27,6 +27,12 @@ const APP_VERSION = appJson?.expo?.version || 'unknown';
 
 export const uploadsConfigured = Boolean(API);
 
+// True only when the owner has explicitly opted in (`shareClips === true`).
+// When `shareClips === null` (not asked yet) or `false`, sharing is off.
+export function canShareClips(shareClips) {
+  return shareClips === true;
+}
+
 // Clips are up to about 0.5 MB, so by default they only upload on Wi-Fi.
 let allowMobileData = false;
 export function setAllowMobileData(on) {

@@ -49,8 +49,11 @@ export const CHUNK_LOOKAHEAD = 1600;
 // Chase mode gap rules (0 = caught, 100 = max lead).
 export const CHASE_GAP_MAX = 100;
 export const CHASE_GAP_START = 70;
-export const CHASE_SHRINK_RATE = 3; // shrinks slowly over time (per second)
-export const CHASE_HIT_DROP = 26; // shrinks sharply on each hit
+export const CHASE_SHRINK_START = 2; // shrinks slowly at the start (per second)
+export const CHASE_SHRINK_END = 6; // shrinks faster at CHASE_RAMP_SECONDS (per second)
+export const CHASE_RAMP_SECONDS = 90;
+export const CHASE_SHRINK_RATE = CHASE_SHRINK_START;
+export const CHASE_HIT_DROP = 20; // shrinks on each hit
 export const CHASE_TREAT_GAIN = 4; // each treat grows the gap
 export const CHASE_STREAK_GAIN = 5; // clean streak grows the gap (per second)
 export const CHASE_SPEED_GAIN = 12; // speed power-up grows it more (per second)
@@ -289,8 +292,13 @@ export function modeScore({ dist = 0, distance, treatPoints = 0 } = {}) {
   return Math.max(0, Math.floor(d / DIST_PER_POINT) + Math.floor(treatPoints));
 }
 
-export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false } = {}) {
-  let next = gap - CHASE_SHRINK_RATE * dt;
+export function chaseShrinkRate(t = 0) {
+  const progress = Math.max(0, Math.min(1, (t || 0) / CHASE_RAMP_SECONDS));
+  return CHASE_SHRINK_START + (CHASE_SHRINK_END - CHASE_SHRINK_START) * progress;
+}
+
+export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false, t = 0 } = {}) {
+  let next = gap - chaseShrinkRate(t) * dt;
   if (cleanStreak) next += CHASE_STREAK_GAIN * dt;
   if (speedBoost) next += CHASE_SPEED_GAIN * dt;
   if (treats > 0) next += treats * CHASE_TREAT_GAIN;
@@ -529,7 +537,8 @@ export function step(run, dt, input = {}) {
       hits: frameHits,
       treats: frameTreats,
       cleanStreak,
-      speedBoost: power.speed > 0
+      speedBoost: power.speed > 0,
+      t
     });
     caught = chaseGap <= 0;
   }

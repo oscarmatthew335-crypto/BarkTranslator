@@ -9,7 +9,7 @@ import useBarkRecorder from '../audio/useBarkRecorder';
 import { runTranslationPipeline } from '../audio/pipeline';
 import { addExample, learningProgress, bondLevel } from '../learning/petLearning';
 import { refreshSharedModel } from '../learning/sharedModel';
-import { queueClip, queueLabel, flush } from '../contribute/contributions';
+import { queueClip, queueLabel, flush, canShareClips } from '../contribute/contributions';
 import { keepPhoto, keepAudio, keepVideo, fileExists } from '../storage/photos';
 import { getThumbnailAsync } from 'expo-video-thumbnails';
 import { playFile, playSounds, stopSounds, speakText } from '../audio/sounds';
@@ -62,7 +62,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
   }, [pet?.id, pet?.species]);
 
   useEffect(() => {
-    if (shareClips) flush();
+    if (shareClips === true) flush();
   }, [shareClips]);
 
   // Replay plays the pet's real recorded sound. Reading the words aloud with
@@ -192,7 +192,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
     const videoUri = keepVidOk ? await keepVideo(videoSourceUri, id, { copy: copyVideo }) : null;
     if (!copyVideo && !keepVidOk) discard(videoSourceUri);
     const audioUri = await keepAudio(clipUri, id);
-    const uploadClip = shareClips === true && Boolean(clipUri);
+    const uploadClip = canShareClips(shareClips) && Boolean(clipUri);
 
     const finalEntry = {
       ...entry,
@@ -311,7 +311,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
       const before = await learningProgress(petId);
       await addExample(petId, entry.features, contextId, moods, entry.recordedAt || entry.date);
       const after = await learningProgress(petId);
-      if (entry.clipId) {
+      if (entry.clipId && canShareClips(shareClips)) {
         queueLabel({
           clipId: entry.clipId,
           contextId,
@@ -345,7 +345,7 @@ export default function useTranslate({ data, cameraRef, cameraOn, shareCardRef, 
         );
       }
     },
-    [pet, updateEntry, showNotice]
+    [pet, updateEntry, showNotice, shareClips]
   );
 
   // One-tap answer to "Did I get it right?"

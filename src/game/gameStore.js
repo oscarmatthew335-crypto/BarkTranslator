@@ -17,6 +17,34 @@ export const emptyBestScores = () => ({
   cat: { endless: 0, chase: 0 }
 });
 
+export const HOW_TO_RUN_LIMIT = 2;
+
+export const emptyModeRuns = () => ({
+  endless: 0,
+  chase: 0,
+  daily: 0,
+  stage: 0
+});
+
+export function modeKeyFor(stage) {
+  if (!stage) return 'stage';
+  if (stage.endless || stage.mode === 'endless') return 'endless';
+  if (stage.chase || stage.mode === 'chase') return 'chase';
+  if (stage.daily || stage.mode === 'daily') return 'daily';
+  return 'stage';
+}
+
+export function shouldShowHowTo(modeRuns, modeOrStage) {
+  const key = typeof modeOrStage === 'string' ? modeOrStage : modeKeyFor(modeOrStage);
+  return (modeRuns?.[key] || 0) < HOW_TO_RUN_LIMIT;
+}
+
+export function recordModeRun(modeRuns, modeOrStage) {
+  const key = typeof modeOrStage === 'string' ? modeOrStage : modeKeyFor(modeOrStage);
+  const base = { ...emptyModeRuns(), ...(modeRuns || {}) };
+  return { ...base, [key]: (base[key] || 0) + 1 };
+}
+
 export function emptyPetGame(pet) {
   return {
     progress: emptyProgress(),
@@ -26,6 +54,7 @@ export function emptyPetGame(pet) {
     streak: emptyStreak(),
     daily: { day: null, best: 0, plays: 0 },
     bestScores: { endless: 0, chase: 0 },
+    modeRuns: emptyModeRuns(),
     challenge: { day: null, id: null, count: 0, done: false },
     round: emptyRoundState(),
     powerUps: [], // waiting for the next stage (from treat rounds and photo challenges)
@@ -33,7 +62,7 @@ export function emptyPetGame(pet) {
   };
 }
 
-export const emptyGameState = () => ({ pets: {}, bestScores: emptyBestScores(), options: { sound: true } });
+export const emptyGameState = () => ({ pets: {}, bestScores: emptyBestScores(), options: { sound: true, vibration: true } });
 
 export function bestScoreFor(state, species, mode) {
   const sp = species === 'cat' ? 'cat' : 'dog';
@@ -107,6 +136,7 @@ export function petGame(state, pet) {
       endless: Math.max(speciesBest.endless || 0, saved.bestScores?.endless || 0),
       chase: Math.max(speciesBest.chase || 0, saved.bestScores?.chase || 0)
     },
+    modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     round: { ...base.round, ...(saved.round || {}) }
   };
 }
