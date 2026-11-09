@@ -74,11 +74,31 @@ Check the following data types:
   - ✅ **App functionality** (training the shared pet-sound model)
 
 ### 5. Device or other IDs
-- **Collected:** Yes (a randomly generated 32-hex install ID stored in `AsyncStorage` under `pawlingo:installId`, sent in the `X-Install-Id` header—not hardware IMEI or Advertising ID)
-- **Shared with third parties:** No
+- **Collected:** Yes (both a randomly generated 32-hex install ID stored in `AsyncStorage` under `pawlingo:installId` sent in the `X-Install-Id` header, and the Android Advertising ID collected by the Google Mobile Ads / AdMob SDK in `src/game/ads.js`)
+- **Shared with third parties:** **Yes** (the Advertising ID and device identifiers are shared with Google AdMob for serving and measuring ads)
 - **Is this data required or optional?**
-  - **Required** (used for daily rate limiting and allowing the user to delete their shared clips via `DELETE /me`)
+  - **Required** (used for daily rate limiting, fulfilling `DELETE /me` erasure requests, and Google AdMob ad delivery / fraud prevention; users can reset or delete their Advertising ID in Android system settings or manage consent via Google UMP)
 - **Why is this user data collected?**
   - ✅ **App functionality**
-  - ✅ **Fraud prevention, security, and compliance** (rate-limiting `/clips`, `/video`, `/errors`, `/extract`, `/photo` and fulfilling `DELETE /me` erasure requests)
+  - ✅ **Advertising or marketing** (Google AdMob rewarded and interstitial ads in `src/game/ads.js`)
+  - ✅ **Analytics** (ad measurement and performance via AdMob)
+  - ✅ **Fraud prevention, security, and compliance** (rate-limiting `/clips`, `/video`, `/errors`, `/extract`, `/photo`, fulfilling `DELETE /me` erasure requests, and AdMob invalid-traffic detection)
+
+### 6. Financial info → Purchase history
+- **Collected:** Yes (`src/game/purchases.js` uses `expo-iap` / Google Play Billing to purchase and restore the one-time `pawlingo_premium` unlock)
+- **Shared with third parties:** No (processed directly by Google Play Billing; Pawlingo never receives credit card or bank details)
+- **Is this data required or optional?**
+  - **Optional** (only when the user chooses to buy or restore Pawlingo Premium)
+- **Why is this user data collected?**
+  - ✅ **App functionality** (unlocking and restoring Pawlingo Premium benefits: unlimited lives, no interstitial ads, and free Continue)
+
+### 7. App activity → App interactions
+- **Collected:** Yes (Google AdMob SDK collects ad views, taps, and rewarded/interstitial ad interactions in `src/game/ads.js`)
+- **Shared with third parties:** **Yes** (shared with Google AdMob)
+- **Is this data required or optional?**
+  - **Required** (when ads are enabled under UMP consent)
+- **Why is this user data collected?**
+  - ✅ **Advertising or marketing**
+  - ✅ **Analytics**
+  - ✅ **Fraud prevention, security, and compliance**
 

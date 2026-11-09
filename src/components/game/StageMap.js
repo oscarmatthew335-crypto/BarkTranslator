@@ -18,8 +18,8 @@ export function Stars({ n, size = 16 }) {
 }
 
 // One large Play button (Endless) and a smaller Chase button next to/under it,
-// showing best scores and earned milestone tiers.
-export function ModeCards({ species, bestScores = {}, onPlay }) {
+// showing best scores, earned milestone tiers, and lives status.
+export function ModeCards({ species, bestScores = {}, livesStatus = null, onPlay }) {
   const { t } = useI18n();
   const endless = endlessStage(species);
   const chase = chaseStage(species);
@@ -46,6 +46,11 @@ export function ModeCards({ species, bestScores = {}, onPlay }) {
                 {t('game.playButton')}
               </Text>
               {endlessBadges ? <Text style={s.badges}>{endlessBadges}</Text> : null}
+              {livesStatus ? (
+                <View style={s.livesPill}>
+                  <Text style={s.livesPillText}>{livesStatus}</Text>
+                </View>
+              ) : null}
             </View>
             <Text style={s.bigPlaySub}>
               {bestScores.endless > 0 ? `${t('game.endless.title')} · ${t('game.bestScore', { n: bestScores.endless })}` : t('game.endless.sub')}
@@ -67,6 +72,11 @@ export function ModeCards({ species, bestScores = {}, onPlay }) {
               {t('game.chase.title')}
             </Text>
             {chaseBadges ? <Text style={s.badges}>{chaseBadges}</Text> : null}
+            {livesStatus ? (
+              <View style={s.livesPill}>
+                <Text style={s.livesPillText}>{livesStatus}</Text>
+              </View>
+            ) : null}
           </View>
           <Text style={s.locked}>
             {bestScores.chase > 0
@@ -130,6 +140,16 @@ const s = StyleSheet.create({
   bigPlaySub: { fontFamily: F.medium, fontSize: 14, color: C.inkSoft, marginTop: 2 },
   modeTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   badges: { fontSize: 15, letterSpacing: 1 },
+  livesPill: {
+    marginLeft: 'auto',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: C.ink,
+    backgroundColor: C.paper
+  },
+  livesPillText: { fontFamily: F.bold, fontSize: 12, color: C.ink },
   map: { gap: 8 },
   row: { flexDirection: 'row' },
   modeNode: {

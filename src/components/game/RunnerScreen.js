@@ -3,8 +3,10 @@ import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDim
 import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle } from 'react-native-svg';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, newRun, step, visible, resultOf } from '../../game/engine';
+import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
 import { startGameAudio, gameEvent } from '../../game/sfx';
+import { count } from '../../game/counters';
+import { isRewardedReady, showRewardedAd } from '../../game/ads';
 import PetSprite from './PetSprite';
 import Thing, { PowerIcon, Chaser } from './Things';
 import { Backdrop, Midground, Goal } from './Scenery';
@@ -28,6 +30,7 @@ export default function RunnerScreen({
   reduceMotion,
   soundOn,
   vibrationOn = true,
+  premium = false,
   onFinish,
   onQuit,
   onFps
@@ -40,6 +43,8 @@ export default function RunnerScreen({
   const [paused, setPaused] = useState(Boolean(showHowTo));
   const [started, setStarted] = useState(!showHowTo);
   const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : 3));
+  const [continuePrompt, setContinuePrompt] = useState(false);
+  const [continueBusy, setContinueBusy] = useState(false);
   const [, setTick] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { height: winHeight } = useWindowDimensions();
@@ -47,6 +52,8 @@ export default function RunnerScreen({
   finishRef.current = onFinish;
   const fpsRef = useRef(onFps);
   fpsRef.current = onFps;
+  const premiumRef = useRef(premium);
+  premiumRef.current = premium;
 
   const setPause = (p) => {
     pausedRef.current = p;
@@ -113,8 +120,14 @@ export default function RunnerScreen({
         }
         setTick((n) => (n + 1) % 1000000);
         if (next.done) {
-          finishRef.current(resultOf(next));
-          return;
+          if (canContinueRun(next) && (premiumRef.current || isRewardedReady('continue'))) {
+            pausedRef.current = true;
+            count('continuesOffered');
+            setContinuePrompt(true);
+          } else {
+            finishRef.current(resultOf(next));
+            return;
+          }
         }
       } else {
         frames = 0;
@@ -136,6 +149,38 @@ export default function RunnerScreen({
     } else {
       setPause(false);
     }
+  };
+
+  const handleContinue = async () => {
+    if (continueBusy) return;
+    setContinueBusy(true);
+    try {
+      let granted = Boolean(premium);
+      if (!granted) {
+        const res = await showRewardedAd('continue');
+        granted = Boolean(res?.rewarded);
+      }
+      if (granted) {
+        count('continuesTaken');
+        runRef.current = continueRun(runRef.current);
+        input.current = { jump: false, duck: false, swipeDuck: false };
+        setContinuePrompt(false);
+        setPaused(false);
+        pausedRef.current = true;
+        setCountdown(reduceMotion ? 0 : 3);
+        setTick((n) => (n + 1) % 1000000);
+      } else {
+        setContinuePrompt(false);
+        finishRef.current(resultOf(runRef.current));
+      }
+    } finally {
+      setContinueBusy(false);
+    }
+  };
+
+  const handleDeclineContinue = () => {
+    setContinuePrompt(false);
+    finishRef.current(resultOf(runRef.current));
   };
 
   const pan = useMemo(() => {
@@ -298,7 +343,34 @@ export default function RunnerScreen({
             </View>
           </View>
         )}
-        {paused && (
+        {continuePrompt && (
+          <View style={s.overlay}>
+            <Text style={s.overlayTitle}>
+              {stage.chase
+                ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
+                : t('game.end.endlessDone')}
+            </Text>
+            <Text style={s.overlaySub}>
+              {stage.chase ? t('game.continueRun.chaseSub') : t('game.continueRun.endlessSub')}
+            </Text>
+            <View style={s.overlayButtons}>
+              <StickerButton
+                label={premium ? t('game.continueRun.freeBtn') : t('game.continueRun.adBtn')}
+                emoji={premium ? '👑' : '🎬'}
+                color={C.butter}
+                disabled={continueBusy}
+                onPress={handleContinue}
+              />
+              <StickerButton
+                label={t('game.continueRun.endBtn')}
+                color={C.paper}
+                disabled={continueBusy}
+                onPress={handleDeclineContinue}
+              />
+            </View>
+          </View>
+        )}
+        {paused && !continuePrompt && (
           <View style={s.overlay}>
             <Text style={s.overlayTitle}>{started ? t('game.paused') : t(stage.nameKey)}</Text>
             {!started && (

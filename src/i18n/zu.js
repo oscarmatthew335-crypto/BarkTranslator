@@ -188,5 +188,6 @@ export default {
   'share.freeOn': 'Mahhala ku-',
   'settings.waiting': 'Kulindile ukuthunyelwa: iziqeshana ezi-{clips}, izimpendulo ezi-{answers}',
   'settings.noServer': 'Lokhu kwakhiwa kokuhlola akunayo iseva, ngakho iziqeshana ziyalinda.',
-  'settings.lastTry': 'Umzamo wokugcina: {detail}'
+  'settings.lastTry': 'Umzamo wokugcina: {detail}',
+  'settings.adPrivacyOptions': 'Izilungiselelo zobumfihlo bezikhangiso'
 };

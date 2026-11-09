@@ -6,6 +6,9 @@ Pawlingo: Dog & Cat Translator
 ## Short Description (max 80 chars)
 Translate dog barks & cat meows, teach your pet's real sounds & share videos!
 
+## Monetization Disclosure
+Contains ads · In-app purchases
+
 ## Full Description (max 4,000 chars)
 Ever wished you knew what your dog's dramatic sigh at the braai or your cat's 3 AM hallway yowl really meant?
 
@@ -20,7 +23,7 @@ Unlike novelty apps that invent a quote even in a silent room, Pawlingo measures
 ### 🐶 DOG MODE & 🐱 CAT MODE (12 VOICES UNLOCKED)
 Switch between Dog and Cat profiles—or add all your pets in one household:
 - **Dog Voices**: Local SA Boet, Grumpy Old Man, Sassy Diva, Officer K-9, Velcro Puppy & Sir Barkington.
-- **Cat Voices**: Sir Whiskers, 3 AM Gremlin, Judgy Aunty, Drama Moggie, Laser Operative & Purr Machine.
+- **Cat Voices**: Local SA Chommie, Grumpy Old Tom, Drama Queen, Evil Overlord, Chaos Kitten & Pharaoh's Heir.
 - **Fits Your Home & Time of Day**: Mark each pet as *Indoors* or *Has a garden* so indoor cats never talk about backyard fences, and midnight snack lines only appear at night.
 
 ### 🎬 SHAREABLE VIDEO & PICTURE CARDS

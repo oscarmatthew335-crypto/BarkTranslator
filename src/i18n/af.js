@@ -188,5 +188,6 @@ export default {
   'share.freeOn': 'Gratis op',
   'settings.waiting': 'Wag om te stuur: {clips} greep/grepe, {answers} antwoord(e)',
   'settings.noServer': 'Hierdie toetsweergawe het nie ’n bediener nie, so grepe wag.',
-  'settings.lastTry': 'Laaste poging: {detail}'
+  'settings.lastTry': 'Laaste poging: {detail}',
+  'settings.adPrivacyOptions': 'Advertensie-privaatheidsinstellings'
 };

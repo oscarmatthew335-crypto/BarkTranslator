@@ -29,6 +29,8 @@ import { getSpecies } from './src/species';
 import useIncomingShareClip from './src/share/incomingShare';
 import { I18nProvider, translate } from './src/i18n';
 import { countSession } from './src/game/counters';
+import { initAds } from './src/game/ads';
+import { initPurchases } from './src/game/purchases';
 
 installCrashReporting();
 
@@ -71,6 +73,15 @@ function PetApp() {
     scannerOpen: activeTab === 'scanner' && data.shareClips !== null
   });
   const { pet, species } = data;
+  const readyForMonetization = Boolean(data.loaded && pet && data.settings.ageConfirmed);
+
+  // Initialize UMP consent + AdMob and Play Billing only after onboarding and
+  // age confirmation are complete (Android only; safe no-op on iOS).
+  useEffect(() => {
+    if (!readyForMonetization) return;
+    initAds();
+    initPurchases();
+  }, [readyForMonetization]);
 
   useIncomingShareClip((clip) => {
     if (!pet) return;

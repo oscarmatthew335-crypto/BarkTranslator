@@ -7,6 +7,11 @@ import { getStatus, onStatusChange, flush, deleteMyData, discardQueued, discardQ
 import { resetExamples } from '../learning/petLearning';
 import { useI18n, LANGUAGE_OPTIONS } from '../i18n';
 import GameStatsSheet from './game/GameStatsSheet';
+import PremiumSheet from './game/PremiumSheet';
+import useGame from '../game/useGame';
+import { restorePremium } from '../game/purchases';
+import { getAdsStatus, openPrivacyOptions } from '../game/ads';
+import { count } from '../game/counters';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 export const PRIVACY_URL = API ? `${API}/privacy` : null;
@@ -17,6 +22,9 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
   const [status, setStatus] = useState(null);
   const [installId, setInstallId] = useState('');
   const [statsOpen, setStatsOpen] = useState(false);
+  const [premiumOpen, setPremiumOpen] = useState(false);
+  const { premium, setPremium } = useGame(pet);
+  const adsStatus = getAdsStatus();
   useEffect(() => {
     getInstallId().then(setInstallId);
   }, []);
@@ -171,6 +179,49 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
               {t('settings.clipPrivacyNote')}
             </Text>
 
+            <Text style={s.section}>👑 {t('game.premium.title')}</Text>
+            <View style={s.box}>
+              <Text style={s.rowSub}>
+                {premium ? `✅ ${t('game.premium.active')}` : t('game.premium.sub')}
+              </Text>
+              {!premium && (
+                <Pressable
+                  onPress={() => {
+                    count('premiumScreenShown');
+                    setPremiumOpen(true);
+                  }}
+                  accessibilityRole="button"
+                  style={s.linkRow}
+                >
+                  <Text style={s.link}>{t('game.premium.cardBtn')}</Text>
+                </Pressable>
+              )}
+              <Pressable
+                onPress={async () => {
+                  const ok = await restorePremium();
+                  if (ok) {
+                    setPremium(true);
+                    Alert.alert('', t('game.premium.restoredMsg'));
+                  } else {
+                    Alert.alert('', t('game.premium.nothingToRestore'));
+                  }
+                }}
+                accessibilityRole="button"
+                style={s.linkRow}
+              >
+                <Text style={s.link}>{t('game.premium.restore')}</Text>
+              </Pressable>
+              {adsStatus.privacyOptionsAvailable && (
+                <Pressable
+                  onPress={() => openPrivacyOptions()}
+                  accessibilityRole="button"
+                  style={s.linkRow}
+                >
+                  <Text style={s.link}>{t('settings.adPrivacyOptions')}</Text>
+                </Pressable>
+              )}
+            </View>
+
             <Text style={s.section}>{pet.name}</Text>
             <View style={s.box}>
               <Pressable onPress={confirmReset} accessibilityRole="button" style={s.linkRow}>
@@ -207,6 +258,12 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
         </Pressable>
       </Pressable>
       <GameStatsSheet visible={statsOpen} onClose={() => setStatsOpen(false)} />
+      <PremiumSheet
+        visible={premiumOpen}
+        premium={premium}
+        onGranted={(val) => setPremium(Boolean(val))}
+        onClose={() => setPremiumOpen(false)}
+      />
     </Modal>
   );
 }

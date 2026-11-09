@@ -9,6 +9,8 @@ import { emptyProgress } from './progress';
 import { emptyWardrobe } from './wardrobe';
 import { emptyStreak } from './daily';
 import { emptyRoundState } from './treatRound';
+import { emptyLives } from './lives';
+import { emptyInterstitialState } from './interstitial';
 
 const KEY = 'pawlingo:game:v1';
 
@@ -62,7 +64,14 @@ export function emptyPetGame(pet) {
   };
 }
 
-export const emptyGameState = () => ({ pets: {}, bestScores: emptyBestScores(), options: { sound: true, vibration: true } });
+export const emptyGameState = () => ({
+  pets: {},
+  bestScores: emptyBestScores(),
+  lives: emptyLives(),
+  interstitial: emptyInterstitialState(),
+  premium: false,
+  options: { sound: true, vibration: true }
+});
 
 export function bestScoreFor(state, species, mode) {
   const sp = species === 'cat' ? 'cat' : 'dog';
@@ -98,7 +107,15 @@ export async function loadGame() {
         dog: { ...def.bestScores.dog, ...(data.bestScores?.dog || {}) },
         cat: { ...def.bestScores.cat, ...(data.bestScores?.cat || {}) }
       };
-      return { ...def, ...data, bestScores, options: { ...def.options, ...(data.options || {}) } };
+      return {
+        ...def,
+        ...data,
+        bestScores,
+        lives: { ...def.lives, ...(data.lives || {}) },
+        interstitial: { ...def.interstitial, ...(data.interstitial || {}) },
+        premium: Boolean(data.premium),
+        options: { ...def.options, ...(data.options || {}) }
+      };
     }
   } catch (_) {}
   return emptyGameState();
@@ -120,6 +137,13 @@ export async function saveBestScore(species, mode, score) {
   const res = recordBestScore(state, species, mode, score);
   await saveGame(res.state);
   return res;
+}
+
+export async function savePremiumState(premium = true) {
+  const state = await loadGame();
+  if (Boolean(state.premium) !== Boolean(premium)) {
+    await saveGame({ ...state, premium: Boolean(premium) });
+  }
 }
 
 // A pet's game data, filling in anything added since it was saved.

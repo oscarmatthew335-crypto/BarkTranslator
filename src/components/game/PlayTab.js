@@ -30,6 +30,12 @@ import { buy, toggleWear, setColour } from '../../game/wardrobe';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
+import LivesSheet from './LivesSheet';
+import PremiumSheet from './PremiumSheet';
+import { livesNow, canStartRun, useLife, addLife, formatWait, MAX_LIVES } from '../../game/lives';
+import { recordRunForInterstitial, shouldShowInterstitial, recordInterstitialShown } from '../../game/interstitial';
+import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } from '../../game/ads';
+import { onPurchaseEvent } from '../../game/purchases';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -38,14 +44,34 @@ const MAX_WAITING_POWER_UPS = 4;
 export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
-  const { ready, game, options, updateGame, setOptions } = useGame(pet);
+  const { ready, game, lives, interstitial, premium, options, updateGame, updateLives, updateInterstitial, setPremium, setOptions } = useGame(pet);
   const [screen, setScreen] = useState({ name: 'hub' });
+  const [livesSheet, setLivesSheet] = useState({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
+  const [premiumOpen, setPremiumOpen] = useState(false);
+  const [adsStatus, setAdsStatus] = useState(() => getAdsStatus());
+  const [now, setNow] = useState(() => Date.now());
   const moments = useMoments();
   const petMoments = moments.all.filter((m) => m.petId === pet.id);
   const faceUri = petMoments.find((m) => m.id === game?.faceMomentId)?.uri || null;
   const today = dayKey();
   const photosToday = game?.photoDay === today ? game.photosToday || 0 : 0;
   const situation = challengeSituation(today, pet.id, photosToday);
+
+  useEffect(() => onAdsStatusChange(setAdsStatus), []);
+  useEffect(
+    () =>
+      onPurchaseEvent((ev) => {
+        if (ev?.type === 'granted' || ev?.type === 'restored') setPremium(true);
+      }),
+    [setPremium]
+  );
+
+  useEffect(() => {
+    if (screen.name !== 'hub') return undefined;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [screen.name]);
 
   useEffect(() => {
     onRunningChange?.(screen.name === 'run');
@@ -62,11 +88,28 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     [t]
   );
 
+  const openPremium = useCallback(() => {
+    count('premiumScreenShown');
+    setPremiumOpen(true);
+  }, []);
+
   // Power-ups waiting from a treat round or photo challenge go into the
   // next stage played.
   const startStage = useCallback(
-    (stage, extraPowerUps = [], { fromReplay = false } = {}) => {
-      count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
+    (stage, extraPowerUps = [], { fromReplay = false, skipLifeCheck = false } = {}) => {
+      const isEndlessOrChase = Boolean(stage.endless || stage.chase);
+      if (isEndlessOrChase && !skipLifeCheck) {
+        const ts = Date.now();
+        if (!canStartRun(lives, ts, { premium })) {
+          count('livesSheetShown');
+          setLivesSheet({ open: true, pendingStage: stage, pendingPowerUps: extraPowerUps, fromReplay });
+          return;
+        }
+        updateLives((l) => useLife(l, ts, { premium }));
+      }
+      if (stage.endless) count('endlessRuns');
+      else if (stage.chase) count('chaseRuns');
+      else count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
       const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
       const showHowTo = !fromReplay && shouldShowHowTo(game?.modeRuns, stage);
       updateGame((g) => ({
@@ -78,12 +121,13 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
       setScreen({ name: 'run', stage, seed, powerUps, showHowTo, key: Date.now() });
     },
-    [game, updateGame]
+    [game, lives, premium, updateGame, updateLives]
   );
 
   const finish = useCallback(
     (result) => {
       const isMode = Boolean(result.daily || result.endless || result.chase);
+      const isEndlessOrChase = Boolean(result.endless || result.chase);
       if (!isMode && !result.failed) count('stagesFinished');
       if (result.failed) count('stagesLost');
       const day = dayKey();
@@ -144,8 +188,21 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         roundItems,
         challengeDone: justDone
       }));
+      if (isEndlessOrChase) {
+        const mode = result.endless ? 'endless' : 'chase';
+        const ts = Date.now();
+        const nextInter = recordRunForInterstitial(interstitial, { mode });
+        updateInterstitial(() => nextInter);
+        if (shouldShowInterstitial({ ...nextInter, mode, newBest, premium }, ts)) {
+          showInterstitialAd().then((shown) => {
+            if (shown) {
+              updateInterstitial((cur) => recordInterstitialShown(cur, Date.now()));
+            }
+          });
+        }
+      }
     },
-    [updateGame, pet, history, game, lang]
+    [updateGame, updateInterstitial, interstitial, premium, pet, history, game, lang]
   );
 
   // A treat-round answer. Recordings go through the same path as the
@@ -295,6 +352,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         reduceMotion={reduceMotion}
         soundOn={options.sound}
         vibrationOn={options.vibration !== false}
+        premium={premium}
         onFinish={finish}
         onQuit={() => setScreen({ name: 'hub' })}
         onFps={recordFps}
@@ -318,35 +376,77 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       />
     );
 
+  const handleWatchAdForLife = useCallback(async () => {
+    const res = await showRewardedAd('life');
+    if (res?.rewarded) {
+      const ts = Date.now();
+      updateLives((l) => addLife(l, ts, 1, { premium }));
+      const pending = livesSheet.pendingStage;
+      const pendingPowerUps = livesSheet.pendingPowerUps || [];
+      const fromReplay = Boolean(livesSheet.fromReplay);
+      setLivesSheet({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
+      if (pending) {
+        updateLives((l) => useLife(l, Date.now(), { premium }));
+        startStage(pending, pendingPowerUps, { fromReplay, skipLifeCheck: true });
+      }
+    }
+  }, [livesSheet, premium, startStage, updateLives]);
+
+  const modals = (
+    <>
+      <LivesSheet
+        visible={livesSheet.open}
+        livesState={lives}
+        premium={premium}
+        adReady={adsStatus.rewardedLifeReady}
+        onWatchAd={handleWatchAdForLife}
+        onOpenPremium={() => {
+          setLivesSheet((ls) => ({ ...ls, open: false }));
+          openPremium();
+        }}
+        onClose={() => setLivesSheet((ls) => ({ ...ls, open: false }))}
+      />
+      <PremiumSheet
+        visible={premiumOpen}
+        premium={premium}
+        onGranted={(val) => setPremium(Boolean(val))}
+        onClose={() => setPremiumOpen(false)}
+      />
+    </>
+  );
+
   if (screen.name === 'end') {
     // After a daily run the next thing is the stage to continue with (the daily run is a bonus, not a stage).
     const isEndlessOrChase = Boolean(screen.stage.endless || screen.stage.chase);
     const after = isEndlessOrChase ? null : screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
     const next = after && isUnlocked(game.progress, pet.species, after.id) ? after : null;
     return (
-      <StageEnd
-        pet={pet}
-        species={species}
-        wardrobe={game.wardrobe}
-        faceUri={faceUri}
-        result={screen.result}
-        stage={screen.stage}
-        next={next}
-        bestScore={screen.bestScore}
-        previousBest={screen.previousBest}
-        newBest={screen.newBest}
-        milestones={screen.milestones}
-        rewardLine={screen.rewardLine}
-        caughtLine={screen.caughtLine}
-        challengeDone={screen.challengeDone}
-        treatRoundCount={screen.roundItems?.length || 0}
-        onTreatRound={startRound}
-        onPhotoChallenge={() => setScreen({ name: 'photo' })}
-        photoSituation={situation}
-        onNext={() => startStage(next)}
-        onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
-        onMap={() => setScreen({ name: 'hub' })}
-      />
+      <>
+        <StageEnd
+          pet={pet}
+          species={species}
+          wardrobe={game.wardrobe}
+          faceUri={faceUri}
+          result={screen.result}
+          stage={screen.stage}
+          next={next}
+          bestScore={screen.bestScore}
+          previousBest={screen.previousBest}
+          newBest={screen.newBest}
+          milestones={screen.milestones}
+          rewardLine={screen.rewardLine}
+          caughtLine={screen.caughtLine}
+          challengeDone={screen.challengeDone}
+          treatRoundCount={screen.roundItems?.length || 0}
+          onTreatRound={startRound}
+          onPhotoChallenge={() => setScreen({ name: 'photo' })}
+          photoSituation={situation}
+          onNext={() => startStage(next)}
+          onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
+          onMap={() => setScreen({ name: 'hub' })}
+        />
+        {modals}
+      </>
     );
   }
 
@@ -355,7 +455,14 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
   const dailyBest = game.daily.day === today ? game.daily.best : null;
   const continueStage = suggestedStage(game.progress, pet.species);
+  const livesInfo = livesNow(lives, now, { premium });
+  const livesStatus = livesInfo.unlimited
+    ? '❤️ ∞'
+    : livesInfo.lives < MAX_LIVES
+    ? `❤️ ${livesInfo.lives}/${MAX_LIVES} · ${formatWait(livesInfo.msUntilNext)}`
+    : `❤️ ${livesInfo.lives}/${MAX_LIVES}`;
   return (
+    <>
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
       <Sticker radius={24} innerStyle={s.hero}>
@@ -383,8 +490,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       </Sticker>
 
       <View style={{ marginTop: 14 }}>
-        <ModeCards species={pet.species} bestScores={game.bestScores} onPlay={startStage} />
+        <ModeCards species={pet.species} bestScores={game.bestScores} livesStatus={livesStatus} onPlay={startStage} />
       </View>
+
+      {!premium && (
+        <Sticker radius={22} color={C.mint} style={{ marginTop: 14 }} innerStyle={s.photoCard}>
+          <Text style={s.photoTitle}>👑 {t('game.premium.cardTitle')}</Text>
+          <Text style={s.photoSub}>{t('game.premium.cardSub')}</Text>
+          <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
+            <StickerButton label={t('game.premium.cardBtn')} emoji="👑" small color={C.paper} onPress={openPremium} />
+          </View>
+        </Sticker>
+      )}
 
       {screen.notice ? (
         <Sticker radius={18} color={C.mint} style={{ marginTop: 12 }} innerStyle={s.notice}>
@@ -473,6 +590,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         />
       </View>
     </ScrollView>
+    {modals}
+    </>
   );
 }
 
