@@ -19,9 +19,11 @@ const FILES = {
 
 let players = null;
 let enabled = true;
+let vibrationEnabled = true;
 
-export async function startGameAudio(soundOn) {
+export async function startGameAudio(soundOn, vibrationOn = true) {
   enabled = Boolean(soundOn);
+  vibrationEnabled = vibrationOn !== false;
   try {
     await setAudioModeAsync({ playsInSilentMode: false, allowsRecording: false, interruptionMode: 'mixWithOthers' });
   } catch (_) {}
@@ -37,6 +39,10 @@ export async function startGameAudio(soundOn) {
 
 export function setGameSound(on) {
   enabled = Boolean(on);
+}
+
+export function setGameVibration(on) {
+  vibrationEnabled = Boolean(on);
 }
 
 export function stopGameAudio() {
@@ -63,27 +69,32 @@ export function gameEvent(event) {
   switch (event) {
     case 'jump':
       play('jump');
+      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       break;
     case 'collect':
       play('collect');
-      Haptics.selectionAsync().catch(() => {});
+      if (vibrationEnabled) Haptics.selectionAsync().catch(() => {});
       break;
     case 'power':
     case 'shield':
     case 'smash':
       play('power');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       break;
     case 'hit':
     case 'out':
     case 'caught':
       play('hit');
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       break;
     case 'finish':
       play('goal');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      if (vibrationEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       break;
     default:
   }
+}
+
+export function gameNewBest() {
+  if (vibrationEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
 }

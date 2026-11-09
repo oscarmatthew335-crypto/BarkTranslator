@@ -187,5 +187,6 @@ export default {
   'share.freeOn': 'Free on',
   'settings.waiting': 'Waiting to send: {clips} clip(s), {answers} answer(s)',
   'settings.noServer': 'This test build has no server set up, so clips wait.',
-  'settings.lastTry': 'Last try: {detail}'
+  'settings.lastTry': 'Last try: {detail}',
+  'settings.adPrivacyOptions': 'Ad privacy settings'
 };

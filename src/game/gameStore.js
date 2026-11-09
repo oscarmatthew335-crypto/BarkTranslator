@@ -9,6 +9,8 @@ import { emptyProgress } from './progress';
 import { emptyWardrobe } from './wardrobe';
 import { emptyStreak } from './daily';
 import { emptyRoundState } from './treatRound';
+import { emptyLives } from './lives';
+import { emptyInterstitialState } from './interstitial';
 
 const KEY = 'pawlingo:game:v1';
 
@@ -16,6 +18,34 @@ export const emptyBestScores = () => ({
   dog: { endless: 0, chase: 0 },
   cat: { endless: 0, chase: 0 }
 });
+
+export const HOW_TO_RUN_LIMIT = 2;
+
+export const emptyModeRuns = () => ({
+  endless: 0,
+  chase: 0,
+  daily: 0,
+  stage: 0
+});
+
+export function modeKeyFor(stage) {
+  if (!stage) return 'stage';
+  if (stage.endless || stage.mode === 'endless') return 'endless';
+  if (stage.chase || stage.mode === 'chase') return 'chase';
+  if (stage.daily || stage.mode === 'daily') return 'daily';
+  return 'stage';
+}
+
+export function shouldShowHowTo(modeRuns, modeOrStage) {
+  const key = typeof modeOrStage === 'string' ? modeOrStage : modeKeyFor(modeOrStage);
+  return (modeRuns?.[key] || 0) < HOW_TO_RUN_LIMIT;
+}
+
+export function recordModeRun(modeRuns, modeOrStage) {
+  const key = typeof modeOrStage === 'string' ? modeOrStage : modeKeyFor(modeOrStage);
+  const base = { ...emptyModeRuns(), ...(modeRuns || {}) };
+  return { ...base, [key]: (base[key] || 0) + 1 };
+}
 
 export function emptyPetGame(pet) {
   return {
@@ -26,6 +56,7 @@ export function emptyPetGame(pet) {
     streak: emptyStreak(),
     daily: { day: null, best: 0, plays: 0 },
     bestScores: { endless: 0, chase: 0 },
+    modeRuns: emptyModeRuns(),
     challenge: { day: null, id: null, count: 0, done: false },
     round: emptyRoundState(),
     powerUps: [], // waiting for the next stage (from treat rounds and photo challenges)
@@ -33,7 +64,14 @@ export function emptyPetGame(pet) {
   };
 }
 
-export const emptyGameState = () => ({ pets: {}, bestScores: emptyBestScores(), options: { sound: true } });
+export const emptyGameState = () => ({
+  pets: {},
+  bestScores: emptyBestScores(),
+  lives: emptyLives(),
+  interstitial: emptyInterstitialState(),
+  premium: false,
+  options: { sound: true, vibration: true }
+});
 
 export function bestScoreFor(state, species, mode) {
   const sp = species === 'cat' ? 'cat' : 'dog';
@@ -69,7 +107,15 @@ export async function loadGame() {
         dog: { ...def.bestScores.dog, ...(data.bestScores?.dog || {}) },
         cat: { ...def.bestScores.cat, ...(data.bestScores?.cat || {}) }
       };
-      return { ...def, ...data, bestScores, options: { ...def.options, ...(data.options || {}) } };
+      return {
+        ...def,
+        ...data,
+        bestScores,
+        lives: { ...def.lives, ...(data.lives || {}) },
+        interstitial: { ...def.interstitial, ...(data.interstitial || {}) },
+        premium: Boolean(data.premium),
+        options: { ...def.options, ...(data.options || {}) }
+      };
     }
   } catch (_) {}
   return emptyGameState();
@@ -93,6 +139,13 @@ export async function saveBestScore(species, mode, score) {
   return res;
 }
 
+export async function savePremiumState(premium = true) {
+  const state = await loadGame();
+  if (Boolean(state.premium) !== Boolean(premium)) {
+    await saveGame({ ...state, premium: Boolean(premium) });
+  }
+}
+
 // A pet's game data, filling in anything added since it was saved.
 export function petGame(state, pet) {
   const base = emptyPetGame(pet);
@@ -107,6 +160,7 @@ export function petGame(state, pet) {
       endless: Math.max(speciesBest.endless || 0, saved.bestScores?.endless || 0),
       chase: Math.max(speciesBest.chase || 0, saved.bestScores?.chase || 0)
     },
+    modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     round: { ...base.round, ...(saved.round || {}) }
   };
 }

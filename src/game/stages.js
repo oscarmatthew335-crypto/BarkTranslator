@@ -184,3 +184,5 @@ export function getStage(species, id) {
   if (id === `${species}-daily`) return dailyStage(species);
   return null;
 }
+
+export { MILESTONES, milestonesFor, milestonesReached, earnedMilestones, milestoneReward } from './milestones';

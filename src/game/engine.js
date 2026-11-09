@@ -49,12 +49,16 @@ export const CHUNK_LOOKAHEAD = 1600;
 // Chase mode gap rules (0 = caught, 100 = max lead).
 export const CHASE_GAP_MAX = 100;
 export const CHASE_GAP_START = 70;
-export const CHASE_SHRINK_RATE = 3; // shrinks slowly over time (per second)
-export const CHASE_HIT_DROP = 26; // shrinks sharply on each hit
+export const CHASE_SHRINK_START = 2; // shrinks slowly at the start (per second)
+export const CHASE_SHRINK_END = 6; // shrinks faster at CHASE_RAMP_SECONDS (per second)
+export const CHASE_RAMP_SECONDS = 90;
+export const CHASE_SHRINK_RATE = CHASE_SHRINK_START;
+export const CHASE_HIT_DROP = 20; // shrinks on each hit
 export const CHASE_TREAT_GAIN = 4; // each treat grows the gap
 export const CHASE_STREAK_GAIN = 5; // clean streak grows the gap (per second)
 export const CHASE_SPEED_GAIN = 12; // speed power-up grows it more (per second)
 export const CHASE_CLEAN_STREAK_S = 3;
+export const CHASE_CONTINUE_GAP = 40; // gap restored when continuing once in Chase
 
 const TREAT_W = 22;
 const POWER_W = 28;
@@ -289,8 +293,13 @@ export function modeScore({ dist = 0, distance, treatPoints = 0 } = {}) {
   return Math.max(0, Math.floor(d / DIST_PER_POINT) + Math.floor(treatPoints));
 }
 
-export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false } = {}) {
-  let next = gap - CHASE_SHRINK_RATE * dt;
+export function chaseShrinkRate(t = 0) {
+  const progress = Math.max(0, Math.min(1, (t || 0) / CHASE_RAMP_SECONDS));
+  return CHASE_SHRINK_START + (CHASE_SHRINK_END - CHASE_SHRINK_START) * progress;
+}
+
+export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = false, speedBoost = false, t = 0 } = {}) {
+  let next = gap - chaseShrinkRate(t) * dt;
   if (cleanStreak) next += CHASE_STREAK_GAIN * dt;
   if (speedBoost) next += CHASE_SPEED_GAIN * dt;
   if (treats > 0) next += treats * CHASE_TREAT_GAIN;
@@ -353,6 +362,7 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     slow: 0,
     power: { speed: 0, magnet: 0, double: 0, shield: false },
     powerUpsUsed: 0,
+    continued: false,
     done: false,
     events: []
   };
@@ -529,7 +539,8 @@ export function step(run, dt, input = {}) {
       hits: frameHits,
       treats: frameTreats,
       cleanStreak,
-      speedBoost: power.speed > 0
+      speedBoost: power.speed > 0,
+      t
     });
     caught = chaseGap <= 0;
   }
@@ -582,6 +593,48 @@ export function step(run, dt, input = {}) {
   return nextRun;
 }
 
+// Continue once per Endless or Chase run after running out of hearts or getting caught.
+export function canContinueRun(run) {
+  if (!run || !run.done || run.continued) return false;
+  return Boolean(run.stage?.endless || run.stage?.chase);
+}
+
+export function continueRun(run) {
+  if (!canContinueRun(run)) return run;
+  const player = {
+    ...run.player,
+    ducking: false,
+    duckTimer: 0,
+    jumpBuffer: 0
+  };
+  if (run.stage.chase) {
+    return {
+      ...run,
+      player,
+      chaseGap: CHASE_CONTINUE_GAP,
+      caught: false,
+      failed: false,
+      done: false,
+      continued: true,
+      invuln: HIT_INVULN_S,
+      slow: 0,
+      events: []
+    };
+  }
+  return {
+    ...run,
+    player,
+    hearts: 1,
+    caught: false,
+    failed: false,
+    done: false,
+    continued: true,
+    invuln: HIT_INVULN_S,
+    slow: 0,
+    events: []
+  };
+}
+
 // Entities to draw this frame, with their position on screen.
 export function visible(run) {
   const out = [];
@@ -628,6 +681,7 @@ export function resultOf(run) {
     multiplier: run.multiplier || 1,
     treatPoints: run.treatPoints || 0,
     hits: run.hits,
+    continued: Boolean(run.continued),
     failed: Boolean(run.failed),
     seconds: Math.round(run.t),
     stars: run.stage.daily || isEndlessOrChase || run.failed ? 0 : starsFor(run),

@@ -15,8 +15,12 @@
       }
     },
     "production": {
-      "android": {
-        "buildType": "app-bundle"
+      "android": { "buildType": "app-bundle" },
+      "env": {
+        "EXPO_PUBLIC_ADMOB_ANDROID_APP_ID": "ca-app-pub-4418250912529728~2654651639",
+        "EXPO_PUBLIC_ADMOB_REWARDED_LIFE": "ca-app-pub-4418250912529728/8449903796",
+        "EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE": "ca-app-pub-4418250912529728/1507035588",
+        "EXPO_PUBLIC_ADMOB_INTERSTITIAL": "ca-app-pub-4418250912529728/5576328446"
       }
     },
     "ios": {

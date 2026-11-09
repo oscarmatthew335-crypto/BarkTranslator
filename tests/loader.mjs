@@ -5,7 +5,9 @@ const map = {
   'react-native': 'rn.mjs',
   'expo-file-system': 'fs.mjs',
   'expo-network': 'network.mjs',
-  'expo-image-manipulator': 'imagemanip.mjs'
+  'expo-image-manipulator': 'imagemanip.mjs',
+  'react-native-google-mobile-ads': 'ads.mjs',
+  'expo-iap': 'iap.mjs'
 };
 export async function resolve(spec, ctx, next) {
   if (map[spec]) return { url: new URL(map[spec], stubs).href, shortCircuit: true };
