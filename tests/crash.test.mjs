@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const APP_VERSION = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8')).expo.version;
 import {
   reportError,
   installCrashReporting,
@@ -31,7 +34,7 @@ test('crash reporter sends appVersion and platform, scrubs personal data, dedupl
   assert.equal(calls[0].opts.headers['X-App-Key'], 'test-key');
   assert.match(calls[0].opts.headers['X-Install-Id'], /^[0-9a-f]{32}$/);
   assert.equal(calls[0].body.platform, 'android');
-  assert.equal(calls[0].body.appVersion, '2.6.0');
+  assert.equal(calls[0].body.appVersion, APP_VERSION);
   assert.equal(calls[0].body.fatal, true);
   assert.equal(calls[0].body.where, 'render');
   assert.ok(!calls[0].body.message.includes('owner@example.com'));
