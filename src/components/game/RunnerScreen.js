@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDimensions, BackHandler } from 'react-native';
 import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle } from 'react-native-svg';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -59,6 +59,18 @@ export default function RunnerScreen({
     pausedRef.current = p;
     setPaused(p);
   };
+
+  // Android back during a run pauses it (the pause screen has Resume and
+  // Quit), so a stray swipe never ends a run or closes the app.
+  const continueRef = useRef(false);
+  continueRef.current = continuePrompt;
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (!pausedRef.current && !continueRef.current) setPause(true);
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
 
   // Pause whenever the app leaves the screen (call, home button, lock).
   useEffect(() => {

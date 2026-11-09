@@ -41,7 +41,7 @@ const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange }) {
+export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const { ready, game, lives, interstitial, premium, options, updateGame, updateLives, updateInterstitial, setPremium, setOptions } = useGame(pet);
@@ -282,6 +282,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     setScreen({ name: 'hub', notice: t('game.photo.saved', { petName: pet.name }) });
     return true;
   };
+
+  // Android back inside the Play tab (App.js calls this). Returns true when
+  // handled. During a run, RunnerScreen handles back itself (pause).
+  if (backRef) {
+    backRef.current = () => {
+      if (livesSheet.open || premiumOpen) return false; // their Modals close themselves
+      if (screen.name === 'hub') return false;
+      if (screen.name === 'run') return true;
+      setScreen({ name: 'hub' });
+      return true;
+    };
+  }
 
   // Every hook must run before the early returns below (rules of hooks).
   const handleWatchAdForLife = useCallback(async () => {
