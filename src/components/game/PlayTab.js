@@ -283,6 +283,23 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     return true;
   };
 
+  // Every hook must run before the early returns below (rules of hooks).
+  const handleWatchAdForLife = useCallback(async () => {
+    const res = await showRewardedAd('life');
+    if (res?.rewarded) {
+      const ts = Date.now();
+      updateLives((l) => addLife(l, ts, 1, { premium }));
+      const pending = livesSheet.pendingStage;
+      const pendingPowerUps = livesSheet.pendingPowerUps || [];
+      const fromReplay = Boolean(livesSheet.fromReplay);
+      setLivesSheet({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
+      if (pending) {
+        updateLives((l) => useLife(l, Date.now(), { premium }));
+        startStage(pending, pendingPowerUps, { fromReplay, skipLifeCheck: true });
+      }
+    }
+  }, [livesSheet, premium, startStage, updateLives]);
+
   if (!ready || !game || !moments.ready) return <View style={s.container} />;
 
   if (screen.name === 'photo')
@@ -375,22 +392,6 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         onFinish={finishRound}
       />
     );
-
-  const handleWatchAdForLife = useCallback(async () => {
-    const res = await showRewardedAd('life');
-    if (res?.rewarded) {
-      const ts = Date.now();
-      updateLives((l) => addLife(l, ts, 1, { premium }));
-      const pending = livesSheet.pendingStage;
-      const pendingPowerUps = livesSheet.pendingPowerUps || [];
-      const fromReplay = Boolean(livesSheet.fromReplay);
-      setLivesSheet({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
-      if (pending) {
-        updateLives((l) => useLife(l, Date.now(), { premium }));
-        startStage(pending, pendingPowerUps, { fromReplay, skipLifeCheck: true });
-      }
-    }
-  }, [livesSheet, premium, startStage, updateLives]);
 
   const modals = (
     <>
