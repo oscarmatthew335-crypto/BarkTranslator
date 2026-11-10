@@ -272,9 +272,13 @@ export default function RunnerScreen({
           </View>
         ) : null}
         {isScoreMode && (
-          <View style={s.scoreBox}>
-            <Text style={s.scoreLive}>{t('game.hud.score', { n: run.score })}</Text>
-            <Text style={s.scoreBest}>{t('game.hud.best', { n: shownBest })}</Text>
+          <View style={[s.scoreBox, run.stage.chase && s.scoreBoxStacked]}>
+            <Text style={s.scoreLive} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+              {t('game.hud.score', { n: run.score })}
+            </Text>
+            <Text style={s.scoreBest} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+              {t('game.hud.best', { n: shownBest })}
+            </Text>
           </View>
         )}
         {!run.stage.chase && (
@@ -282,11 +286,6 @@ export default function RunnerScreen({
             {'❤️'.repeat(run.hearts)}
             {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
           </Text>
-        )}
-        {run.multiplier > 1 && (
-          <View style={s.multPill} accessibilityLabel={t('game.multiplierA11y', { n: run.multiplier })}>
-            <Text style={s.multText}>{t('game.multiplier', { n: run.multiplier })}</Text>
-          </View>
         )}
         <Text style={s.treats} accessibilityLabel={t('game.treatsA11y', { n: run.treats })}>
           {pet.species === 'cat' ? '🐟' : '🦴'} {run.treats}
@@ -338,6 +337,11 @@ export default function RunnerScreen({
               </G>
             </G>
           </Svg>
+        )}
+        {run.multiplier > 1 && (
+          <View style={s.multFloat} accessibilityLabel={t('game.multiplierA11y', { n: run.multiplier })} pointerEvents="none">
+            <Text style={s.multText} numberOfLines={1}>{t('game.multiplier', { n: run.multiplier })}</Text>
+          </View>
         )}
         {activePowers.length > 0 && (
           <View style={s.powers} pointerEvents="none">
@@ -469,9 +473,11 @@ const s = StyleSheet.create({
   progressTrack: { flex: 1, height: 14, borderRadius: 7, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: C.mint },
   scoreBox: { flex: 1, flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  scoreLive: { fontFamily: F.bold, fontSize: 17, color: C.ink },
-  scoreBest: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft },
-  multPill: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 2, borderColor: C.ink, backgroundColor: C.butter },
+  // Chase: the gap meter takes the spare width, so score and best sit on two fixed lines.
+  scoreBoxStacked: { flex: 0, flexDirection: 'column', alignItems: 'flex-end', gap: 0, minWidth: 92 },
+  scoreLive: { fontFamily: F.bold, fontSize: 17, color: C.ink, fontVariant: ['tabular-nums'] },
+  scoreBest: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft, fontVariant: ['tabular-nums'] },
+  multFloat: { position: 'absolute', top: 6, right: 8, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 2, borderColor: C.ink, backgroundColor: C.butter },
   multText: { fontFamily: F.bold, fontSize: 15, color: C.ink },
   treats: { fontFamily: F.bold, fontSize: 20, color: C.ink, minWidth: 50, textAlign: 'right' },
   // About 60% of the screen height goes to the game view so jumps have room on screen.
