@@ -23,7 +23,19 @@ export const TEST_INTERSTITIAL_ID = TestIds?.INTERSTITIAL || 'ca-app-pub-3940256
 export const ADS_NON_PERSONALISED = false;
 export const AD_CONTENT_RATING = MaxAdContentRating?.PG || 'PG';
 
-export function adUnitIds(env = process.env) {
+// Expo only inlines EXPO_PUBLIC_* values into the app bundle where the code reads
+// them literally as `process.env.EXPO_PUBLIC_X`. Reading them through a variable
+// (e.g. `env = process.env; env.EXPO_PUBLIC_X`) is NOT inlined, so release builds
+// silently fell back to Google's test units (2.6.1 shipped showing "Test Ad").
+function bundledAdEnv() {
+  return {
+    EXPO_PUBLIC_ADMOB_REWARDED_LIFE: process.env.EXPO_PUBLIC_ADMOB_REWARDED_LIFE,
+    EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE: process.env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE,
+    EXPO_PUBLIC_ADMOB_INTERSTITIAL: process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL
+  };
+}
+
+export function adUnitIds(env = bundledAdEnv()) {
   return {
     rewardedLife: env?.EXPO_PUBLIC_ADMOB_REWARDED_LIFE || TEST_REWARDED_ID,
     rewardedContinue: env?.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE || TEST_REWARDED_ID,

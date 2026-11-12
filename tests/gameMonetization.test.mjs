@@ -304,3 +304,12 @@ test('a failed ad load is retried with a growing wait, capped at 5 minutes', () 
   assert.equal(retryDelayMs(10), RETRY_MAX_MS);
   assert.equal(RETRY_MAX_MS, 5 * 60 * 1000);
 });
+
+test('ad unit IDs are read as literal process.env.EXPO_PUBLIC_* so Expo inlines them into release bundles', () => {
+  const src = readFileSync(new URL('../src/game/ads.js', import.meta.url), 'utf8');
+  for (const k of ['EXPO_PUBLIC_ADMOB_REWARDED_LIFE', 'EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE', 'EXPO_PUBLIC_ADMOB_INTERSTITIAL']) {
+    assert.ok(src.includes(`process.env.${k}`), `ads.js must read process.env.${k} literally`);
+  }
+  // Regression: 2.6.1 defaulted to `env = process.env`, which Expo does not inline.
+  assert.ok(!/adUnitIds\(env = process\.env\)/.test(src), 'adUnitIds must not default to the bare process.env object');
+});
