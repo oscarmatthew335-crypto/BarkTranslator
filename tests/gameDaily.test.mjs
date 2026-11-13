@@ -193,9 +193,9 @@ test('daily challenge: one per day, picks only open stages, completes once, and 
   assert.ok(challengeFor('2026-10-20', 'cat', opened));
 });
 
-test('wardrobe: 8 colours, 10-15 cosmetic items, buy with treats, wear and take off', () => {
+test('wardrobe: 8 colours, expanded cosmetic items, buy with treats, wear and take off', () => {
   assert.equal(BODY_COLOURS.length, 8);
-  assert.ok(ITEMS.length >= 10 && ITEMS.length <= 15);
+  assert.ok(ITEMS.length >= 25);
   assert.equal(defaultColour({ species: 'dog', breedId: 'gsd' }), 'brown');
   assert.equal(defaultColour({ species: 'dog', breedId: 'rescue' }), 'golden');
   assert.equal(defaultColour({ species: 'cat' }), 'grey');

@@ -100,46 +100,57 @@ export function updateWeeklyBest(weeklyBest, today, mode, score) {
   };
 }
 
-export function saverAvailable(streak, today) {
+export function saverAvailable(streak, today, extraSavers = 0) {
   const missed = keyFromNumber(dayNumber(today) - 1);
-  return streak.saverWeek !== weekOf(missed);
+  return streak.saverWeek !== weekOf(missed) || Number(extraSavers) > 0;
 }
 
-// Call when the owner plays on `today`. Returns { streak, event } where event
+// Call when the owner plays on `today`. Returns { streak, event, usedExtraSaver } where event
 // is start | same | up | saved | reset.
 //  - Playing again the same day changes nothing.
 //  - A day key earlier than the last one (flying west across time zones)
 //    is treated as the same day: the streak never breaks from travel.
-//  - Missing exactly one day uses the week's free streak saver, if unused.
-export function updateStreak(streak, today) {
+//  - Missing exactly one day uses the week's free streak saver, if unused, or an extraSaver if available.
+export function updateStreak(streak, today, { extraSavers = 0 } = {}) {
   if (!streak.lastDay) {
     const s = { ...streak, count: 1, best: Math.max(streak.best, 1), lastDay: today };
-    return { streak: s, event: 'start' };
+    return { streak: s, event: 'start', usedExtraSaver: false };
   }
   const gap = dayNumber(today) - dayNumber(streak.lastDay);
-  if (gap <= 0) return { streak, event: 'same' };
+  if (gap <= 0) return { streak, event: 'same', usedExtraSaver: false };
   if (gap === 1) {
     const count = streak.count + 1;
-    return { streak: { ...streak, count, best: Math.max(streak.best, count), lastDay: today }, event: 'up' };
+    return { streak: { ...streak, count, best: Math.max(streak.best, count), lastDay: today }, event: 'up', usedExtraSaver: false };
   }
-  if (gap === 2 && saverAvailable(streak, today)) {
+  if (gap === 2) {
     const missed = keyFromNumber(dayNumber(today) - 1);
-    const count = streak.count + 1;
-    return {
-      streak: { ...streak, count, best: Math.max(streak.best, count), lastDay: today, saverWeek: weekOf(missed), savedDay: missed },
-      event: 'saved'
-    };
+    const freeAvailable = streak.saverWeek !== weekOf(missed);
+    if (freeAvailable || Number(extraSavers) > 0) {
+      const count = streak.count + 1;
+      return {
+        streak: {
+          ...streak,
+          count,
+          best: Math.max(streak.best, count),
+          lastDay: today,
+          saverWeek: freeAvailable ? weekOf(missed) : streak.saverWeek,
+          savedDay: missed
+        },
+        event: 'saved',
+        usedExtraSaver: !freeAvailable
+      };
+    }
   }
-  return { streak: { ...streak, count: 1, lastDay: today }, event: 'reset' };
+  return { streak: { ...streak, count: 1, lastDay: today }, event: 'reset', usedExtraSaver: false };
 }
 
 // What the streak shows today without playing (it is only "lost" once the
 // owner plays again after a gap, so there's never a countdown).
-export function streakShown(streak, today) {
+export function streakShown(streak, today, extraSavers = 0) {
   if (!streak.lastDay) return 0;
   const gap = dayNumber(today) - dayNumber(streak.lastDay);
   if (gap <= 1) return streak.count;
-  if (gap === 2 && saverAvailable(streak, today)) return streak.count;
+  if (gap === 2 && saverAvailable(streak, today, extraSavers)) return streak.count;
   return 0;
 }
 

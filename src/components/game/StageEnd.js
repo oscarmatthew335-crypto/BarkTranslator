@@ -31,6 +31,8 @@ export default function StageEnd({
   onReplay,
   onMap,
   onShareScore,
+  onDoubleTreats,
+  doubleTreatsAmount = 0,
   onTreatRound,
   onPhotoChallenge,
   photoSituation,
@@ -112,6 +114,14 @@ export default function StageEnd({
       </Sticker>
 
       <View style={s.buttons}>
+        {onDoubleTreats && doubleTreatsAmount > 0 ? (
+          <StickerButton
+            label={t('game.end.doubleTreats', { n: doubleTreatsAmount })}
+            emoji="🎬"
+            color={C.mint}
+            onPress={onDoubleTreats}
+          />
+        ) : null}
         {result.endless || result.chase ? (
           <>
             <StickerButton label={t('game.end.again')} emoji="🔁" color={C.butter} onPress={onReplay} />

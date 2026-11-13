@@ -20,6 +20,21 @@ export function isUnlimitedFirstDay(state, now) {
   return elapsed < FIRST_DAY_UNLIMITED_MS;
 }
 
+export function firstDayRemainingMs(state, now = Date.now()) {
+  if (!state || state.firstSeenAt == null) return FIRST_DAY_UNLIMITED_MS;
+  const elapsed = Math.max(0, now - state.firstSeenAt);
+  return Math.max(0, FIRST_DAY_UNLIMITED_MS - elapsed);
+}
+
+export function formatHoursLeft(ms) {
+  const totalMin = Math.max(1, Math.ceil((ms || 0) / 60000));
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h <= 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 export function livesNow(state, now = Date.now(), { premium = false } = {}) {
   const base = state && typeof state === 'object' ? state : emptyLives(now);
   const firstSeenAt = base.firstSeenAt ?? now;

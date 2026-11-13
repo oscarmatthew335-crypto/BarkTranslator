@@ -33,14 +33,17 @@ function bundledAdEnv() {
   return {
     EXPO_PUBLIC_ADMOB_REWARDED_LIFE: process.env.EXPO_PUBLIC_ADMOB_REWARDED_LIFE,
     EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE: process.env.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE,
+    EXPO_PUBLIC_ADMOB_REWARDED_DOUBLE: process.env.EXPO_PUBLIC_ADMOB_REWARDED_DOUBLE,
     EXPO_PUBLIC_ADMOB_INTERSTITIAL: process.env.EXPO_PUBLIC_ADMOB_INTERSTITIAL
   };
 }
 
 export function adUnitIds(env = bundledAdEnv()) {
+  const rewardedLife = env?.EXPO_PUBLIC_ADMOB_REWARDED_LIFE || TEST_REWARDED_ID;
   return {
-    rewardedLife: env?.EXPO_PUBLIC_ADMOB_REWARDED_LIFE || TEST_REWARDED_ID,
+    rewardedLife,
     rewardedContinue: env?.EXPO_PUBLIC_ADMOB_REWARDED_CONTINUE || TEST_REWARDED_ID,
+    rewardedDouble: env?.EXPO_PUBLIC_ADMOB_REWARDED_DOUBLE || rewardedLife,
     interstitial: env?.EXPO_PUBLIC_ADMOB_INTERSTITIAL || TEST_INTERSTITIAL_ID
   };
 }
@@ -59,6 +62,7 @@ let privacyOptionsAvailable = false;
 const slots = {
   life: { ad: null, loaded: false, cleanups: [] },
   continue: { ad: null, loaded: false, cleanups: [] },
+  double: { ad: null, loaded: false, cleanups: [] },
   interstitial: { ad: null, loaded: false, cleanups: [] }
 };
 
@@ -80,6 +84,7 @@ export function getAdsStatus() {
       canRequestAds: false,
       rewardedLifeReady: false,
       rewardedContinueReady: false,
+      rewardedDoubleReady: false,
       interstitialReady: false,
       privacyOptionsAvailable: false
     };
@@ -89,6 +94,7 @@ export function getAdsStatus() {
     canRequestAds: canRequest,
     rewardedLifeReady: Boolean(slots.life.loaded && slots.life.ad),
     rewardedContinueReady: Boolean(slots.continue.loaded && slots.continue.ad),
+    rewardedDoubleReady: Boolean(slots.double.loaded && slots.double.ad),
     interstitialReady: Boolean(slots.interstitial.loaded && slots.interstitial.ad),
     privacyOptionsAvailable
   };
@@ -99,9 +105,15 @@ export function onAdsStatusChange(fn) {
   return () => listeners.delete(fn);
 }
 
+function rewardedKey(kind) {
+  if (kind === 'continue') return 'continue';
+  if (kind === 'double') return 'double';
+  return 'life';
+}
+
 export function isRewardedReady(kind = 'life') {
   if (Platform.OS !== 'android') return false;
-  const key = kind === 'continue' ? 'continue' : 'life';
+  const key = rewardedKey(kind);
   return Boolean(slots[key].loaded && slots[key].ad);
 }
 
@@ -115,7 +127,7 @@ export function isInterstitialReady() {
 export const RETRY_BASE_MS = 30000;
 export const RETRY_MAX_MS = 300000;
 export const retryDelayMs = (attempt) => Math.min(RETRY_BASE_MS * 2 ** Math.max(0, attempt), RETRY_MAX_MS);
-const retries = { life: 0, continue: 0, interstitial: 0 };
+const retries = { life: 0, continue: 0, double: 0, interstitial: 0 };
 const retryTimers = {};
 
 function scheduleRetry(key, load) {
@@ -155,7 +167,12 @@ function preloadRewarded(key) {
   clearSlot(key);
   try {
     const ids = adUnitIds();
-    const unitId = key === 'continue' ? ids.rewardedContinue : ids.rewardedLife;
+    const unitId =
+      key === 'continue'
+        ? ids.rewardedContinue
+        : key === 'double'
+        ? ids.rewardedDouble
+        : ids.rewardedLife;
     const ad = RewardedAd.createForAdRequest(unitId, adRequestOptions());
     const unsubLoad = ad.addAdEventListener(RewardedAdEventType.LOADED, () => {
       slots[key].loaded = true;
@@ -252,6 +269,7 @@ export async function initAds() {
       initialized = true;
       preloadRewarded('life');
       preloadRewarded('continue');
+      preloadRewarded('double');
       preloadInterstitial();
       notify();
       return true;
@@ -274,7 +292,7 @@ export async function initAds() {
 // if the user completed the ad and earned the reward.
 export function showRewardedAd(kind = 'life') {
   if (Platform.OS !== 'android') return Promise.resolve({ rewarded: false });
-  const key = kind === 'continue' ? 'continue' : 'life';
+  const key = rewardedKey(kind);
   const slot = slots[key];
   if (!slot?.loaded || !slot?.ad) {
     preloadRewarded(key);

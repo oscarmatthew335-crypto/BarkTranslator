@@ -76,6 +76,7 @@ export default function PremiumSheet({ visible, premium = false, onGranted, onCl
             <Text style={s.perk}>❤️ {t('game.premium.perkLives')}</Text>
             <Text style={s.perk}>🚫 {t('game.premium.perkNoAds')}</Text>
             <Text style={s.perk}>⚡ {t('game.premium.perkContinue')}</Text>
+            <Text style={s.perk}>🦴 {t('game.premium.perkTreats')}</Text>
           </Sticker>
 
           {message ? (

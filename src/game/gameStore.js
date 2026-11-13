@@ -11,6 +11,7 @@ import { emptyStreak, emptyWeeklyBest } from './daily';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
 import { emptyInterstitialState } from './interstitial';
+import { emptyDoubleTreatsState } from './doubleTreats';
 
 const KEY = 'pawlingo:game:v1';
 
@@ -65,11 +66,21 @@ export function emptyPetGame(pet) {
   };
 }
 
+export const emptyStoreState = () => ({
+  starterOfferedAt: null,
+  starterBought: false,
+  premiumBonusGranted: false,
+  processedTokens: []
+});
+
 export const emptyGameState = () => ({
   pets: {},
   bestScores: emptyBestScores(),
   lives: emptyLives(),
   interstitial: emptyInterstitialState(),
+  doubleTreats: emptyDoubleTreatsState(),
+  extraSavers: 0,
+  store: emptyStoreState(),
   premium: false,
   options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null }
 });
@@ -114,6 +125,9 @@ export async function loadGame() {
         bestScores,
         lives: { ...def.lives, ...(data.lives || {}) },
         interstitial: { ...def.interstitial, ...(data.interstitial || {}) },
+        doubleTreats: { ...def.doubleTreats, ...(data.doubleTreats || {}) },
+        extraSavers: Math.max(0, Math.floor(Number(data.extraSavers) || 0)),
+        store: { ...def.store, ...(data.store || {}) },
         premium: Boolean(data.premium),
         options: { ...def.options, ...(data.options || {}) }
       };

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { loadGame, saveGame, petGame, emptyGameState, emptyBestScores } from './gameStore';
+import { loadGame, saveGame, petGame, emptyGameState, emptyBestScores, emptyStoreState } from './gameStore';
 
 const listeners = new Set();
 let sharedState = null;
@@ -107,16 +107,49 @@ export default function useGame(pet) {
     [applyUpdate]
   );
 
+  const updateDoubleTreats = useCallback(
+    (fn) =>
+      applyUpdate((base) => ({
+        ...base,
+        doubleTreats: fn(base.doubleTreats || emptyGameState().doubleTreats)
+      })),
+    [applyUpdate]
+  );
+
+  const updateExtraSavers = useCallback(
+    (fn) =>
+      applyUpdate((base) => ({
+        ...base,
+        extraSavers: Math.max(0, Math.floor(Number(fn(base.extraSavers || 0)) || 0))
+      })),
+    [applyUpdate]
+  );
+
+  const updateStore = useCallback(
+    (fn) =>
+      applyUpdate((base) => ({
+        ...base,
+        store: fn(base.store || emptyStoreState())
+      })),
+    [applyUpdate]
+  );
+
   return {
     ready: Boolean(state),
     game,
     lives: state?.lives || emptyGameState().lives,
     interstitial: state?.interstitial || emptyGameState().interstitial,
+    doubleTreats: state?.doubleTreats || emptyGameState().doubleTreats,
+    extraSavers: Math.max(0, Number(state?.extraSavers) || 0),
+    store: state?.store || emptyStoreState(),
     premium: Boolean(state?.premium),
     options: state?.options || emptyGameState().options,
     updateGame,
     updateLives,
     updateInterstitial,
+    updateDoubleTreats,
+    updateExtraSavers,
+    updateStore,
     setPremium,
     setOptions
   };
