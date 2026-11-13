@@ -1,7 +1,7 @@
 // Expo dynamic config: uses Google's official test AdMob App IDs unless
 // EXPO_PUBLIC_ADMOB_ANDROID_APP_ID / EXPO_PUBLIC_ADMOB_IOS_APP_ID are set.
 // Firebase Analytics is enabled only when google-services.json is present on disk
-// (via EXPO_PUBLIC_GOOGLE_SERVICES_JSON or ./google-services.json), so dev and CI
+// (via GOOGLE_SERVICES_JSON or ./google-services.json), so dev and CI
 // builds without it succeed cleanly.
 const fs = require('fs');
 const path = require('path');
@@ -14,7 +14,7 @@ module.exports = () => {
   const base = appJson.expo;
   const androidAppId = process.env.EXPO_PUBLIC_ADMOB_ANDROID_APP_ID || TEST_ANDROID_APP_ID;
   const iosAppId = process.env.EXPO_PUBLIC_ADMOB_IOS_APP_ID || TEST_IOS_APP_ID;
-  const googleServicesFile = process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON || './google-services.json';
+  const googleServicesFile = process.env.GOOGLE_SERVICES_JSON ?? './google-services.json';
   const hasGoogleServices = fs.existsSync(path.resolve(__dirname, googleServicesFile));
   const metaAppId = String(process.env.EXPO_PUBLIC_META_APP_ID || '').trim();
   const metaClientToken = String(process.env.EXPO_PUBLIC_META_CLIENT_TOKEN || '').trim();

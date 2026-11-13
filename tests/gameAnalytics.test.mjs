@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
 import {
@@ -19,17 +20,17 @@ import {
 const require = createRequire(import.meta.url);
 const appConfigFn = require('../app.config.js');
 
-test('app.config.js reads EXPO_PUBLIC_GOOGLE_SERVICES_JSON literally and falls back cleanly when missing', () => {
+test('app.config.js reads GOOGLE_SERVICES_JSON and falls back cleanly when missing', () => {
   const src = readFileSync(new URL('../app.config.js', import.meta.url), 'utf8');
   assert.ok(
-    src.includes('process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON'),
-    'app.config.js must read process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON literally'
+    src.includes('process.env.GOOGLE_SERVICES_JSON'),
+    'app.config.js must read process.env.GOOGLE_SERVICES_JSON'
   );
 
-  const saved = process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON;
+  const saved = process.env.GOOGLE_SERVICES_JSON;
   try {
     // Missing file (default in dev / CI) -> no crash, no Firebase plugin or googleServicesFile
-    process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON = './non-existent-google-services.json';
+    process.env.GOOGLE_SERVICES_JSON = './non-existent-google-services.json';
     const cfgMissing = appConfigFn();
     assert.equal(cfgMissing.android?.googleServicesFile, undefined);
     assert.equal(
@@ -42,7 +43,7 @@ test('app.config.js reads EXPO_PUBLIC_GOOGLE_SERVICES_JSON literally and falls b
     );
 
     // Existing file on disk -> sets android.googleServicesFile and enables Firebase plugins
-    process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON = './app.json';
+    process.env.GOOGLE_SERVICES_JSON = './app.json';
     const cfgPresent = appConfigFn();
     assert.equal(cfgPresent.android?.googleServicesFile, './app.json');
     assert.equal(
@@ -54,9 +55,19 @@ test('app.config.js reads EXPO_PUBLIC_GOOGLE_SERVICES_JSON literally and falls b
       true
     );
   } finally {
-    if (saved === undefined) delete process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON;
-    else process.env.EXPO_PUBLIC_GOOGLE_SERVICES_JSON = saved;
+    if (saved === undefined) delete process.env.GOOGLE_SERVICES_JSON;
+    else process.env.GOOGLE_SERVICES_JSON = saved;
   }
+});
+
+test('google-services.json is never tracked by git and is listed in .gitignore', () => {
+  const gitignore = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+  assert.ok(
+    gitignore.split(/\r?\n/).some((line) => line.trim() === 'google-services.json'),
+    'google-services.json must be in .gitignore'
+  );
+  const tracked = execFileSync('git', ['ls-files', 'google-services.json'], { encoding: 'utf8' }).trim();
+  assert.equal(tracked, '', 'google-services.json must never be tracked by git');
 });
 
 test('analytics wrapper gates on UMP consent and Android platform, and strips personal fields', async () => {

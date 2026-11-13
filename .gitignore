@@ -41,6 +41,9 @@ yarn-error.*
 /android
 *.apk
 
+# Firebase secret config (uploaded to EAS env, never committed)
+google-services.json
+
 
 # python
 __pycache__/

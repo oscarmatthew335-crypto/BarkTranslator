@@ -192,4 +192,9 @@ test('privacy policies and data-safety.md stay in sync and document the Meta SDK
   assert.ok(storePrivacy.includes('Meta (Facebook) SDK'), 'privacy.html must include the Meta (Facebook) SDK section');
   assert.ok(dataSafety.includes('Meta'), 'store/data-safety.md must document sharing with Meta');
   assert.equal(eas.build.production.env.EXPO_PUBLIC_META_APP_ID, '1715784240586694');
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(eas.build.production.env, 'EXPO_PUBLIC_META_CLIENT_TOKEN'),
+    false,
+    'EXPO_PUBLIC_META_CLIENT_TOKEN must never be in eas.json (public repo)'
+  );
 });
