@@ -321,5 +321,20 @@ export default {
   'game.stats.rewardedAdsCompleted': "Rewarded ads completed",
   'game.stats.interstitialsShown': "Interstitial ads shown",
   'game.stats.premiumScreenShown': "Premium screen shown",
-  'game.stats.purchases': "Premium purchases"
+  'game.stats.purchases': "Premium purchases",
+  'game.item.bandana-champ': "Week Champ bandana",
+  'game.wardrobe.streak7': "🔥 7-day streak",
+  'game.streak.nextReward': "Day {day} reward: +{n} {emoji}",
+  'game.streak.nextDay7': "Day {day} reward: +{n} {emoji} + Week Champ bandana",
+  'game.streak.rewardEarned': "🔥 Streak reward: +{n} {emoji}!",
+  'game.streak.rewardDay7': "🔥 7-day streak! +{n} {emoji} + Week Champ bandana unlocked!",
+  'game.reminder.title': "Pawlingo",
+  'game.reminder.body': "{petName} is waiting! Keep your {n}-day streak 🔥",
+  'game.reminder.promptTitle': "Keep your streak going?",
+  'game.reminder.promptSub': "Get one friendly 6 pm reminder if {petName} hasn't run yet that day.",
+  'game.reminder.turnOn': "Turn on reminders",
+  'settings.streakReminderTitle': "Daily streak reminder",
+  'settings.streakReminderSub': "One 6 pm reminder when you have a streak with {petName} and haven't played yet today.",
+  'game.end.weeklyBest': "This week's best: {n}",
+  'game.end.newWeeklyBest': "🎉 New weekly best!"
 };

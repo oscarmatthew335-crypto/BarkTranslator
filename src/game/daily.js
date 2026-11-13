@@ -35,6 +35,71 @@ export const dailySeed = (key, species) => hashString(`pawlingo-daily:${key}:${s
 
 export const emptyStreak = () => ({ count: 0, best: 0, lastDay: null, saverWeek: null, savedDay: null });
 
+export const STREAK_REWARDS = {
+  1: 10,
+  2: 15,
+  3: 20,
+  5: 30,
+  7: 50
+};
+
+export const STREAK_DAY7_ITEM = 'bandana-champ';
+
+export function streakRewardFor(dayCount) {
+  const n = Math.max(0, Math.floor(Number(dayCount) || 0));
+  return {
+    treats: STREAK_REWARDS[n] || 0,
+    item: n === 7 ? STREAK_DAY7_ITEM : null
+  };
+}
+
+export function nextStreakReward(currentCount) {
+  const n = Math.max(0, Math.floor(Number(currentCount) || 0));
+  const milestones = [1, 2, 3, 5, 7];
+  const nextDay = milestones.find((d) => d > n);
+  if (!nextDay) return null;
+  return {
+    day: nextDay,
+    treats: STREAK_REWARDS[nextDay] || 0,
+    item: nextDay === 7 ? STREAK_DAY7_ITEM : null
+  };
+}
+
+export const emptyWeeklyBest = () => ({
+  week: null,
+  endless: 0,
+  chase: 0,
+  daily: 0
+});
+
+export function weeklyBestFor(weeklyBest, today, mode) {
+  if (!today) return 0;
+  const wk = weekOf(today);
+  if (!weeklyBest || weeklyBest.week !== wk) return 0;
+  return Math.max(0, Math.floor(Number(weeklyBest[mode]) || 0));
+}
+
+export function updateWeeklyBest(weeklyBest, today, mode, score) {
+  const wk = today ? weekOf(today) : null;
+  const base =
+    weeklyBest && weeklyBest.week === wk
+      ? { ...emptyWeeklyBest(), ...weeklyBest, week: wk }
+      : { ...emptyWeeklyBest(), week: wk };
+  if (!['endless', 'chase', 'daily'].includes(mode)) {
+    return { weeklyBest: base, best: 0, previousWeeklyBest: 0, isNewWeeklyBest: false };
+  }
+  const prev = Math.max(0, Math.floor(Number(base[mode]) || 0));
+  const cleanScore = Math.max(0, Math.floor(Number(score) || 0));
+  const best = Math.max(prev, cleanScore);
+  const isNewWeeklyBest = cleanScore > prev && cleanScore > 0;
+  return {
+    weeklyBest: { ...base, [mode]: best },
+    best,
+    previousWeeklyBest: prev,
+    isNewWeeklyBest
+  };
+}
+
 export function saverAvailable(streak, today) {
   const missed = keyFromNumber(dayNumber(today) - 1);
   return streak.saverWeek !== weekOf(missed);

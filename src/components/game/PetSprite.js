@@ -82,7 +82,12 @@ function CollarItem({ item }) {
 
 function NeckItem({ item }) {
   if (!item) return null;
-  return <Polygon points="35,19 49,23 40,31" fill={item.colour} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />;
+  return (
+    <>
+      <Polygon points="35,19 49,23 40,31" fill={item.colour} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
+      {item.id === 'bandana-champ' ? <Circle cx={41} cy={25} r={2} fill="#FFF" stroke={INK} strokeWidth={1} /> : null}
+    </>
+  );
 }
 
 function GlassesItem({ item }) {

@@ -19,6 +19,9 @@ export default function StageEnd({
   bestScore = 0,
   previousBest = 0,
   newBest = false,
+  weeklyBest = 0,
+  newWeeklyBest = false,
+  streakReward = null,
   milestones = [],
   rewardLine = null,
   caughtLine = null,
@@ -61,8 +64,17 @@ export default function StageEnd({
             <Text style={s.big}>{t('game.end.score', { n: result.score })}</Text>
             {newBest ? (
               <Text style={[s.line, s.bold]}>{t('game.end.newBest')}</Text>
+            ) : newWeeklyBest ? (
+              <Text style={[s.line, s.bold]}>{t('game.end.newWeeklyBest')}</Text>
             ) : toBeat > 0 ? (
               <Text style={s.line}>{t('game.end.toBeatBest', { n: toBeat })}</Text>
+            ) : null}
+            {weeklyBest > 0 || bestScore > 0 ? (
+              <Text style={s.line}>
+                {weeklyBest > 0 ? t('game.end.weeklyBest', { n: weeklyBest }) : ''}
+                {weeklyBest > 0 && bestScore > 0 ? ' · ' : ''}
+                {bestScore > 0 ? t('game.end.best', { n: bestScore }) : ''}
+              </Text>
             ) : null}
           </>
         ) : result.failed ? (
@@ -89,6 +101,13 @@ export default function StageEnd({
           <Text style={s.line}>{result.hits === 0 ? t('game.end.noBumps') : result.hits === 1 ? t('game.end.oneBump') : t('game.end.bumps', { n: result.hits })}</Text>
         ) : null}
         {challengeDone ? <Text style={[s.line, s.bold]}>{t('game.end.challengeDone')}</Text> : null}
+        {streakReward?.treats > 0 ? (
+          <Text style={[s.line, s.bold]}>
+            {streakReward.item
+              ? t('game.streak.rewardDay7', { n: streakReward.treats, emoji: treatEmoji })
+              : t('game.streak.rewardEarned', { n: streakReward.treats, emoji: treatEmoji })}
+          </Text>
+        ) : null}
       </Sticker>
 
       <View style={s.buttons}>

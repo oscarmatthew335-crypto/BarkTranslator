@@ -7,7 +7,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emptyProgress } from './progress';
 import { emptyWardrobe } from './wardrobe';
-import { emptyStreak } from './daily';
+import { emptyStreak, emptyWeeklyBest } from './daily';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
 import { emptyInterstitialState } from './interstitial';
@@ -54,6 +54,7 @@ export function emptyPetGame(pet) {
     bank: 0, // treats to spend in the wardrobe
     lifetimeTreats: 0,
     streak: emptyStreak(),
+    weeklyBest: emptyWeeklyBest(),
     daily: { day: null, best: 0, plays: 0 },
     bestScores: { endless: 0, chase: 0 },
     modeRuns: emptyModeRuns(),
@@ -70,7 +71,7 @@ export const emptyGameState = () => ({
   lives: emptyLives(),
   interstitial: emptyInterstitialState(),
   premium: false,
-  options: { sound: true, vibration: true }
+  options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null }
 });
 
 export function bestScoreFor(state, species, mode) {
@@ -160,6 +161,7 @@ export function petGame(state, pet) {
       endless: Math.max(speciesBest.endless || 0, saved.bestScores?.endless || 0),
       chase: Math.max(speciesBest.chase || 0, saved.bestScores?.chase || 0)
     },
+    weeklyBest: { ...base.weeklyBest, ...(saved.weeklyBest || {}) },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     round: { ...base.round, ...(saved.round || {}) }
   };

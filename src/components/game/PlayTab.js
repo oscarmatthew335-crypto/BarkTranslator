@@ -25,8 +25,21 @@ import Moments from './Moments';
 import useMoments from '../../game/useMoments';
 import { challengeSituation, saveMoment, reencodeWithoutMetadata, shouldUploadPhoto, uploadMeta, PHOTO_REWARD } from '../../game/photoChallenge';
 import { queuePhoto } from '../../contribute/contributions';
-import { dayKey, dailySeed, updateStreak, streakShown, saverAvailable, challengeFor, advanceChallenge, CHALLENGE_REWARD } from '../../game/daily';
-import { buy, toggleWear, setColour } from '../../game/wardrobe';
+import {
+  dayKey,
+  dailySeed,
+  updateStreak,
+  streakShown,
+  saverAvailable,
+  streakRewardFor,
+  nextStreakReward,
+  updateWeeklyBest,
+  challengeFor,
+  advanceChallenge,
+  CHALLENGE_REWARD
+} from '../../game/daily';
+import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
+import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders } from '../../game/reminders';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
@@ -79,6 +92,26 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     onRunningChange?.(screen.name === 'run');
     return () => onRunningChange?.(false);
   }, [screen.name, onRunningChange]);
+
+  useEffect(() => {
+    if (!ready || !game) return;
+    if (!options?.reminders) {
+      cancelStreakReminders();
+      return;
+    }
+    syncStreakReminder({
+      enabled: Boolean(options.reminders),
+      streak: game.streak,
+      today,
+      petName: pet.name,
+      translateFn: t,
+      lastScheduledDay: options.lastReminderDay
+    }).then((res) => {
+      if (res?.scheduled && res.scheduledForDay && res.scheduledForDay !== options.lastReminderDay) {
+        setOptions({ lastReminderDay: res.scheduledForDay });
+      }
+    });
+  }, [ready, game?.streak?.count, game?.streak?.lastDay, options?.reminders, options?.lastReminderDay, pet.name, today, t, setOptions]);
 
   const showNotice = useCallback(
     (message, action) =>
@@ -161,24 +194,31 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
       const { challenge, justDone } = advanceChallenge(current, result);
       const streakOut = updateStreak(game.streak, day);
+      const streakAdvanced =
+        streakOut.event === 'start' || streakOut.event === 'up' || streakOut.event === 'saved';
+      const sReward = streakAdvanced ? streakRewardFor(streakOut.streak.count) : { treats: 0, item: null };
+      const modeKey = runModeFor(result);
+      const wkOut = updateWeeklyBest(game.weeklyBest, day, modeKey, result.score);
       track('run_end', {
-        mode: runModeFor(result),
+        mode: modeKey,
         score_bucket: scoreBucket(result.score),
         treats: result.treats || 0
       });
-      logMetaRunFinished(runModeFor(result));
+      logMetaRunFinished(modeKey);
       if (justDone) {
         track('daily_challenge_done', { type: challenge.type });
       }
-      if (streakOut.event === 'start' || streakOut.event === 'up' || streakOut.event === 'saved') {
+      if (streakAdvanced) {
         track('streak_day', { length: streakOut.streak.count });
       }
       updateGame((g) => ({
         ...g,
         progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
-        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus,
-        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus,
-        streak: updateStreak(g.streak, day).streak,
+        wardrobe: sReward.item ? unlockItem(g.wardrobe, sReward.item) : g.wardrobe,
+        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus + sReward.treats,
+        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus + sReward.treats,
+        streak: streakOut.streak,
+        weeklyBest: wkOut.weeklyBest,
         challenge,
         bestScores: {
           endless: Math.max(g.bestScores?.endless || 0, result.endless ? result.score : 0),
@@ -204,6 +244,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         bestScore,
         previousBest: prevBest,
         newBest,
+        weeklyBest: wkOut.best,
+        previousWeeklyBest: wkOut.previousWeeklyBest,
+        newWeeklyBest: wkOut.isNewWeeklyBest,
+        streakReward: sReward,
         milestones: reached,
         rewardLine,
         caughtLine,
@@ -468,6 +512,9 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           bestScore={screen.bestScore}
           previousBest={screen.previousBest}
           newBest={screen.newBest}
+          weeklyBest={screen.weeklyBest}
+          newWeeklyBest={screen.newWeeklyBest}
+          streakReward={screen.streakReward}
           milestones={screen.milestones}
           rewardLine={screen.rewardLine}
           caughtLine={screen.caughtLine}
@@ -487,6 +534,12 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
   const streak = streakShown(game.streak, today);
+  const upcomingStreak = nextStreakReward(streak);
+  const showReminderPrompt = shouldOfferReminderPrompt({
+    streakCount: streak,
+    promptShown: options?.reminderPromptShown,
+    remindersEnabled: options?.reminders
+  });
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
   const dailyBest = game.daily.day === today ? game.daily.best : null;
   const continueStage = suggestedStage(game.progress, pet.species);
@@ -511,6 +564,13 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             {streak > 0 ? t('game.streak.days', { n: streak }) : t('game.streak.none')}
             {streak > 0 && saverAvailable(game.streak, today) ? ` · ${t('game.streak.saverNote')}` : ''}
           </Text>
+          {upcomingStreak && (
+            <Text style={s.heroSmall}>
+              {upcomingStreak.item
+                ? t('game.streak.nextDay7', { day: upcomingStreak.day, n: upcomingStreak.treats, emoji: treatEmoji })
+                : t('game.streak.nextReward', { day: upcomingStreak.day, n: upcomingStreak.treats, emoji: treatEmoji })}
+            </Text>
+          )}
           {game.powerUps.length > 0 && (
             <View style={s.ready}>
               <Text style={s.readyText}>{t('game.readyPowerUps')}</Text>
@@ -523,6 +583,27 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           )}
         </View>
       </Sticker>
+
+      {showReminderPrompt && (
+        <Sticker radius={20} color={C.paper} style={{ marginTop: 12 }} innerStyle={s.photoCard}>
+          <Text style={s.photoTitle}>🔔 {t('game.reminder.promptTitle')}</Text>
+          <Text style={s.photoSub}>{t('game.reminder.promptSub', { petName: pet.name })}</Text>
+          <View style={s.row}>
+            <StickerButton
+              small
+              color={C.mint}
+              label={t('game.reminder.turnOn')}
+              onPress={() => setOptions({ reminders: true, reminderPromptShown: true, lastReminderDay: null })}
+            />
+            <StickerButton
+              small
+              color={C.paper}
+              label={t('game.photo.notNow')}
+              onPress={() => setOptions({ reminderPromptShown: true })}
+            />
+          </View>
+        </Sticker>
+      )}
 
       <View style={{ marginTop: 14 }}>
         <ModeCards species={pet.species} bestScores={game.bestScores} livesStatus={livesStatus} onPlay={startStage} />

@@ -10,13 +10,29 @@ import {
   updateStreak,
   streakShown,
   saverAvailable,
+  STREAK_REWARDS,
+  STREAK_DAY7_ITEM,
+  streakRewardFor,
+  nextStreakReward,
+  emptyWeeklyBest,
+  weeklyBestFor,
+  updateWeeklyBest,
   challengeFor,
   advanceChallenge
 } from '../src/game/daily.js';
 import { buildLevel } from '../src/game/engine.js';
 import { dailyStage, STAGES } from '../src/game/stages.js';
 import { emptyProgress, recordStage } from '../src/game/progress.js';
-import { emptyWardrobe, buy, toggleWear, setColour, canBuy, defaultColour, ITEMS, BODY_COLOURS } from '../src/game/wardrobe.js';
+import { emptyWardrobe, buy, toggleWear, setColour, canBuy, unlockItem, defaultColour, ITEMS, BODY_COLOURS } from '../src/game/wardrobe.js';
+import {
+  REMINDER_HOUR_LOCAL,
+  shouldOfferReminderPrompt,
+  shouldScheduleStreakReminder,
+  nextReminderDate,
+  buildStreakReminderMessage,
+  syncStreakReminder
+} from '../src/game/reminders.js';
+import { __getScheduledForTests, __resetNotificationsForTests } from './stubs/notifications.mjs';
 import { emptyCounters, applySession, retention, rememberReturns, sessionsPerDay, rate } from '../src/game/counters.js';
 
 const SAST = 120; // South Africa, UTC+2
@@ -248,4 +264,140 @@ test('counts made at the same moment are all kept (none overwrite another)', asy
   assert.equal(now.stagesFinished, 2);
   assert.equal(now.treatRoundsOffered, 1);
   assert.equal(now.questionsAsked, 3);
+});
+
+test('streak rewards table and Day 7 Week Champ bandana unlock', () => {
+  assert.deepEqual(STREAK_REWARDS, { 1: 10, 2: 15, 3: 20, 5: 30, 7: 50 });
+  assert.deepEqual(streakRewardFor(1), { treats: 10, item: null });
+  assert.deepEqual(streakRewardFor(2), { treats: 15, item: null });
+  assert.deepEqual(streakRewardFor(3), { treats: 20, item: null });
+  assert.deepEqual(streakRewardFor(4), { treats: 0, item: null });
+  assert.deepEqual(streakRewardFor(5), { treats: 30, item: null });
+  assert.deepEqual(streakRewardFor(6), { treats: 0, item: null });
+  assert.deepEqual(streakRewardFor(7), { treats: 50, item: STREAK_DAY7_ITEM });
+
+  assert.deepEqual(nextStreakReward(0), { day: 1, treats: 10, item: null });
+  assert.deepEqual(nextStreakReward(1), { day: 2, treats: 15, item: null });
+  assert.deepEqual(nextStreakReward(3), { day: 5, treats: 30, item: null });
+  assert.deepEqual(nextStreakReward(5), { day: 7, treats: 50, item: STREAK_DAY7_ITEM });
+  assert.equal(nextStreakReward(7), null);
+
+  let w = emptyWardrobe({ species: 'dog' });
+  assert.equal(canBuy(w, 9999, STREAK_DAY7_ITEM), false, 'Week Champ bandana is streak-only, not bought with treats');
+  w = unlockItem(w, STREAK_DAY7_ITEM);
+  assert.ok(w.owned.includes(STREAK_DAY7_ITEM));
+  w = toggleWear(w, STREAK_DAY7_ITEM);
+  assert.equal(w.equipped.neck, STREAK_DAY7_ITEM);
+});
+
+test('local streak reminders: off by default, streak >= 2, not played today, at most one per day at 18:00 local', async () => {
+  __resetNotificationsForTests('granted');
+  assert.equal(REMINDER_HOUR_LOCAL, 18);
+
+  // Prompt asked once after first streak day
+  assert.equal(shouldOfferReminderPrompt({ streakCount: 0, promptShown: false, remindersEnabled: false }), false);
+  assert.equal(shouldOfferReminderPrompt({ streakCount: 1, promptShown: false, remindersEnabled: false }), true);
+  assert.equal(shouldOfferReminderPrompt({ streakCount: 1, promptShown: true, remindersEnabled: false }), false);
+  assert.equal(shouldOfferReminderPrompt({ streakCount: 2, promptShown: false, remindersEnabled: true }), false);
+
+  // Scheduling rules
+  assert.equal(
+    shouldScheduleStreakReminder({ enabled: false, streakCount: 3, lastPlayedDay: '2026-10-19', today: '2026-10-20' }),
+    false,
+    'off by default'
+  );
+  assert.equal(
+    shouldScheduleStreakReminder({ enabled: true, streakCount: 1, lastPlayedDay: '2026-10-19', today: '2026-10-20' }),
+    false,
+    'requires streak >= 2'
+  );
+  assert.equal(
+    shouldScheduleStreakReminder({ enabled: true, streakCount: 2, lastPlayedDay: '2026-10-20', today: '2026-10-20' }),
+    false,
+    'never fires if already played today'
+  );
+  assert.equal(
+    shouldScheduleStreakReminder({
+      enabled: true,
+      streakCount: 2,
+      lastPlayedDay: '2026-10-19',
+      today: '2026-10-20',
+      lastScheduledDay: '2026-10-20'
+    }),
+    false,
+    'at most one notification per day'
+  );
+  assert.equal(
+    shouldScheduleStreakReminder({
+      enabled: true,
+      streakCount: 2,
+      lastPlayedDay: '2026-10-19',
+      today: '2026-10-20',
+      lastScheduledDay: '2026-10-19'
+    }),
+    true
+  );
+
+  // 18:00 local time calculation & wording
+  const noon = new Date(2026, 9, 20, 12, 0, 0).getTime();
+  const triggerToday = nextReminderDate(noon, { playedToday: false });
+  assert.equal(triggerToday.getHours(), 18);
+  assert.equal(triggerToday.getDate(), 20);
+
+  const msg = buildStreakReminderMessage({ petName: 'Bella', streakCount: 4 });
+  assert.equal(msg.body, 'Bella is waiting! Keep your 4-day streak 🔥');
+
+  const res1 = await syncStreakReminder({
+    enabled: true,
+    streak: { count: 3, lastDay: '2026-10-19' },
+    today: '2026-10-20',
+    petName: 'Bella',
+    nowMs: noon,
+    lastScheduledDay: null
+  });
+  assert.equal(res1.scheduled, true);
+  assert.equal(__getScheduledForTests().length, 1);
+  assert.equal(__getScheduledForTests()[0].content.body, 'Bella is waiting! Keep your 3-day streak 🔥');
+
+  // Calling again on the same day does not schedule a second notification
+  const res2 = await syncStreakReminder({
+    enabled: true,
+    streak: { count: 3, lastDay: '2026-10-19' },
+    today: '2026-10-20',
+    petName: 'Bella',
+    nowMs: noon,
+    lastScheduledDay: res1.scheduledForDay
+  });
+  assert.equal(res2.scheduled, false);
+  assert.equal(__getScheduledForTests().length, 1);
+});
+
+test('weekly best resets every Monday in local time', () => {
+  let wb = emptyWeeklyBest();
+  // Wednesday 2026-10-21
+  let out = updateWeeklyBest(wb, '2026-10-21', 'endless', 420);
+  wb = out.weeklyBest;
+  assert.equal(out.best, 420);
+  assert.equal(out.isNewWeeklyBest, true);
+  assert.equal(weeklyBestFor(wb, '2026-10-25', 'endless'), 420, 'Sunday of the same week keeps the weekly best');
+
+  // Higher score on Friday of the same week
+  out = updateWeeklyBest(wb, '2026-10-23', 'endless', 600);
+  wb = out.weeklyBest;
+  assert.equal(out.best, 600);
+  assert.equal(out.previousWeeklyBest, 420);
+  assert.equal(out.isNewWeeklyBest, true);
+
+  // Lower score on Sunday of the same week -> not a new weekly best
+  out = updateWeeklyBest(wb, '2026-10-25', 'endless', 350);
+  wb = out.weeklyBest;
+  assert.equal(out.best, 600);
+  assert.equal(out.isNewWeeklyBest, false);
+
+  // Monday 2026-10-26 -> new week! Resets to 0 before recording
+  assert.equal(weeklyBestFor(wb, '2026-10-26', 'endless'), 0);
+  out = updateWeeklyBest(wb, '2026-10-26', 'endless', 250);
+  assert.equal(out.previousWeeklyBest, 0);
+  assert.equal(out.best, 250);
+  assert.equal(out.isNewWeeklyBest, true, 'fresh New weekly best! on Monday');
 });

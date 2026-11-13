@@ -64,6 +64,8 @@ export default function Wardrobe({ pet, species, wardrobe, bank, onColour, onBuy
                       label={wearing ? t('game.wardrobe.takeOff') : t('game.wardrobe.wear')}
                       onPress={() => onWear(item.id)}
                     />
+                  ) : item.streakOnly ? (
+                    <StickerButton small disabled label={t('game.wardrobe.streak7')} onPress={() => {}} />
                   ) : (
                     <StickerButton
                       small

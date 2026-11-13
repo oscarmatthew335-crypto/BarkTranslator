@@ -24,6 +24,7 @@ export const ITEMS = [
   { id: 'hat-crown', slot: 'hat', price: 250, colour: '#FFC23B' },
   { id: 'bandana-pink', slot: 'neck', price: 50, colour: '#FF5FA2' },
   { id: 'bandana-sa', slot: 'neck', price: 150, colour: '#007A4D' },
+  { id: 'bandana-champ', slot: 'neck', price: 0, colour: '#FFD43B', streakOnly: true },
   { id: 'glasses-round', slot: 'glasses', price: 70, colour: '#24164A' },
   { id: 'glasses-sun', slot: 'glasses', price: 110, colour: '#24164A', dark: true },
   { id: 'glasses-heart', slot: 'glasses', price: 180, colour: '#FF5A5F', heart: true }
@@ -47,7 +48,17 @@ export function emptyWardrobe(pet) {
 
 export function canBuy(wardrobe, bank, itemId) {
   const item = getItem(itemId);
-  return Boolean(item) && !wardrobe.owned.includes(itemId) && bank >= item.price;
+  if (!item || item.streakOnly) return false;
+  return !wardrobe.owned.includes(itemId) && bank >= item.price;
+}
+
+export function unlockItem(wardrobe, itemId) {
+  const item = getItem(itemId);
+  if (!item || wardrobe.owned.includes(itemId)) return wardrobe;
+  return {
+    ...wardrobe,
+    owned: [...wardrobe.owned, itemId]
+  };
 }
 
 // Returns { wardrobe, bank } after buying (and wearing) an item, or the same

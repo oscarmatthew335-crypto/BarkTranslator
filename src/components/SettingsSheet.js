@@ -23,7 +23,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
   const [installId, setInstallId] = useState('');
   const [statsOpen, setStatsOpen] = useState(false);
   const [premiumOpen, setPremiumOpen] = useState(false);
-  const { premium, setPremium } = useGame(pet);
+  const { premium, options, setPremium, setOptions } = useGame(pet);
   const adsStatus = getAdsStatus();
   useEffect(() => {
     getInstallId().then(setInstallId);
@@ -172,6 +172,13 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 sub={t('settings.readAloudSub', { petName: pet.name })}
                 value={settings.readAloud === true}
                 onChange={(v) => updateSettings({ readAloud: v })}
+                divider
+              />
+              <Row
+                title={t('settings.streakReminderTitle')}
+                sub={t('settings.streakReminderSub', { petName: pet.name })}
+                value={Boolean(options?.reminders)}
+                onChange={(v) => setOptions({ reminders: Boolean(v), reminderPromptShown: true, lastReminderDay: null })}
                 divider
               />
             </View>

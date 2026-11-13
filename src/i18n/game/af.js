@@ -322,5 +322,20 @@ export default {
   'game.stats.rewardedAdsCompleted': "Beloningsadvertensies voltooi",
   'game.stats.interstitialsShown': "Tussen-advertensies gewys",
   'game.stats.premiumScreenShown': "Premium-skerm gewys",
-  'game.stats.purchases': "Premium-aankope"
+  'game.stats.purchases': "Premium-aankope",
+  'game.item.bandana-champ': "Weekkampioen-bandana",
+  'game.wardrobe.streak7': "🔥 7-dae-reeks",
+  'game.streak.nextReward': "Dag {day}-beloning: +{n} {emoji}",
+  'game.streak.nextDay7': "Dag {day}-beloning: +{n} {emoji} + Weekkampioen-bandana",
+  'game.streak.rewardEarned': "🔥 Reeksbeloning: +{n} {emoji}!",
+  'game.streak.rewardDay7': "🔥 7-dae-reeks! +{n} {emoji} + Weekkampioen-bandana ontsluit!",
+  'game.reminder.title': "Pawlingo",
+  'game.reminder.body': "{petName} wag! Hou jou {n}-dae-reeks aan die gang 🔥",
+  'game.reminder.promptTitle': "Hou jou reeks aan die gang?",
+  'game.reminder.promptSub': "Kry een vriendelike 18:00-herinnering as {petName} nog nie vandag gehardloop het nie.",
+  'game.reminder.turnOn': "Skakel herinneringe aan",
+  'settings.streakReminderTitle': "Daaglikse reeksherinnering",
+  'settings.streakReminderSub': "Een 18:00-herinnering wanneer jy 'n reeks met {petName} het en nog nie vandag gespeel het nie.",
+  'game.end.weeklyBest': "Hierdie week se beste: {n}",
+  'game.end.newWeeklyBest': "🎉 Nuwe weeklikse beste!"
 };

@@ -322,5 +322,20 @@ export default {
   'game.stats.rewardedAdsCompleted': "Izikhangiso zomklomelo eziqediwe",
   'game.stats.interstitialsShown': "Izikhangiso eziphakathi ezikhonjisiwe",
   'game.stats.premiumScreenShown': "Isikrini se-Premium sikhonjisiwe",
-  'game.stats.purchases': "Ukuthengwa kwe-Premium"
+  'game.stats.purchases': "Ukuthengwa kwe-Premium",
+  'game.item.bandana-champ': "Ibandana yompetha wesonto",
+  'game.wardrobe.streak7': "🔥 Uchungechunge lwezinsuku ezi-7",
+  'game.streak.nextReward': "Umklomelo wosuku {day}: +{n} {emoji}",
+  'game.streak.nextDay7': "Umklomelo wosuku {day}: +{n} {emoji} + Ibandana yompetha wesonto",
+  'game.streak.rewardEarned': "🔥 Umklomelo wochungechunge: +{n} {emoji}!",
+  'game.streak.rewardDay7': "🔥 Izinsuku ezi-7! +{n} {emoji} + Ibandana yompetha wesonto ivuliwe!",
+  'game.reminder.title': "Pawlingo",
+  'game.reminder.body': "U-{petName} ulindile! Gcina uchungechunge lwakho lwezinsuku ezi-{n} 🔥",
+  'game.reminder.promptTitle': "Gcina uchungechunge lwakho luqhubeka?",
+  'game.reminder.promptSub': "Thola isikhumbuzo esisodwa ngo-6 ntambama uma u-{petName} engakagijimi namuhla.",
+  'game.reminder.turnOn': "Vula izikhumbuzo",
+  'settings.streakReminderTitle': "Isikhumbuzo sochungechunge lwansuku zonke",
+  'settings.streakReminderSub': "Isikhumbuzo esisodwa ngo-6 ntambama uma unochungechunge no-{petName} futhi ungakadlali namuhla.",
+  'game.end.weeklyBest': "Okuhamba phambili kwaleli sonto: {n}",
+  'game.end.newWeeklyBest': "🎉 Okuhamba phambili okusha kwesonto!"
 };
