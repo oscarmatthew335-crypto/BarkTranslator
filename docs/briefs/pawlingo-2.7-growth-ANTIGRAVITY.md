@@ -32,7 +32,7 @@ Pawlingo is live with paid install ads (Google ~R8 per install). Today a player 
 - Link note in the PR: the owner links Firebase to AdMob and Google Ads in their consoles.
 
 ## Part B: Meta SDK
-Do everything in `pawlingo-2.7-meta-sdk-ANTIGRAVITY.md` (in the repo's `docs/briefs/` or attached). Meta App ID is `1715784240586694`; the client token goes in the `production` env in `eas.json` (owner provides it).
+Do everything in `pawlingo-2.7-meta-sdk-ANTIGRAVITY.md` (in the repo's `docs/briefs/` or attached). Meta App ID is `1715784240586694`; the client token is an EAS environment variable the owner sets (never in `eas.json`: the repo is public).
 
 ## Part C: reasons to come back
 `daily.js` already has the day key, streak, streak saver and daily challenge. Build on it:
