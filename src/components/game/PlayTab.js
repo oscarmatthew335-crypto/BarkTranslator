@@ -36,6 +36,7 @@ import { livesNow, canStartRun, useLife, addLife, formatWait, MAX_LIVES } from '
 import { recordRunForInterstitial, shouldShowInterstitial, recordInterstitialShown } from '../../game/interstitial';
 import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } from '../../game/ads';
 import { onPurchaseEvent } from '../../game/purchases';
+import { track, scoreBucket, runModeFor } from '../../game/analytics';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -88,9 +89,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     [t]
   );
 
-  const openPremium = useCallback(() => {
+  const openPremium = useCallback((source = 'hub') => {
     count('premiumScreenShown');
+    track('store_open', { source: typeof source === 'string' ? source : 'hub' });
     setPremiumOpen(true);
+  }, []);
+
+  const openWardrobe = useCallback((source = 'hub') => {
+    track('store_open', { source: typeof source === 'string' ? source : 'wardrobe' });
+    setScreen({ name: 'wardrobe' });
   }, []);
 
   // Power-ups waiting from a treat round or photo challenge go into the
@@ -110,6 +117,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       if (stage.endless) count('endlessRuns');
       else if (stage.chase) count('chaseRuns');
       else count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
+      track('run_start', { mode: runModeFor(stage) });
       const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
       const showHowTo = !fromReplay && shouldShowHowTo(game?.modeRuns, stage);
       updateGame((g) => ({
@@ -151,6 +159,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       const caughtLine = result.chase ? pickCaughtLine(pet, { lang }).text : null;
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
       const { challenge, justDone } = advanceChallenge(current, result);
+      const streakOut = updateStreak(game.streak, day);
+      track('run_end', {
+        mode: runModeFor(result),
+        score_bucket: scoreBucket(result.score),
+        treats: result.treats || 0
+      });
+      if (justDone) {
+        track('daily_challenge_done', { type: challenge.type });
+      }
+      if (streakOut.event === 'start' || streakOut.event === 'up' || streakOut.event === 'saved') {
+        track('streak_day', { length: streakOut.streak.count });
+      }
       updateGame((g) => ({
         ...g,
         progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
@@ -415,7 +435,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         onWatchAd={handleWatchAdForLife}
         onOpenPremium={() => {
           setLivesSheet((ls) => ({ ...ls, open: false }));
-          openPremium();
+          openPremium('lives_sheet');
         }}
         onClose={() => setLivesSheet((ls) => ({ ...ls, open: false }))}
       />
@@ -511,7 +531,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           <Text style={s.photoTitle}>👑 {t('game.premium.cardTitle')}</Text>
           <Text style={s.photoSub}>{t('game.premium.cardSub')}</Text>
           <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
-            <StickerButton label={t('game.premium.cardBtn')} emoji="👑" small color={C.paper} onPress={openPremium} />
+            <StickerButton label={t('game.premium.cardBtn')} emoji="👑" small color={C.paper} onPress={() => openPremium('hub_card')} />
           </View>
         </Sticker>
       )}
@@ -561,7 +581,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
       <PhotoCard pet={pet} situation={situation} onPress={() => setScreen({ name: 'photo' })} />
       <View style={s.row}>
-        <StickerButton label={t('game.wardrobe.button')} emoji="🎀" small color={C.butter} onPress={() => setScreen({ name: 'wardrobe' })} />
+        <StickerButton label={t('game.wardrobe.button')} emoji="🎀" small color={C.butter} onPress={() => openWardrobe('hub')} />
         <StickerButton
           label={t('game.moments.button', { petName: pet.name, n: petMoments.length })}
           emoji="🖼️"

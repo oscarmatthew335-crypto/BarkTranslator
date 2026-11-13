@@ -14,6 +14,7 @@ import mobileAds, {
   TestIds
 } from 'react-native-google-mobile-ads';
 import { count } from './counters';
+import { initAnalytics, track } from './analytics';
 
 export const TEST_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
 export const TEST_REWARDED_ID = TestIds?.REWARDED || 'ca-app-pub-3940256099942544/5224354917';
@@ -226,6 +227,7 @@ export async function initAds() {
       privacyOptionsAvailable = Boolean(
         consentInfo?.privacyOptionsRequirementStatus === 'REQUIRED'
       );
+      await initAnalytics({ canTrack: canRequest && !ADS_NON_PERSONALISED });
 
       if (!canRequest) {
         initialized = true;
@@ -254,6 +256,7 @@ export async function initAds() {
     } catch (_) {
       canRequest = false;
       initialized = false;
+      await initAnalytics({ canTrack: false });
       notify();
       return false;
     } finally {
@@ -291,7 +294,10 @@ export function showRewardedAd(kind = 'life') {
         unsubClosed?.();
         unsubError?.();
       } catch (_) {}
-      if (earned) count('rewardedAdsCompleted');
+      if (earned) {
+        count('rewardedAdsCompleted');
+        track('ad_rewarded_complete', { placement: key });
+      }
       preloadRewarded(key);
       resolve({ rewarded: earned });
     };
@@ -336,7 +342,10 @@ export function showInterstitialAd() {
         unsubClosed?.();
         unsubError?.();
       } catch (_) {}
-      if (shown) count('interstitialsShown');
+      if (shown) {
+        count('interstitialsShown');
+        track('ad_interstitial_shown');
+      }
       preloadInterstitial();
       resolve(Boolean(shown));
     };

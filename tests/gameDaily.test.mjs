@@ -224,12 +224,15 @@ test('local counters: sessions per day, first open, and day-1/7/30 returns', () 
   assert.equal(rate(1, 0), null);
 });
 
-test('the Play tab sends nothing by itself: no fetch or analytics anywhere in its code', async () => {
+test('the Play tab never makes direct network requests or uses third-party analytics outside the consent-gated wrappers', async () => {
   const { readdirSync, readFileSync } = await import('node:fs');
   for (const dir of ['src/game/', 'src/components/game/']) {
     for (const f of readdirSync(new URL(`../${dir}`, import.meta.url))) {
       const src = readFileSync(new URL(`../${dir}${f}`, import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
-      assert.ok(!/\bfetch\(|XMLHttpRequest|analytics|firebase|segment|amplitude|mixpanel/i.test(src), `${dir}${f}`);
+      assert.ok(!/\bfetch\(|XMLHttpRequest|segment|amplitude|mixpanel/i.test(src), `${dir}${f}`);
+      if (f !== 'analytics.js') {
+        assert.ok(!/@react-native-firebase\/analytics/i.test(src), `${dir}${f} must go through src/game/analytics.js`);
+      }
     }
   }
 });

@@ -19,6 +19,7 @@ import {
 } from 'expo-iap';
 import { count } from './counters';
 import { savePremiumState } from './gameStore';
+import { track } from './analytics';
 
 export const PREMIUM_PRODUCT_ID = 'pawlingo_premium';
 
@@ -71,12 +72,38 @@ export function getPremiumProduct() {
   return productInfo;
 }
 
+export function purchasePriceDetails(purchase, info = productInfo) {
+  const productId =
+    purchase?.productId ||
+    (Array.isArray(purchase?.ids) && purchase.ids[0]) ||
+    info?.id ||
+    info?.productId ||
+    PREMIUM_PRODUCT_ID;
+  const rawPrice = purchase?.price ?? info?.price ?? info?.oneTimePurchaseOfferDetails?.priceAmountMicros;
+  let value = Number(rawPrice);
+  if (info?.oneTimePurchaseOfferDetails?.priceAmountMicros && rawPrice === info.oneTimePurchaseOfferDetails.priceAmountMicros) {
+    value = Number(rawPrice) / 1e6;
+  }
+  if (!Number.isFinite(value) || value < 0) value = 0;
+  const currency =
+    String(
+      purchase?.currency ||
+        info?.currency ||
+        info?.oneTimePurchaseOfferDetails?.priceCurrencyCode ||
+        'USD'
+    ).slice(0, 8);
+  return { product_id: String(productId), value, currency };
+}
+
 async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
   try {
     await finishTransaction({ purchase, isConsumable: false });
   } catch (_) {}
   await savePremiumState(true);
-  if (isNewPurchase) count('purchases');
+  if (isNewPurchase) {
+    count('purchases');
+    track('purchase', purchasePriceDetails(purchase));
+  }
   notify({ type: 'granted', purchase });
   resolveWaiters({ status: 'purchased' });
 }
