@@ -19,26 +19,56 @@ import {
 } from 'expo-iap';
 import { count } from './counters';
 import { savePremiumState } from './gameStore';
+import { track } from './analytics';
+import { logMetaPremiumPurchased } from './meta';
+import {
+  PREMIUM_PRODUCT_ID as STORE_PREMIUM_ID,
+  STARTER_PACK_ID,
+  ALL_PRODUCT_IDS,
+  getTreatPack,
+  isConsumableProduct
+} from './storeItems';
 
-export const PREMIUM_PRODUCT_ID = 'pawlingo_premium';
+export const PREMIUM_PRODUCT_ID = STORE_PREMIUM_ID;
 
-export function isPremiumPurchase(purchase) {
+export function purchaseProductId(purchase) {
+  if (!purchase || typeof purchase !== 'object') return null;
+  if (purchase.productId) return purchase.productId;
+  if (Array.isArray(purchase.ids) && purchase.ids.length > 0) return purchase.ids[0];
+  return null;
+}
+
+export function isProductPurchase(purchase, targetId) {
   if (!purchase || typeof purchase !== 'object') return false;
   const matchesId =
-    purchase.productId === PREMIUM_PRODUCT_ID ||
-    (Array.isArray(purchase.ids) && purchase.ids.includes(PREMIUM_PRODUCT_ID));
+    purchase.productId === targetId ||
+    (Array.isArray(purchase.ids) && purchase.ids.includes(targetId));
   if (!matchesId) return false;
   // Pending purchases (e.g. cash / EFT vouchers) must not grant until 'purchased'.
   if (purchase.purchaseState && purchase.purchaseState !== 'purchased') return false;
   return true;
 }
 
+export function isPremiumPurchase(purchase) {
+  return isProductPurchase(purchase, PREMIUM_PRODUCT_ID);
+}
+
 export function isPendingPurchase(purchase) {
   return Boolean(purchase && purchase.purchaseState === 'pending');
 }
 
+export function purchaseTokenOf(purchase) {
+  return (
+    purchase?.purchaseToken ||
+    purchase?.transactionId ||
+    purchase?.orderId ||
+    null
+  );
+}
+
 let connected = false;
 let productInfo = null;
+let productsById = {};
 let updateSub = null;
 let errorSub = null;
 let pendingWaiters = [];
@@ -62,23 +92,131 @@ function resolveWaiters(result) {
   });
 }
 
+// Grant events for treat packs and the starter pack are kept until the UI has
+// stored the reward, and replayed to every new listener. Without this, a
+// purchase that lands while the Play tab isn't mounted would be lost.
+// Treat packs are only consumed on Play after confirmConsumableGranted(), so an
+// unconfirmed pack comes back from getAvailablePurchases() on the next start.
+const grantBuffer = new Map();
+const unconsumed = new Map();
+
+function notifyGrant(key, event) {
+  grantBuffer.set(key, event);
+  notify(event);
+}
+
 export function onPurchaseEvent(fn) {
   listeners.add(fn);
+  grantBuffer.forEach((event) => {
+    try {
+      fn(event);
+    } catch (_) {}
+  });
   return () => listeners.delete(fn);
 }
 
+export async function confirmConsumableGranted(token) {
+  const key = `consumable:${token}`;
+  grantBuffer.delete(key);
+  const purchase = unconsumed.get(token);
+  unconsumed.delete(token);
+  if (!purchase) return;
+  try {
+    await finishTransaction({ purchase, isConsumable: true });
+  } catch (_) {}
+}
+
+function emitTreatPack(pid, purchase) {
+  const pack = getTreatPack(pid);
+  const token = purchaseTokenOf(purchase);
+  if (!pack || !token) return false;
+  unconsumed.set(token, purchase);
+  notifyGrant(`consumable:${token}`, {
+    type: 'consumable_granted',
+    productId: pid,
+    treats: pack.treats,
+    token,
+    purchase
+  });
+  return true;
+}
+
+export function __resetPurchaseBuffersForTests() {
+  grantBuffer.clear();
+  unconsumed.clear();
+  listeners.clear();
+}
+
 export function getPremiumProduct() {
-  return productInfo;
+  return productInfo || productsById[PREMIUM_PRODUCT_ID] || null;
+}
+
+export function getStoreProducts() {
+  return { ...productsById };
+}
+
+export function purchasePriceDetails(purchase, info = productInfo) {
+  const productId =
+    purchase?.productId ||
+    (Array.isArray(purchase?.ids) && purchase.ids[0]) ||
+    info?.id ||
+    info?.productId ||
+    PREMIUM_PRODUCT_ID;
+  const rawPrice = purchase?.price ?? info?.price ?? info?.oneTimePurchaseOfferDetails?.priceAmountMicros;
+  let value = Number(rawPrice);
+  if (info?.oneTimePurchaseOfferDetails?.priceAmountMicros && rawPrice === info.oneTimePurchaseOfferDetails.priceAmountMicros) {
+    value = Number(rawPrice) / 1e6;
+  }
+  if (!Number.isFinite(value) || value < 0) value = 0;
+  const currency =
+    String(
+      purchase?.currency ||
+        info?.currency ||
+        info?.oneTimePurchaseOfferDetails?.priceCurrencyCode ||
+        'USD'
+    ).slice(0, 8);
+  return { product_id: String(productId), value, currency };
 }
 
 async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
-  try {
-    await finishTransaction({ purchase, isConsumable: false });
-  } catch (_) {}
-  await savePremiumState(true);
-  if (isNewPurchase) count('purchases');
-  notify({ type: 'granted', purchase });
-  resolveWaiters({ status: 'purchased' });
+  const pid = purchaseProductId(purchase) || PREMIUM_PRODUCT_ID;
+  const consumable = isConsumableProduct(pid);
+  // Treat packs are consumed only after the UI confirms the treats are stored.
+  if (!consumable) {
+    try {
+      await finishTransaction({ purchase, isConsumable: false });
+    } catch (_) {}
+  }
+
+  const details = purchasePriceDetails(purchase, productsById[pid] || productInfo);
+  if (isNewPurchase) {
+    count('purchases');
+    track('purchase', details);
+  }
+
+  if (pid === PREMIUM_PRODUCT_ID) {
+    await savePremiumState(true);
+    if (isNewPurchase) {
+      logMetaPremiumPurchased({
+        price: details.value,
+        currency: details.currency,
+        productId: details.product_id
+      });
+    }
+    notify({ type: 'granted', productId: pid, purchase });
+    resolveWaiters({ status: 'purchased', productId: pid });
+    return;
+  }
+
+  if (pid === STARTER_PACK_ID) {
+    notifyGrant('starter', { type: 'starter_granted', productId: pid, purchase });
+    resolveWaiters({ status: 'purchased', productId: pid });
+    return;
+  }
+
+  if (emitTreatPack(pid, purchase)) {
+    resolveWaiters({ status: 'purchased', productId: pid });
+  }
 }
 
 export async function initPurchases({ onPremiumGranted } = {}) {
@@ -104,7 +242,8 @@ export async function initPurchases({ onPremiumGranted } = {}) {
         resolveWaiters({ status: 'pending' });
         return;
       }
-      if (isPremiumPurchase(purchase)) {
+      const pid = purchaseProductId(purchase);
+      if (pid && ALL_PRODUCT_IDS.includes(pid) && (!purchase.purchaseState || purchase.purchaseState === 'purchased')) {
         await acknowledgeAndGrant(purchase, { isNewPurchase: true });
       }
     });
@@ -116,10 +255,16 @@ export async function initPurchases({ onPremiumGranted } = {}) {
     });
 
     try {
-      const products = await fetchProducts({ skus: [PREMIUM_PRODUCT_ID], type: 'in-app' });
+      const products = await fetchProducts({ skus: ALL_PRODUCT_IDS, type: 'in-app' });
       if (Array.isArray(products) && products.length > 0) {
-        productInfo = products.find((p) => p.id === PREMIUM_PRODUCT_ID || p.productId === PREMIUM_PRODUCT_ID) || products[0];
-        notify({ type: 'product', product: productInfo });
+        const nextMap = {};
+        for (const p of products) {
+          const id = p.id || p.productId;
+          if (id) nextMap[id] = p;
+        }
+        productsById = nextMap;
+        productInfo = nextMap[PREMIUM_PRODUCT_ID] || products.find((p) => p.id === PREMIUM_PRODUCT_ID || p.productId === PREMIUM_PRODUCT_ID) || null;
+        notify({ type: 'products', products: nextMap, product: productInfo });
       }
     } catch (_) {}
 
@@ -133,7 +278,7 @@ export async function initPurchases({ onPremiumGranted } = {}) {
   }
 }
 
-export async function buyPremium() {
+export async function buyProduct(productId = PREMIUM_PRODUCT_ID) {
   if (Platform.OS !== 'android') return { status: 'unavailable' };
   if (!connected) {
     const ok = await initPurchases();
@@ -154,8 +299,8 @@ export async function buyPremium() {
     Promise.resolve(
       requestPurchase({
         request: {
-          google: { skus: [PREMIUM_PRODUCT_ID] },
-          apple: { sku: PREMIUM_PRODUCT_ID }
+          google: { skus: [productId] },
+          apple: { sku: productId }
         },
         type: 'in-app'
       })
@@ -166,6 +311,10 @@ export async function buyPremium() {
       resolve({ status: cancelled ? 'cancelled' : 'error', error: err });
     });
   });
+}
+
+export async function buyPremium() {
+  return buyProduct(PREMIUM_PRODUCT_ID);
 }
 
 export async function restorePremium({ silent = false } = {}) {
@@ -181,12 +330,27 @@ export async function restorePremium({ silent = false } = {}) {
   try {
     const owned = await getAvailablePurchases();
     const match = Array.isArray(owned) ? owned.find((p) => isPremiumPurchase(p)) : null;
+    const starterMatch = Array.isArray(owned) ? owned.find((p) => isProductPurchase(p, STARTER_PACK_ID)) : null;
+    if (starterMatch) {
+      try {
+        await finishTransaction({ purchase: starterMatch, isConsumable: false });
+      } catch (_) {}
+      notifyGrant('starter', { type: 'starter_restored', productId: STARTER_PACK_ID, purchase: starterMatch });
+    }
+    // Treat packs that were paid for but never consumed (app closed before the
+    // treats were stored) are granted now; the token check stops double grants.
+    if (Array.isArray(owned)) {
+      for (const p of owned) {
+        const pid = purchaseProductId(p);
+        if (pid && isConsumableProduct(pid) && isProductPurchase(p, pid)) emitTreatPack(pid, p);
+      }
+    }
     if (match) {
       try {
         await finishTransaction({ purchase: match, isConsumable: false });
       } catch (_) {}
       await savePremiumState(true);
-      notify({ type: 'restored', purchase: match });
+      notify({ type: 'restored', productId: PREMIUM_PRODUCT_ID, purchase: match });
       return true;
     }
     if (!silent) notify({ type: 'none' });

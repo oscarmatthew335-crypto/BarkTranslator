@@ -1,16 +1,48 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle } from '../ui';
 import { BODY_COLOURS, ITEMS, SLOTS, canBuy } from '../../game/wardrobe';
+import {
+  TREAT_PACKS,
+  STARTER_PACK,
+  isStarterPackVisible,
+  starterPackStrikethrough
+} from '../../game/storeItems';
+import { getStoreProducts, buyProduct, onPurchaseEvent } from '../../game/purchases';
 import PetPreview from './PetPreview';
 
 // Dress the pet up with treats collected while playing. All cosmetic, all
-// free: there is nothing to buy with money.
-export default function Wardrobe({ pet, species, wardrobe, bank, onColour, onBuy, onWear, onBack }) {
+// earned by playing or via optional treat packs.
+export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onColour, onBuy, onWear, onBack }) {
   const { t } = useI18n();
+  const [products, setProducts] = useState(() => getStoreProducts());
+  const [busySku, setBusySku] = useState(null);
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
+
+  useEffect(() => {
+    setProducts(getStoreProducts());
+    return onPurchaseEvent((ev) => {
+      if (ev?.type === 'products' && ev.products) setProducts(ev.products);
+    });
+  }, []);
+
+  const showStarter = isStarterPackVisible(storeState);
+  const strikePrice = showStarter ? starterPackStrikethrough(products) : null;
+  const starterProduct = products[STARTER_PACK.id];
+  const starterPriceLabel =
+    starterProduct?.displayPrice || starterProduct?.localizedPrice || starterProduct?.price || null;
+
+  const handleBuyPack = async (sku) => {
+    if (busySku) return;
+    setBusySku(sku);
+    try {
+      await buyProduct(sku);
+    } finally {
+      setBusySku(null);
+    }
+  };
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.wardrobe.title', { petName: pet.name })} subtitle={t('game.wardrobe.sub')} />
@@ -64,6 +96,8 @@ export default function Wardrobe({ pet, species, wardrobe, bank, onColour, onBuy
                       label={wearing ? t('game.wardrobe.takeOff') : t('game.wardrobe.wear')}
                       onPress={() => onWear(item.id)}
                     />
+                  ) : item.streakOnly ? (
+                    <StickerButton small disabled label={t('game.wardrobe.streak7')} onPress={() => {}} />
                   ) : (
                     <StickerButton
                       small
@@ -78,6 +112,44 @@ export default function Wardrobe({ pet, species, wardrobe, bank, onColour, onBuy
           </View>
         </View>
       ))}
+      <Text style={s.section}>{t('game.store.treatsTitle')}</Text>
+      {showStarter && (
+        <Sticker radius={20} color={C.butter} style={{ marginBottom: 10 }} innerStyle={s.packCard}>
+          <View style={{ flex: 1 }}>
+            <Text style={s.packTitle}>👑 {t('game.store.starterTitle')}</Text>
+            <Text style={s.packSub}>{t('game.store.starterSub', { emoji: treatEmoji })}</Text>
+            {strikePrice ? <Text style={s.strikePrice}>{strikePrice}</Text> : null}
+          </View>
+          <StickerButton
+            small
+            color={C.paper}
+            disabled={Boolean(busySku)}
+            label={starterPriceLabel || t('game.store.buyBtn')}
+            onPress={() => handleBuyPack(STARTER_PACK.id)}
+          />
+        </Sticker>
+      )}
+      <View style={{ gap: 8 }}>
+        {TREAT_PACKS.map((pack) => {
+          const p = products[pack.id];
+          const price = p?.displayPrice || p?.localizedPrice || p?.price || t('game.store.buyBtn');
+          return (
+            <View key={pack.id} style={s.item}>
+              <Text style={s.itemName}>
+                {treatEmoji} {t(`game.store.${pack.id}`, { n: pack.treats })}
+              </Text>
+              <StickerButton
+                small
+                color={C.butter}
+                disabled={Boolean(busySku)}
+                label={String(price)}
+                onPress={() => handleBuyPack(pack.id)}
+              />
+            </View>
+          );
+        })}
+      </View>
+
       <Text style={s.note}>{t('game.wardrobe.note')}</Text>
       <View style={{ marginTop: 14 }}>
         <StickerButton label={t('game.back')} color={C.paper} onPress={onBack} />
@@ -102,5 +174,9 @@ const s = StyleSheet.create({
   itemOn: { borderColor: C.ink, backgroundColor: '#E6FFF3' },
   dot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: C.ink },
   itemName: { flex: 1, fontFamily: F.semibold, fontSize: 15, color: C.ink },
+  packCard: { padding: 12, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  packTitle: { fontFamily: F.bold, fontSize: 16, color: C.ink },
+  packSub: { fontFamily: F.regular, fontSize: 13, color: C.ink, marginTop: 2 },
+  strikePrice: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, textDecorationLine: 'line-through', marginTop: 2 },
   note: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 16, lineHeight: 17 }
 });

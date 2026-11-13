@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import Svg from 'react-native-svg';
 import { C, F } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -25,17 +27,47 @@ import Moments from './Moments';
 import useMoments from '../../game/useMoments';
 import { challengeSituation, saveMoment, reencodeWithoutMetadata, shouldUploadPhoto, uploadMeta, PHOTO_REWARD } from '../../game/photoChallenge';
 import { queuePhoto } from '../../contribute/contributions';
-import { dayKey, dailySeed, updateStreak, streakShown, saverAvailable, challengeFor, advanceChallenge, CHALLENGE_REWARD } from '../../game/daily';
-import { buy, toggleWear, setColour } from '../../game/wardrobe';
+import {
+  dayKey,
+  dailySeed,
+  updateStreak,
+  streakShown,
+  saverAvailable,
+  streakRewardFor,
+  nextStreakReward,
+  updateWeeklyBest,
+  challengeFor,
+  advanceChallenge,
+  CHALLENGE_REWARD
+} from '../../game/daily';
+import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
+import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders } from '../../game/reminders';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
 import LivesSheet from './LivesSheet';
 import PremiumSheet from './PremiumSheet';
-import { livesNow, canStartRun, useLife, addLife, formatWait, MAX_LIVES } from '../../game/lives';
+import { livesNow, canStartRun, useLife, addLife, formatWait, firstDayRemainingMs, formatHoursLeft, MAX_LIVES } from '../../game/lives';
 import { recordRunForInterstitial, shouldShowInterstitial, recordInterstitialShown } from '../../game/interstitial';
 import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } from '../../game/ads';
-import { onPurchaseEvent } from '../../game/purchases';
+import { onPurchaseEvent, confirmConsumableGranted } from '../../game/purchases';
+import { canOfferDoubleTreats, recordDoubleTreats } from '../../game/doubleTreats';
+import {
+  PREMIUM_BONUS_TREATS,
+  STARTER_PACK,
+  grantConsumableOnce,
+  shouldTriggerStarterOffer
+} from '../../game/storeItems';
+import { track, scoreBucket, msBucket, runModeFor } from '../../game/analytics';
+import { logMetaRunFinished } from '../../game/meta';
+import ScoreShareCard from './ScoreShareCard';
+import { canShareRunScore, buildScoreShareMessage } from '../../game/shareScore';
+import {
+  pickRunGoal,
+  runGoalProgress,
+  recordRecentRun,
+  nearMissStatus
+} from '../../game/runFeel';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -44,12 +76,31 @@ const MAX_WAITING_POWER_UPS = 4;
 export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
-  const { ready, game, lives, interstitial, premium, options, updateGame, updateLives, updateInterstitial, setPremium, setOptions } = useGame(pet);
+  const {
+    ready,
+    game,
+    lives,
+    interstitial,
+    doubleTreats,
+    extraSavers,
+    store,
+    premium,
+    options,
+    updateGame,
+    updateLives,
+    updateInterstitial,
+    updateDoubleTreats,
+    updateExtraSavers,
+    updateStore,
+    setPremium,
+    setOptions
+  } = useGame(pet);
   const [screen, setScreen] = useState({ name: 'hub' });
   const [livesSheet, setLivesSheet] = useState({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [adsStatus, setAdsStatus] = useState(() => getAdsStatus());
   const [now, setNow] = useState(() => Date.now());
+  const scoreCardRef = useRef(null);
   const moments = useMoments();
   const petMoments = moments.all.filter((m) => m.petId === pet.id);
   const faceUri = petMoments.find((m) => m.id === game?.faceMomentId)?.uri || null;
@@ -61,9 +112,42 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   useEffect(
     () =>
       onPurchaseEvent((ev) => {
-        if (ev?.type === 'granted' || ev?.type === 'restored') setPremium(true);
+        if (ev?.type === 'granted' || ev?.type === 'restored') {
+          setPremium(true);
+          if (!store.premiumBonusGranted) {
+            updateStore((st) => ({ ...st, premiumBonusGranted: true }));
+            updateGame((g) => ({
+              ...g,
+              bank: g.bank + PREMIUM_BONUS_TREATS,
+              lifetimeTreats: g.lifetimeTreats + PREMIUM_BONUS_TREATS
+            }));
+          }
+        } else if (ev?.type === 'starter_granted' || ev?.type === 'starter_restored') {
+          if (!store.starterBought) {
+            updateStore((st) => ({ ...st, starterBought: true }));
+            updateExtraSavers((n) => n + STARTER_PACK.extraSavers);
+            updateGame((g) => ({
+              ...g,
+              wardrobe: unlockItem(g.wardrobe, STARTER_PACK.itemId),
+              bank: g.bank + STARTER_PACK.treats,
+              lifetimeTreats: g.lifetimeTreats + STARTER_PACK.treats
+            }));
+          }
+        } else if (ev?.type === 'consumable_granted') {
+          const { granted, tokens } = grantConsumableOnce(store.processedTokens, ev.token, ev.treats);
+          if (granted > 0) {
+            updateStore((st) => ({ ...st, processedTokens: tokens }));
+            updateGame((g) => ({
+              ...g,
+              bank: g.bank + granted,
+              lifetimeTreats: g.lifetimeTreats + granted
+            }));
+          }
+          // Stored (or already stored earlier): now let Play consume the pack.
+          confirmConsumableGranted(ev.token);
+        }
       }),
-    [setPremium]
+    [setPremium, store.premiumBonusGranted, store.starterBought, store.processedTokens, updateStore, updateExtraSavers, updateGame]
   );
 
   useEffect(() => {
@@ -78,6 +162,26 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     return () => onRunningChange?.(false);
   }, [screen.name, onRunningChange]);
 
+  useEffect(() => {
+    if (!ready || !game) return;
+    if (!options?.reminders) {
+      cancelStreakReminders();
+      return;
+    }
+    syncStreakReminder({
+      enabled: Boolean(options.reminders),
+      streak: game.streak,
+      today,
+      petName: pet.name,
+      translateFn: t,
+      lastScheduledDay: options.lastReminderDay
+    }).then((res) => {
+      if (res?.scheduled && res.scheduledForDay && res.scheduledForDay !== options.lastReminderDay) {
+        setOptions({ lastReminderDay: res.scheduledForDay });
+      }
+    });
+  }, [ready, game?.streak?.count, game?.streak?.lastDay, options?.reminders, options?.lastReminderDay, pet.name, today, t, setOptions]);
+
   const showNotice = useCallback(
     (message, action) =>
       Alert.alert(
@@ -88,9 +192,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     [t]
   );
 
-  const openPremium = useCallback(() => {
+  const openPremium = useCallback((source = 'hub') => {
     count('premiumScreenShown');
+    track('store_open', { source: typeof source === 'string' ? source : 'hub' });
     setPremiumOpen(true);
+  }, []);
+
+  const openWardrobe = useCallback((source = 'hub') => {
+    track('store_open', { source: typeof source === 'string' ? source : 'wardrobe' });
+    setScreen({ name: 'wardrobe' });
   }, []);
 
   // Power-ups waiting from a treat round or photo challenge go into the
@@ -110,8 +220,19 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       if (stage.endless) count('endlessRuns');
       else if (stage.chase) count('chaseRuns');
       else count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
+      const mode = runModeFor(stage);
+      track('run_start', { mode });
       const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
       const showHowTo = !fromReplay && shouldShowHowTo(game?.modeRuns, stage);
+      const nextModeRuns = recordModeRun(game?.modeRuns, stage);
+      const totalRunCount = Object.values(nextModeRuns).reduce((sum, n) => sum + (Number(n) || 0), 0);
+      const runGoal = pickRunGoal({
+        day: dayKey(),
+        runCount: totalRunCount,
+        mode,
+        recentRuns: game?.recentRuns
+      });
+      track('run_goal_shown', { type: runGoal.type, mode });
       updateGame((g) => ({
         ...g,
         powerUps: g.powerUps?.length ? [] : g.powerUps,
@@ -119,7 +240,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       }));
       // The daily run is the same course for everyone with this pet type today.
       const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
-      setScreen({ name: 'run', stage, seed, powerUps, showHowTo, key: Date.now() });
+      setScreen({
+        name: 'run',
+        stage,
+        seed,
+        powerUps,
+        showHowTo,
+        instantStart: Boolean(fromReplay),
+        runGoal,
+        key: Date.now()
+      });
     },
     [game, lives, premium, updateGame, updateLives]
   );
@@ -151,12 +281,55 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       const caughtLine = result.chase ? pickCaughtLine(pet, { lang }).text : null;
       const current = game.challenge?.day === day ? game.challenge : challengeFor(day, pet.species, game.progress);
       const { challenge, justDone } = advanceChallenge(current, result);
+      const streakOut = updateStreak(game.streak, day, { extraSavers });
+      if (streakOut.usedExtraSaver) {
+        updateExtraSavers((n) => Math.max(0, n - 1));
+      }
+      const streakAdvanced =
+        streakOut.event === 'start' || streakOut.event === 'up' || streakOut.event === 'saved';
+      const sReward = streakAdvanced ? streakRewardFor(streakOut.streak.count) : { treats: 0, item: null };
+      const modeKey = runModeFor(result);
+      const wkOut = updateWeeklyBest(game.weeklyBest, day, modeKey, result.score);
+      const activeGoal = screen.name === 'run' ? screen.runGoal : null;
+      const goalProg = activeGoal ? runGoalProgress(activeGoal, result) : null;
+      const goalCompleted = goalProg?.done ? activeGoal : null;
+      const goalBonus = goalCompleted ? goalCompleted.bonus : 0;
+      const nearMiss = isMode
+        ? nearMissStatus({
+            score: result.score,
+            previousBest: prevBest,
+            previousWeeklyBest: wkOut.previousWeeklyBest,
+            newBest,
+            newWeeklyBest: wkOut.isNewWeeklyBest
+          })
+        : { kind: 'none' };
+      track('run_end', {
+        mode: modeKey,
+        score_bucket: scoreBucket(result.score),
+        treats: result.treats || 0
+      });
+      logMetaRunFinished(modeKey);
+      if (goalCompleted) {
+        track('run_goal_done', { type: goalCompleted.type, mode: modeKey });
+      }
+      if (nearMiss.kind === 'near_miss' || nearMiss.kind === 'near_miss_weekly') {
+        track('near_miss_shown', { mode: modeKey });
+      }
+      if (justDone) {
+        track('daily_challenge_done', { type: challenge.type });
+      }
+      if (streakAdvanced) {
+        track('streak_day', { length: streakOut.streak.count });
+      }
       updateGame((g) => ({
         ...g,
         progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
-        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus,
-        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus,
-        streak: updateStreak(g.streak, day).streak,
+        wardrobe: sReward.item ? unlockItem(g.wardrobe, sReward.item) : g.wardrobe,
+        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus + sReward.treats + goalBonus,
+        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus + sReward.treats + goalBonus,
+        streak: streakOut.streak,
+        weeklyBest: wkOut.weeklyBest,
+        recentRuns: recordRecentRun(g.recentRuns, result),
         challenge,
         bestScores: {
           endless: Math.max(g.bestScores?.endless || 0, result.endless ? result.score : 0),
@@ -182,27 +355,37 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         bestScore,
         previousBest: prevBest,
         newBest,
+        weeklyBest: wkOut.best,
+        previousWeeklyBest: wkOut.previousWeeklyBest,
+        newWeeklyBest: wkOut.isNewWeeklyBest,
+        streakReward: sReward,
+        goalCompleted,
+        deathAt: Date.now(),
         milestones: reached,
         rewardLine,
         caughtLine,
         roundItems,
         challengeDone: justDone
       }));
+      const nextInter = recordRunForInterstitial(interstitial, { mode: modeKey });
+      if (shouldTriggerStarterOffer(store, nextInter.totalRuns)) {
+        updateStore((st) => ({ ...st, starterOfferedAt: Date.now() }));
+      }
       if (isEndlessOrChase) {
-        const mode = result.endless ? 'endless' : 'chase';
         const ts = Date.now();
-        const nextInter = recordRunForInterstitial(interstitial, { mode });
         updateInterstitial(() => nextInter);
-        if (shouldShowInterstitial({ ...nextInter, mode, newBest, premium }, ts)) {
+        if (shouldShowInterstitial({ ...nextInter, mode: modeKey, newBest, premium }, ts)) {
           showInterstitialAd().then((shown) => {
             if (shown) {
               updateInterstitial((cur) => recordInterstitialShown(cur, Date.now()));
             }
           });
         }
+      } else {
+        updateInterstitial(() => nextInter);
       }
     },
-    [updateGame, updateInterstitial, interstitial, premium, pet, history, game, lang]
+    [updateGame, updateInterstitial, updateDoubleTreats, updateExtraSavers, updateStore, interstitial, doubleTreats, extraSavers, store, premium, pet, history, game, lang, screen.name, screen.runGoal]
   );
 
   // A treat-round answer. Recordings go through the same path as the
@@ -312,6 +495,45 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     }
   }, [livesSheet, premium, startStage, updateLives]);
 
+  const handleShareScore = useCallback(async () => {
+    if (screen.name !== 'end' || !screen.result) return;
+    const mode = runModeFor(screen.result);
+    track('share_score', { mode, score_bucket: scoreBucket(screen.result.score) });
+    const chaserLabel = t(screen.stage?.chaser?.nameKey || 'game.chaser.bath');
+    const message = buildScoreShareMessage({
+      petName: pet.name,
+      score: screen.result.score,
+      isChase: Boolean(screen.result.chase),
+      chaserLabel,
+      translateFn: t
+    });
+    try {
+      if (scoreCardRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(scoreCardRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1350 });
+        await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: message });
+        return;
+      }
+    } catch (_) {}
+    try {
+      await Share.share({ message });
+    } catch (_) {}
+  }, [screen, pet.name, t]);
+
+  const handleDoubleTreats = useCallback(async () => {
+    if (screen.name !== 'end' || screen.doubleClaimed) return;
+    const res = await showRewardedAd('double');
+    if (res?.rewarded) {
+      const bonus = Math.max(0, Math.floor(Number(screen.result?.treats) || 0));
+      updateDoubleTreats((d) => recordDoubleTreats(d, dayKey()));
+      updateGame((g) => ({
+        ...g,
+        bank: g.bank + bonus,
+        lifetimeTreats: g.lifetimeTreats + bonus
+      }));
+      setScreen((sc) => (sc.name === 'end' ? { ...sc, doubleClaimed: true } : sc));
+    }
+  }, [screen, updateDoubleTreats, updateGame]);
+
   if (!ready || !game || !moments.ready) return <View style={s.container} />;
 
   if (screen.name === 'photo')
@@ -335,6 +557,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         species={species}
         wardrobe={game.wardrobe}
         bank={game.bank}
+        storeState={store}
         onColour={(c) => updateGame((g) => ({ ...g, wardrobe: setColour(g.wardrobe, c) }))}
         onBuy={(id) => updateGame((g) => ({ ...g, ...buy(g.wardrobe, g.bank, id) }))}
         onWear={(id) => updateGame((g) => ({ ...g, wardrobe: toggleWear(g.wardrobe, id) }))}
@@ -378,6 +601,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             : 0
         }
         showHowTo={screen.showHowTo}
+        instantStart={Boolean(screen.instantStart)}
+        runGoal={screen.runGoal}
         reduceMotion={reduceMotion}
         soundOn={options.sound}
         vibrationOn={options.vibration !== false}
@@ -415,7 +640,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         onWatchAd={handleWatchAdForLife}
         onOpenPremium={() => {
           setLivesSheet((ls) => ({ ...ls, open: false }));
-          openPremium();
+          openPremium('lives_sheet');
         }}
         onClose={() => setLivesSheet((ls) => ({ ...ls, open: false }))}
       />
@@ -433,12 +658,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     const isEndlessOrChase = Boolean(screen.stage.endless || screen.stage.chase);
     const after = isEndlessOrChase ? null : screen.stage.daily ? suggestedStage(game.progress, pet.species) : nextStageAfter(pet.species, screen.stage.id);
     const next = after && isUnlocked(game.progress, pet.species, after.id) ? after : null;
+    const offerDouble =
+      adsStatus.rewardedDoubleReady &&
+      canOfferDoubleTreats(screen.result, doubleTreats, today, { alreadyClaimed: Boolean(screen.doubleClaimed) });
     return (
       <>
         <StageEnd
           pet={pet}
           species={species}
           wardrobe={game.wardrobe}
+          bank={game.bank}
           faceUri={faceUri}
           result={screen.result}
           stage={screen.stage}
@@ -446,6 +675,11 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           bestScore={screen.bestScore}
           previousBest={screen.previousBest}
           newBest={screen.newBest}
+          weeklyBest={screen.weeklyBest}
+          previousWeeklyBest={screen.previousWeeklyBest}
+          newWeeklyBest={screen.newWeeklyBest}
+          streakReward={screen.streakReward}
+          goalCompleted={screen.goalCompleted}
           milestones={screen.milestones}
           rewardLine={screen.rewardLine}
           caughtLine={screen.caughtLine}
@@ -455,8 +689,25 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           onPhotoChallenge={() => setScreen({ name: 'photo' })}
           photoSituation={situation}
           onNext={() => startStage(next)}
-          onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
+          onReplay={() => {
+            if (screen.deathAt) {
+              track('play_again_tap', { ms_bucket: msBucket(Date.now() - screen.deathAt) });
+            }
+            startStage(screen.stage, [], { fromReplay: true });
+          }}
+          onOpenWardrobe={() => openWardrobe('end_unlock')}
+          onShareScore={canShareRunScore(screen.result, { newBest: screen.newBest }) ? handleShareScore : null}
+          onDoubleTreats={offerDouble ? handleDoubleTreats : null}
+          doubleTreatsAmount={offerDouble ? screen.result.treats : 0}
           onMap={() => setScreen({ name: 'hub' })}
+        />
+        <ScoreShareCard
+          ref={scoreCardRef}
+          pet={pet}
+          wardrobe={game.wardrobe}
+          score={screen.result.score}
+          isChase={Boolean(screen.result.chase)}
+          chaserLabel={t(screen.stage?.chaser?.nameKey || 'game.chaser.bath')}
         />
         {modals}
       </>
@@ -464,16 +715,25 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   }
 
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
-  const streak = streakShown(game.streak, today);
+  const streak = streakShown(game.streak, today, extraSavers);
+  const upcomingStreak = nextStreakReward(streak);
+  const showReminderPrompt = shouldOfferReminderPrompt({
+    streakCount: streak,
+    promptShown: options?.reminderPromptShown,
+    remindersEnabled: options?.reminders
+  });
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
   const dailyBest = game.daily.day === today ? game.daily.best : null;
   const continueStage = suggestedStage(game.progress, pet.species);
   const livesInfo = livesNow(lives, now, { premium });
-  const livesStatus = livesInfo.unlimited
-    ? '❤️ ∞'
-    : livesInfo.lives < MAX_LIVES
-    ? `❤️ ${livesInfo.lives}/${MAX_LIVES} · ${formatWait(livesInfo.msUntilNext)}`
-    : `❤️ ${livesInfo.lives}/${MAX_LIVES}`;
+  const livesStatus =
+    livesInfo.unlimited && !premium
+      ? t('game.lives.unlimitedToday', { time: formatHoursLeft(firstDayRemainingMs(lives, now)) })
+      : livesInfo.unlimited
+      ? '❤️ ∞'
+      : livesInfo.lives < MAX_LIVES
+      ? `❤️ ${livesInfo.lives}/${MAX_LIVES} · ${formatWait(livesInfo.msUntilNext)}`
+      : `❤️ ${livesInfo.lives}/${MAX_LIVES}`;
   return (
     <>
     <ScrollView style={s.container} contentContainerStyle={s.content}>
@@ -487,8 +747,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           <Text style={s.heroLine}>⭐ {totalStars(game.progress)}</Text>
           <Text style={s.heroSmall}>
             {streak > 0 ? t('game.streak.days', { n: streak }) : t('game.streak.none')}
-            {streak > 0 && saverAvailable(game.streak, today) ? ` · ${t('game.streak.saverNote')}` : ''}
+            {streak > 0 && saverAvailable(game.streak, today, extraSavers) ? ` · ${t('game.streak.saverNote')}` : ''}
           </Text>
+          {upcomingStreak && (
+            <Text style={s.heroSmall}>
+              {upcomingStreak.item
+                ? t('game.streak.nextDay7', { day: upcomingStreak.day, n: upcomingStreak.treats, emoji: treatEmoji })
+                : t('game.streak.nextReward', { day: upcomingStreak.day, n: upcomingStreak.treats, emoji: treatEmoji })}
+            </Text>
+          )}
           {game.powerUps.length > 0 && (
             <View style={s.ready}>
               <Text style={s.readyText}>{t('game.readyPowerUps')}</Text>
@@ -502,6 +769,27 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         </View>
       </Sticker>
 
+      {showReminderPrompt && (
+        <Sticker radius={20} color={C.paper} style={{ marginTop: 12 }} innerStyle={s.photoCard}>
+          <Text style={s.photoTitle}>🔔 {t('game.reminder.promptTitle')}</Text>
+          <Text style={s.photoSub}>{t('game.reminder.promptSub', { petName: pet.name })}</Text>
+          <View style={s.row}>
+            <StickerButton
+              small
+              color={C.mint}
+              label={t('game.reminder.turnOn')}
+              onPress={() => setOptions({ reminders: true, reminderPromptShown: true, lastReminderDay: null })}
+            />
+            <StickerButton
+              small
+              color={C.paper}
+              label={t('game.photo.notNow')}
+              onPress={() => setOptions({ reminderPromptShown: true })}
+            />
+          </View>
+        </Sticker>
+      )}
+
       <View style={{ marginTop: 14 }}>
         <ModeCards species={pet.species} bestScores={game.bestScores} livesStatus={livesStatus} onPlay={startStage} />
       </View>
@@ -511,7 +799,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           <Text style={s.photoTitle}>👑 {t('game.premium.cardTitle')}</Text>
           <Text style={s.photoSub}>{t('game.premium.cardSub')}</Text>
           <View style={{ marginTop: 10, alignSelf: 'flex-start' }}>
-            <StickerButton label={t('game.premium.cardBtn')} emoji="👑" small color={C.paper} onPress={openPremium} />
+            <StickerButton label={t('game.premium.cardBtn')} emoji="👑" small color={C.paper} onPress={() => openPremium('hub_card')} />
           </View>
         </Sticker>
       )}
@@ -561,7 +849,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 
       <PhotoCard pet={pet} situation={situation} onPress={() => setScreen({ name: 'photo' })} />
       <View style={s.row}>
-        <StickerButton label={t('game.wardrobe.button')} emoji="🎀" small color={C.butter} onPress={() => setScreen({ name: 'wardrobe' })} />
+        <StickerButton label={t('game.wardrobe.button')} emoji="🎀" small color={C.butter} onPress={() => openWardrobe('hub')} />
         <StickerButton
           label={t('game.moments.button', { petName: pet.name, n: petMoments.length })}
           emoji="🖼️"

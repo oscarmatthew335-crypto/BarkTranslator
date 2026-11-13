@@ -8,6 +8,9 @@
 
 import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import * as Haptics from 'expo-haptics';
+import { collectPitchFor } from './runFeel';
+
+export { collectPitchFor };
 
 const FILES = {
   jump: require('../../assets/sounds/game_jump.wav'),
@@ -20,6 +23,8 @@ const FILES = {
 let players = null;
 let enabled = true;
 let vibrationEnabled = true;
+let lastCollectAt = null;
+let collectStreak = 0;
 
 export async function startGameAudio(soundOn, vibrationOn = true) {
   enabled = Boolean(soundOn);
@@ -55,10 +60,13 @@ export function stopGameAudio() {
   players = null;
 }
 
-function play(name) {
+function play(name, rate = 1) {
   if (!enabled || !players?.[name]) return;
   try {
     const p = players[name];
+    if (typeof p.setPlaybackRate === 'function') {
+      p.setPlaybackRate(rate);
+    }
     p.seekTo(0);
     p.play();
   } catch (_) {}
@@ -71,10 +79,15 @@ export function gameEvent(event) {
       play('jump');
       if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       break;
-    case 'collect':
-      play('collect');
+    case 'collect': {
+      const now = Date.now();
+      const { nextStreak, rate } = collectPitchFor(lastCollectAt, now, collectStreak);
+      lastCollectAt = now;
+      collectStreak = nextStreak;
+      play('collect', rate);
       if (vibrationEnabled) Haptics.selectionAsync().catch(() => {});
       break;
+    }
     case 'power':
     case 'shield':
     case 'smash':

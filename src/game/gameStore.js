@@ -7,10 +7,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emptyProgress } from './progress';
 import { emptyWardrobe } from './wardrobe';
-import { emptyStreak } from './daily';
+import { emptyStreak, emptyWeeklyBest } from './daily';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
 import { emptyInterstitialState } from './interstitial';
+import { emptyDoubleTreatsState } from './doubleTreats';
 
 const KEY = 'pawlingo:game:v1';
 
@@ -54,9 +55,11 @@ export function emptyPetGame(pet) {
     bank: 0, // treats to spend in the wardrobe
     lifetimeTreats: 0,
     streak: emptyStreak(),
+    weeklyBest: emptyWeeklyBest(),
     daily: { day: null, best: 0, plays: 0 },
     bestScores: { endless: 0, chase: 0 },
     modeRuns: emptyModeRuns(),
+    recentRuns: [],
     challenge: { day: null, id: null, count: 0, done: false },
     round: emptyRoundState(),
     powerUps: [], // waiting for the next stage (from treat rounds and photo challenges)
@@ -64,13 +67,23 @@ export function emptyPetGame(pet) {
   };
 }
 
+export const emptyStoreState = () => ({
+  starterOfferedAt: null,
+  starterBought: false,
+  premiumBonusGranted: false,
+  processedTokens: []
+});
+
 export const emptyGameState = () => ({
   pets: {},
   bestScores: emptyBestScores(),
   lives: emptyLives(),
   interstitial: emptyInterstitialState(),
+  doubleTreats: emptyDoubleTreatsState(),
+  extraSavers: 0,
+  store: emptyStoreState(),
   premium: false,
-  options: { sound: true, vibration: true }
+  options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null }
 });
 
 export function bestScoreFor(state, species, mode) {
@@ -113,6 +126,9 @@ export async function loadGame() {
         bestScores,
         lives: { ...def.lives, ...(data.lives || {}) },
         interstitial: { ...def.interstitial, ...(data.interstitial || {}) },
+        doubleTreats: { ...def.doubleTreats, ...(data.doubleTreats || {}) },
+        extraSavers: Math.max(0, Math.floor(Number(data.extraSavers) || 0)),
+        store: { ...def.store, ...(data.store || {}) },
         premium: Boolean(data.premium),
         options: { ...def.options, ...(data.options || {}) }
       };
@@ -160,7 +176,9 @@ export function petGame(state, pet) {
       endless: Math.max(speciesBest.endless || 0, saved.bestScores?.endless || 0),
       chase: Math.max(speciesBest.chase || 0, saved.bestScores?.chase || 0)
     },
+    weeklyBest: { ...base.weeklyBest, ...(saved.weeklyBest || {}) },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
+    recentRuns: Array.isArray(saved.recentRuns) ? saved.recentRuns : [],
     round: { ...base.round, ...(saved.round || {}) }
   };
 }

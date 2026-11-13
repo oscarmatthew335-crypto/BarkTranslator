@@ -4,6 +4,7 @@ import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circl
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
 import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
+import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent } from '../../game/sfx';
 import { count } from '../../game/counters';
 import { isRewardedReady, showRewardedAd } from '../../game/ads';
@@ -26,6 +27,8 @@ export default function RunnerScreen({
   seed,
   startPowerUps = [],
   bestScore = 0,
+  runGoal = null,
+  instantStart = false,
   showHowTo = true,
   reduceMotion,
   soundOn,
@@ -42,7 +45,7 @@ export default function RunnerScreen({
   const pausedRef = useRef(true);
   const [paused, setPaused] = useState(Boolean(showHowTo));
   const [started, setStarted] = useState(!showHowTo);
-  const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : 3));
+  const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : instantStart ? 1 : 3));
   const [continuePrompt, setContinuePrompt] = useState(false);
   const [continueBusy, setContinueBusy] = useState(false);
   const [, setTick] = useState(0);
@@ -217,7 +220,9 @@ export default function RunnerScreen({
   const run = runRef.current;
   const things = visible(run);
   const hurtFresh = run.invuln > HIT_INVULN_S - 0.25 && run.hits > 0;
-  const shake = !reduceMotion && hurtFresh ? Math.sin(run.t * 90) * 3 : 0;
+  const nearMissFresh = (run.nearMissTimer || 0) > 0;
+  const shake = !reduceMotion && (hurtFresh || nearMissFresh) ? Math.sin(run.t * 90) * (hurtFresh ? 3 : 2) : 0;
+  const goalProg = runGoal ? runGoalProgress(runGoal, run) : null;
   const blink = run.invuln > 0 && (reduceMotion ? true : Math.floor(run.t * 12) % 2 === 0);
   const pose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
   const petTop = GROUND - run.player.height - 44;
@@ -352,6 +357,14 @@ export default function RunnerScreen({
             ))}
           </View>
         )}
+        {goalProg && (
+          <View style={[s.goalChip, goalProg.done && s.goalChipDone]} pointerEvents="none">
+            <Text style={s.goalChipText} numberOfLines={1}>
+              {goalProg.done ? '✓ ' : '🎯 '}
+              {t(`game.goal.${runGoal.type}`, { n: goalProg.target })} ({goalProg.current}/{goalProg.target})
+            </Text>
+          </View>
+        )}
         {!paused && countdown !== null && !reduceMotion && countdown > 0 && (
           <View style={s.countdownOverlay} pointerEvents="none">
             <View style={s.countdownBubble}>
@@ -483,6 +496,9 @@ const s = StyleSheet.create({
   // About 60% of the screen height goes to the game view so jumps have room on screen.
   stage: { flex: 1, minHeight: 260, borderTopWidth: INK_WIDTH, borderBottomWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.paper },
   powers: { position: 'absolute', top: 6, left: 8, flexDirection: 'row', gap: 4 },
+  goalChip: { position: 'absolute', top: 38, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, borderWidth: 2, borderColor: C.ink, backgroundColor: 'rgba(255,255,255,0.9)' },
+  goalChipDone: { backgroundColor: C.mint },
+  goalChipText: { fontFamily: F.semibold, fontSize: 12, color: C.ink },
   countdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9, elevation: 9, alignItems: 'center', justifyContent: 'center' },
   countdownBubble: { width: 84, height: 84, borderRadius: 42, borderWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.butter, alignItems: 'center', justifyContent: 'center' },
   countdownText: { fontFamily: F.bold, fontSize: 44, color: C.ink },

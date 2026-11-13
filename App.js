@@ -31,6 +31,7 @@ import { I18nProvider, translate } from './src/i18n';
 import { countSession } from './src/game/counters';
 import { initAds } from './src/game/ads';
 import { initPurchases } from './src/game/purchases';
+import { track } from './src/game/analytics';
 
 installCrashReporting();
 
@@ -135,6 +136,7 @@ function PetApp() {
               data.updatePet(created.id, { contextId, contextSetAt: Date.now() });
             }
             data.updateSettings({ ageConfirmed: true });
+            track('tutorial_complete');
           }}
         />
       </I18nProvider>
