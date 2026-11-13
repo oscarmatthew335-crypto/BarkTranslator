@@ -363,5 +363,14 @@ export default {
   'game.item.cape-hero': "Ingubo yeqhawe",
   'game.item.glasses-star': "Izibuko zenkanyezi",
   'game.item.glasses-monocle': "I-monocle yegolide",
-  'game.item.glasses-cyber': "I-visor ye-cyber"
+  'game.item.glasses-cyber': "I-visor ye-cyber",
+  'game.goal.treats': "Qoqa izidlo ezi-{n}",
+  'game.goal.score': "Finyelela ku-{n}",
+  'game.goal.jumps': "Gxuma izikhathi ezi-{n}",
+  'game.goal.seconds': "Phila imizuzwana engu-{n}",
+  'game.goal.doneBonus': "Inhloso ifezekile! +{n} {emoji}",
+  'game.end.soCloseBest': "Sondela kakhulu! Sekusele {n} kuphela kokuhle kakhulu.",
+  'game.end.soCloseWeekly': "Sondela kakhulu! Sekusele {n} kokuhle kakhulu kwaleli viki.",
+  'game.end.nextUnlock': "Izidlo ezingeziwe ezi-{n} ze-{item}",
+  'game.end.readyUnlock': "Kulungele ukuvula i-{item}!"
 };

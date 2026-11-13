@@ -362,5 +362,14 @@ export default {
   'game.item.cape-hero': "Hero cape",
   'game.item.glasses-star': "Star shades",
   'game.item.glasses-monocle': "Gold monocle",
-  'game.item.glasses-cyber': "Cyber visor"
+  'game.item.glasses-cyber': "Cyber visor",
+  'game.goal.treats': "Collect {n} treats",
+  'game.goal.score': "Reach {n}",
+  'game.goal.jumps': "Jump {n} times",
+  'game.goal.seconds': "Survive {n} s",
+  'game.goal.doneBonus': "Goal done! +{n} {emoji}",
+  'game.end.soCloseBest': "So close! Only {n} from your best.",
+  'game.end.soCloseWeekly': "So close! Only {n} from this week's best.",
+  'game.end.nextUnlock': "{n} more treats for {item}",
+  'game.end.readyUnlock': "Ready to unlock {item}!"
 };

@@ -59,6 +59,7 @@ export function emptyPetGame(pet) {
     daily: { day: null, best: 0, plays: 0 },
     bestScores: { endless: 0, chase: 0 },
     modeRuns: emptyModeRuns(),
+    recentRuns: [],
     challenge: { day: null, id: null, count: 0, done: false },
     round: emptyRoundState(),
     powerUps: [], // waiting for the next stage (from treat rounds and photo challenges)
@@ -177,6 +178,7 @@ export function petGame(state, pet) {
     },
     weeklyBest: { ...base.weeklyBest, ...(saved.weeklyBest || {}) },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
+    recentRuns: Array.isArray(saved.recentRuns) ? saved.recentRuns : [],
     round: { ...base.round, ...(saved.round || {}) }
   };
 }

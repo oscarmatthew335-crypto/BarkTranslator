@@ -353,6 +353,8 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     treatPoints: 0,
     score: 0,
     hits: 0,
+    jumps: 0,
+    nearMissTimer: 0,
     hearts: stage.hearts || 3,
     chaseGap: stage.chase ? CHASE_GAP_START : null,
     cleanTime: 0,
@@ -405,12 +407,13 @@ export function step(run, dt, input = {}) {
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, invuln, slow, hearts, cleanTime = 0 } = run;
+  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, jumps = 0, nearMissTimer = 0, invuln, slow, hearts, cleanTime = 0 } = run;
 
   // timers
   for (const k of Object.keys(POWER_DURATION)) power[k] = Math.max(0, power[k] - dt);
   invuln = Math.max(0, invuln - dt);
   slow = Math.max(0, slow - dt);
+  nearMissTimer = Math.max(0, nearMissTimer - dt);
 
   // pet movement
   if (input.swipeDuck) player.duckTimer = SWIPE_DUCK_S;
@@ -478,6 +481,13 @@ export function step(run, dt, input = {}) {
         const k = Math.min(1, (MAGNET_PULL * dt) / d);
         e = { ...e, x: e.x + dx * k, y: e.y + dy * k };
         changed.set(i, e);
+      }
+    }
+    if (e.kind === 'obstacle' && !e.hit && !e.nearMissed && e.x + e.w < dist + 2 && e.x + e.w >= dist - 14) {
+      if (player.height > 0 || player.ducking) {
+        changed.set(i, { ...e, nearMissed: true });
+        nearMissTimer = 0.22;
+        events.push('nearMiss');
       }
     }
     if (!overlaps(pBox, entityBox(e))) continue;
@@ -561,6 +571,8 @@ export function step(run, dt, input = {}) {
     else events.push('finish');
   }
 
+  jumps += events.filter((ev) => ev === 'jump').length;
+
   let nextRun = {
     ...run,
     t,
@@ -576,6 +588,8 @@ export function step(run, dt, input = {}) {
     treatPoints,
     score,
     hits,
+    jumps,
+    nearMissTimer,
     hearts,
     chaseGap,
     cleanTime,
@@ -681,6 +695,7 @@ export function resultOf(run) {
     multiplier: run.multiplier || 1,
     treatPoints: run.treatPoints || 0,
     hits: run.hits,
+    jumps: run.jumps || 0,
     continued: Boolean(run.continued),
     failed: Boolean(run.failed),
     seconds: Math.round(run.t),

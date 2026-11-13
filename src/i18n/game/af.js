@@ -363,5 +363,14 @@ export default {
   'game.item.cape-hero': "Held-mantel",
   'game.item.glasses-star': "Ster-sonbril",
   'game.item.glasses-monocle': "Goue monokel",
-  'game.item.glasses-cyber': "Kuber-visier"
+  'game.item.glasses-cyber': "Kuber-visier",
+  'game.goal.treats': "Versamel {n} lekkernye",
+  'game.goal.score': "Bereik {n}",
+  'game.goal.jumps': "Spring {n} keer",
+  'game.goal.seconds': "Oorleef {n} s",
+  'game.goal.doneBonus': "Doel bereik! +{n} {emoji}",
+  'game.end.soCloseBest': "So naby! Net {n} van jou beste.",
+  'game.end.soCloseWeekly': "So naby! Net {n} van hierdie week se beste.",
+  'game.end.nextUnlock': "Nog {n} lekkernye vir {item}",
+  'game.end.readyUnlock': "Gereed om {item} oop te sluit!"
 };

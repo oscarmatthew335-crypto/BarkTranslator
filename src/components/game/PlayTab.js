@@ -58,10 +58,16 @@ import {
   grantConsumableOnce,
   shouldTriggerStarterOffer
 } from '../../game/storeItems';
-import { track, scoreBucket, runModeFor } from '../../game/analytics';
+import { track, scoreBucket, msBucket, runModeFor } from '../../game/analytics';
 import { logMetaRunFinished } from '../../game/meta';
 import ScoreShareCard from './ScoreShareCard';
 import { canShareRunScore, buildScoreShareMessage } from '../../game/shareScore';
+import {
+  pickRunGoal,
+  runGoalProgress,
+  recordRecentRun,
+  nearMissStatus
+} from '../../game/runFeel';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -212,9 +218,19 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       if (stage.endless) count('endlessRuns');
       else if (stage.chase) count('chaseRuns');
       else count(stage.daily ? 'dailyRuns' : 'stagesPlayed');
-      track('run_start', { mode: runModeFor(stage) });
+      const mode = runModeFor(stage);
+      track('run_start', { mode });
       const powerUps = [...(game?.powerUps || []), ...extraPowerUps].slice(-MAX_WAITING_POWER_UPS);
       const showHowTo = !fromReplay && shouldShowHowTo(game?.modeRuns, stage);
+      const nextModeRuns = recordModeRun(game?.modeRuns, stage);
+      const totalRunCount = Object.values(nextModeRuns).reduce((sum, n) => sum + (Number(n) || 0), 0);
+      const runGoal = pickRunGoal({
+        day: dayKey(),
+        runCount: totalRunCount,
+        mode,
+        recentRuns: game?.recentRuns
+      });
+      track('run_goal_shown', { type: runGoal.type, mode });
       updateGame((g) => ({
         ...g,
         powerUps: g.powerUps?.length ? [] : g.powerUps,
@@ -222,7 +238,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       }));
       // The daily run is the same course for everyone with this pet type today.
       const seed = stage.daily ? dailySeed(dayKey(), stage.species) : hashString(`${stage.id}:${Date.now()}`);
-      setScreen({ name: 'run', stage, seed, powerUps, showHowTo, key: Date.now() });
+      setScreen({
+        name: 'run',
+        stage,
+        seed,
+        powerUps,
+        showHowTo,
+        instantStart: Boolean(fromReplay),
+        runGoal,
+        key: Date.now()
+      });
     },
     [game, lives, premium, updateGame, updateLives]
   );
@@ -263,12 +288,31 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       const sReward = streakAdvanced ? streakRewardFor(streakOut.streak.count) : { treats: 0, item: null };
       const modeKey = runModeFor(result);
       const wkOut = updateWeeklyBest(game.weeklyBest, day, modeKey, result.score);
+      const activeGoal = screen.name === 'run' ? screen.runGoal : null;
+      const goalProg = activeGoal ? runGoalProgress(activeGoal, result) : null;
+      const goalCompleted = goalProg?.done ? activeGoal : null;
+      const goalBonus = goalCompleted ? goalCompleted.bonus : 0;
+      const nearMiss = isMode
+        ? nearMissStatus({
+            score: result.score,
+            previousBest: prevBest,
+            previousWeeklyBest: wkOut.previousWeeklyBest,
+            newBest,
+            newWeeklyBest: wkOut.isNewWeeklyBest
+          })
+        : { kind: 'none' };
       track('run_end', {
         mode: modeKey,
         score_bucket: scoreBucket(result.score),
         treats: result.treats || 0
       });
       logMetaRunFinished(modeKey);
+      if (goalCompleted) {
+        track('run_goal_done', { type: goalCompleted.type, mode: modeKey });
+      }
+      if (nearMiss.kind === 'near_miss' || nearMiss.kind === 'near_miss_weekly') {
+        track('near_miss_shown', { mode: modeKey });
+      }
       if (justDone) {
         track('daily_challenge_done', { type: challenge.type });
       }
@@ -279,10 +323,11 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         ...g,
         progress: isMode || result.failed ? g.progress : recordStage(g.progress, result),
         wardrobe: sReward.item ? unlockItem(g.wardrobe, sReward.item) : g.wardrobe,
-        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus + sReward.treats,
-        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus + sReward.treats,
+        bank: g.bank + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus + sReward.treats + goalBonus,
+        lifetimeTreats: g.lifetimeTreats + result.treats + tierBonus + sReward.treats + goalBonus,
         streak: streakOut.streak,
         weeklyBest: wkOut.weeklyBest,
+        recentRuns: recordRecentRun(g.recentRuns, result),
         challenge,
         bestScores: {
           endless: Math.max(g.bestScores?.endless || 0, result.endless ? result.score : 0),
@@ -312,6 +357,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         previousWeeklyBest: wkOut.previousWeeklyBest,
         newWeeklyBest: wkOut.isNewWeeklyBest,
         streakReward: sReward,
+        goalCompleted,
+        deathAt: Date.now(),
         milestones: reached,
         rewardLine,
         caughtLine,
@@ -336,7 +383,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         updateInterstitial(() => nextInter);
       }
     },
-    [updateGame, updateInterstitial, interstitial, premium, pet, history, game, lang]
+    [updateGame, updateInterstitial, updateDoubleTreats, updateExtraSavers, updateStore, interstitial, doubleTreats, extraSavers, store, premium, pet, history, game, lang, screen.name, screen.runGoal]
   );
 
   // A treat-round answer. Recordings go through the same path as the
@@ -552,6 +599,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             : 0
         }
         showHowTo={screen.showHowTo}
+        instantStart={Boolean(screen.instantStart)}
+        runGoal={screen.runGoal}
         reduceMotion={reduceMotion}
         soundOn={options.sound}
         vibrationOn={options.vibration !== false}
@@ -616,6 +665,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           pet={pet}
           species={species}
           wardrobe={game.wardrobe}
+          bank={game.bank}
           faceUri={faceUri}
           result={screen.result}
           stage={screen.stage}
@@ -624,8 +674,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           previousBest={screen.previousBest}
           newBest={screen.newBest}
           weeklyBest={screen.weeklyBest}
+          previousWeeklyBest={screen.previousWeeklyBest}
           newWeeklyBest={screen.newWeeklyBest}
           streakReward={screen.streakReward}
+          goalCompleted={screen.goalCompleted}
           milestones={screen.milestones}
           rewardLine={screen.rewardLine}
           caughtLine={screen.caughtLine}
@@ -635,7 +687,13 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           onPhotoChallenge={() => setScreen({ name: 'photo' })}
           photoSituation={situation}
           onNext={() => startStage(next)}
-          onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
+          onReplay={() => {
+            if (screen.deathAt) {
+              track('play_again_tap', { ms_bucket: msBucket(Date.now() - screen.deathAt) });
+            }
+            startStage(screen.stage, [], { fromReplay: true });
+          }}
+          onOpenWardrobe={() => openWardrobe('end_unlock')}
           onShareScore={canShareRunScore(screen.result, { newBest: screen.newBest }) ? handleShareScore : null}
           onDoubleTreats={offerDouble ? handleDoubleTreats : null}
           doubleTreatsAmount={offerDouble ? screen.result.treats : 0}

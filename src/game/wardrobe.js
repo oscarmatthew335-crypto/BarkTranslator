@@ -96,3 +96,18 @@ export function toggleWear(wardrobe, itemId) {
 }
 
 export const setColour = (wardrobe, colour) => (getColour(colour).id === colour ? { ...wardrobe, colour } : wardrobe);
+
+// Next unowned paid cosmetic item for the "just out of reach" StageEnd nudge.
+export function nextUnownedItem(wardrobe, bank = 0) {
+  const owned = new Set(wardrobe?.owned || []);
+  const unownedPaid = ITEMS.filter((i) => !i.streakOnly && i.price > 0 && !owned.has(i.id)).sort((a, b) => a.price - b.price);
+  if (!unownedPaid.length) return null;
+  const cleanBank = Math.max(0, Math.floor(Number(bank) || 0));
+  const nextJustAbove = unownedPaid.find((i) => i.price > cleanBank);
+  const item = nextJustAbove || unownedPaid[0];
+  return {
+    item,
+    needed: Math.max(0, item.price - cleanBank),
+    progress: Math.min(1, cleanBank / item.price)
+  };
+}
