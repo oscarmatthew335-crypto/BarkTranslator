@@ -74,14 +74,14 @@ Check the following data types:
   - ✅ **App functionality** (training the shared pet-sound model)
 
 ### 5. Device or other IDs
-- **Collected:** Yes (both a randomly generated 32-hex install ID stored in `AsyncStorage` under `pawlingo:installId` sent in the `X-Install-Id` header, and the Android Advertising ID collected by the Google Mobile Ads / AdMob SDK in `src/game/ads.js`)
-- **Shared with third parties:** **Yes** (the Advertising ID and device identifiers are shared with Google AdMob for serving and measuring ads)
+- **Collected:** Yes (a randomly generated 32-hex install ID stored in `AsyncStorage` under `pawlingo:installId` sent in the `X-Install-Id` header, plus the Android Advertising ID collected by the Google Mobile Ads / AdMob SDK in `src/game/ads.js`, Firebase Analytics in `src/game/analytics.js`, and the Meta SDK in `src/game/meta.js` after UMP consent)
+- **Shared with third parties:** **Yes** (the Advertising ID and device identifiers are shared with Google AdMob and Meta for advertising/marketing and analytics when UMP consent allows)
 - **Is this data required or optional?**
-  - **Required** (used for daily rate limiting, fulfilling `DELETE /me` erasure requests, and Google AdMob ad delivery / fraud prevention; users can reset or delete their Advertising ID in Android system settings or manage consent via Google UMP)
+  - **Required** (used for daily rate limiting, fulfilling `DELETE /me` erasure requests, Google AdMob ad delivery / fraud prevention, and consent-gated Meta ad attribution; users can reset or delete their Advertising ID in Android system settings or manage consent via Google UMP)
 - **Why is this user data collected?**
   - ✅ **App functionality**
-  - ✅ **Advertising or marketing** (Google AdMob rewarded and interstitial ads in `src/game/ads.js`)
-  - ✅ **Analytics** (ad measurement and performance via AdMob)
+  - ✅ **Advertising or marketing** (Google AdMob rewarded and interstitial ads in `src/game/ads.js`, and Meta ad install/conversion attribution in `src/game/meta.js`)
+  - ✅ **Analytics** (ad measurement and performance via AdMob, Firebase Analytics, and Meta)
   - ✅ **Fraud prevention, security, and compliance** (rate-limiting `/clips`, `/video`, `/errors`, `/extract`, `/photo`, fulfilling `DELETE /me` erasure requests, and AdMob invalid-traffic detection)
 
 ### 6. Financial info → Purchase history
@@ -93,10 +93,10 @@ Check the following data types:
   - ✅ **App functionality** (unlocking and restoring Pawlingo Premium benefits: unlimited lives, no interstitial ads, and free Continue)
 
 ### 7. App activity → App interactions
-- **Collected:** Yes (Google AdMob SDK collects ad views, taps, and rewarded/interstitial ad interactions in `src/game/ads.js`)
-- **Shared with third parties:** **Yes** (shared with Google AdMob)
+- **Collected:** Yes (Google AdMob SDK collects ad views, taps, and rewarded/interstitial ad interactions in `src/game/ads.js`; Firebase Analytics (`src/game/analytics.js`) and the Meta SDK (`src/game/meta.js`) collect anonymous game/store events such as `run_finished` and `premium_purchased` after UMP consent)
+- **Shared with third parties:** **Yes** (shared with Google AdMob and Meta for advertising/marketing and analytics when UMP consent allows)
 - **Is this data required or optional?**
-  - **Required** (when ads are enabled under UMP consent)
+  - **Required** (when ads and analytics are enabled under UMP consent)
 - **Why is this user data collected?**
   - ✅ **Advertising or marketing**
   - ✅ **Analytics**

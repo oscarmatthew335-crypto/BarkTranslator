@@ -15,6 +15,7 @@ import mobileAds, {
 } from 'react-native-google-mobile-ads';
 import { count } from './counters';
 import { initAnalytics, track } from './analytics';
+import { initMeta } from './meta';
 
 export const TEST_ANDROID_APP_ID = 'ca-app-pub-3940256099942544~3347511713';
 export const TEST_REWARDED_ID = TestIds?.REWARDED || 'ca-app-pub-3940256099942544/5224354917';
@@ -228,6 +229,7 @@ export async function initAds() {
         consentInfo?.privacyOptionsRequirementStatus === 'REQUIRED'
       );
       await initAnalytics({ canTrack: canRequest && !ADS_NON_PERSONALISED });
+      await initMeta({ canTrack: canRequest && !ADS_NON_PERSONALISED });
 
       if (!canRequest) {
         initialized = true;
@@ -257,6 +259,7 @@ export async function initAds() {
       canRequest = false;
       initialized = false;
       await initAnalytics({ canTrack: false });
+      await initMeta({ canTrack: false });
       notify();
       return false;
     } finally {

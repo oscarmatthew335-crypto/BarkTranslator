@@ -27,6 +27,7 @@
     "expo-video-thumbnails": "~57.0.2",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-fbsdk-next": "^13.4.3",
     "react-native-google-mobile-ads": "^17.4.0",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-svg": "15.15.4",

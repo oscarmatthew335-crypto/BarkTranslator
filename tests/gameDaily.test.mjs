@@ -230,8 +230,11 @@ test('the Play tab never makes direct network requests or uses third-party analy
     for (const f of readdirSync(new URL(`../${dir}`, import.meta.url))) {
       const src = readFileSync(new URL(`../${dir}${f}`, import.meta.url), 'utf8').replace(/\/\/.*$/gm, '');
       assert.ok(!/\bfetch\(|XMLHttpRequest|segment|amplitude|mixpanel/i.test(src), `${dir}${f}`);
-      if (f !== 'analytics.js') {
-        assert.ok(!/@react-native-firebase\/analytics/i.test(src), `${dir}${f} must go through src/game/analytics.js`);
+      if (f !== 'analytics.js' && f !== 'meta.js') {
+        assert.ok(
+          !/@react-native-firebase\/analytics|react-native-fbsdk-next/i.test(src),
+          `${dir}${f} must go through src/game/analytics.js or src/game/meta.js`
+        );
       }
     }
   }

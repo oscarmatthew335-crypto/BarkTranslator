@@ -20,6 +20,7 @@ import {
 import { count } from './counters';
 import { savePremiumState } from './gameStore';
 import { track } from './analytics';
+import { logMetaPremiumPurchased } from './meta';
 
 export const PREMIUM_PRODUCT_ID = 'pawlingo_premium';
 
@@ -102,7 +103,13 @@ async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
   await savePremiumState(true);
   if (isNewPurchase) {
     count('purchases');
-    track('purchase', purchasePriceDetails(purchase));
+    const details = purchasePriceDetails(purchase);
+    track('purchase', details);
+    logMetaPremiumPurchased({
+      price: details.value,
+      currency: details.currency,
+      productId: details.product_id
+    });
   }
   notify({ type: 'granted', purchase });
   resolveWaiters({ status: 'purchased' });

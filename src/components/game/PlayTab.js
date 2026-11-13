@@ -37,6 +37,7 @@ import { recordRunForInterstitial, shouldShowInterstitial, recordInterstitialSho
 import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } from '../../game/ads';
 import { onPurchaseEvent } from '../../game/purchases';
 import { track, scoreBucket, runModeFor } from '../../game/analytics';
+import { logMetaRunFinished } from '../../game/meta';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -165,6 +166,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         score_bucket: scoreBucket(result.score),
         treats: result.treats || 0
       });
+      logMetaRunFinished(runModeFor(result));
       if (justDone) {
         track('daily_challenge_done', { type: challenge.type });
       }
