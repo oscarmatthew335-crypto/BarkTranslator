@@ -337,5 +337,9 @@ export default {
   'settings.streakReminderTitle': "Daaglikse reeksherinnering",
   'settings.streakReminderSub': "Een 18:00-herinnering wanneer jy 'n reeks met {petName} het en nog nie vandag gespeel het nie.",
   'game.end.weeklyBest': "Hierdie week se beste: {n}",
-  'game.end.newWeeklyBest': "🎉 Nuwe weeklikse beste!"
+  'game.end.newWeeklyBest': "🎉 Nuwe weeklikse beste!",
+  'game.share.btn': "Deel",
+  'game.share.escaped': "{petName} het vir {chaser} ontsnap!",
+  'game.share.newBestLine': "{petName} het 'n nuwe persoonlike beste opgestel!",
+  'game.share.freeOnPlay': "Gratis op Google Play"
 };

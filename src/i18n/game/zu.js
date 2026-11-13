@@ -337,5 +337,9 @@ export default {
   'settings.streakReminderTitle': "Isikhumbuzo sochungechunge lwansuku zonke",
   'settings.streakReminderSub': "Isikhumbuzo esisodwa ngo-6 ntambama uma unochungechunge no-{petName} futhi ungakadlali namuhla.",
   'game.end.weeklyBest': "Okuhamba phambili kwaleli sonto: {n}",
-  'game.end.newWeeklyBest': "🎉 Okuhamba phambili okusha kwesonto!"
+  'game.end.newWeeklyBest': "🎉 Okuhamba phambili okusha kwesonto!",
+  'game.share.btn': "Yabelana",
+  'game.share.escaped': "U-{petName} uphunyukile ku-{chaser}!",
+  'game.share.newBestLine': "U-{petName} usethe amaphuzu amasha aphezulu!",
+  'game.share.freeOnPlay': "Mahhala ku-Google Play"
 };

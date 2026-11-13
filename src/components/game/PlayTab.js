@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, Alert, Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import Svg from 'react-native-svg';
 import { C, F } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -51,6 +53,8 @@ import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } f
 import { onPurchaseEvent } from '../../game/purchases';
 import { track, scoreBucket, runModeFor } from '../../game/analytics';
 import { logMetaRunFinished } from '../../game/meta';
+import ScoreShareCard from './ScoreShareCard';
+import { canShareRunScore, buildScoreShareMessage } from '../../game/shareScore';
 
 const MAX_WAITING_POWER_UPS = 4;
 
@@ -65,6 +69,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const [premiumOpen, setPremiumOpen] = useState(false);
   const [adsStatus, setAdsStatus] = useState(() => getAdsStatus());
   const [now, setNow] = useState(() => Date.now());
+  const scoreCardRef = useRef(null);
   const moments = useMoments();
   const petMoments = moments.all.filter((m) => m.petId === pet.id);
   const faceUri = petMoments.find((m) => m.id === game?.faceMomentId)?.uri || null;
@@ -378,6 +383,30 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     }
   }, [livesSheet, premium, startStage, updateLives]);
 
+  const handleShareScore = useCallback(async () => {
+    if (screen.name !== 'end' || !screen.result) return;
+    const mode = runModeFor(screen.result);
+    track('share_score', { mode, score_bucket: scoreBucket(screen.result.score) });
+    const chaserLabel = t(screen.stage?.chaser?.nameKey || 'game.chaser.bath');
+    const message = buildScoreShareMessage({
+      petName: pet.name,
+      score: screen.result.score,
+      isChase: Boolean(screen.result.chase),
+      chaserLabel,
+      translateFn: t
+    });
+    try {
+      if (scoreCardRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(scoreCardRef, { format: 'jpg', quality: 0.92, width: 1080, height: 1350 });
+        await Sharing.shareAsync(uri, { mimeType: 'image/jpeg', dialogTitle: message });
+        return;
+      }
+    } catch (_) {}
+    try {
+      await Share.share({ message });
+    } catch (_) {}
+  }, [screen, pet.name, t]);
+
   if (!ready || !game || !moments.ready) return <View style={s.container} />;
 
   if (screen.name === 'photo')
@@ -525,7 +554,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           photoSituation={situation}
           onNext={() => startStage(next)}
           onReplay={() => startStage(screen.stage, [], { fromReplay: true })}
+          onShareScore={canShareRunScore(screen.result, { newBest: screen.newBest }) ? handleShareScore : null}
           onMap={() => setScreen({ name: 'hub' })}
+        />
+        <ScoreShareCard
+          ref={scoreCardRef}
+          pet={pet}
+          wardrobe={game.wardrobe}
+          score={screen.result.score}
+          isChase={Boolean(screen.result.chase)}
+          chaserLabel={t(screen.stage?.chaser?.nameKey || 'game.chaser.bath')}
         />
         {modals}
       </>

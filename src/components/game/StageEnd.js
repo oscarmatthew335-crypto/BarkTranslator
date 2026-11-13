@@ -30,6 +30,7 @@ export default function StageEnd({
   onNext,
   onReplay,
   onMap,
+  onShareScore,
   onTreatRound,
   onPhotoChallenge,
   photoSituation,
@@ -114,11 +115,13 @@ export default function StageEnd({
         {result.endless || result.chase ? (
           <>
             <StickerButton label={t('game.end.again')} emoji="🔁" color={C.butter} onPress={onReplay} />
+            {onShareScore ? <StickerButton label={t('game.share.btn')} emoji="📤" color={C.mint} onPress={onShareScore} /> : null}
             <StickerButton label={t('game.end.map')} emoji="🗺️" color={C.paper} onPress={onMap} />
           </>
         ) : (
           <>
             <StickerButton label={result.failed ? t('game.end.tryAgain') : t('game.end.again')} emoji="🔁" color={C.butter} onPress={onReplay} />
+            {onShareScore ? <StickerButton label={t('game.share.btn')} emoji="📤" color={C.mint} onPress={onShareScore} /> : null}
             {next ? <StickerButton label={t('game.end.next', { stage: t(next.nameKey) })} emoji="▶️" color={C.paper} onPress={onNext} /> : null}
             <StickerButton label={t('game.end.map')} emoji="🗺️" color={C.paper} onPress={onMap} />
           </>

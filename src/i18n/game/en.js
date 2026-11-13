@@ -336,5 +336,9 @@ export default {
   'settings.streakReminderTitle': "Daily streak reminder",
   'settings.streakReminderSub': "One 6 pm reminder when you have a streak with {petName} and haven't played yet today.",
   'game.end.weeklyBest': "This week's best: {n}",
-  'game.end.newWeeklyBest': "🎉 New weekly best!"
+  'game.end.newWeeklyBest': "🎉 New weekly best!",
+  'game.share.btn': "Share",
+  'game.share.escaped': "{petName} escaped {chaser}!",
+  'game.share.newBestLine': "{petName} set a new personal best!",
+  'game.share.freeOnPlay': "Free on Google Play"
 };
