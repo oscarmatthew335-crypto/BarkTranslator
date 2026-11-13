@@ -92,9 +92,59 @@ function resolveWaiters(result) {
   });
 }
 
+// Grant events for treat packs and the starter pack are kept until the UI has
+// stored the reward, and replayed to every new listener. Without this, a
+// purchase that lands while the Play tab isn't mounted would be lost.
+// Treat packs are only consumed on Play after confirmConsumableGranted(), so an
+// unconfirmed pack comes back from getAvailablePurchases() on the next start.
+const grantBuffer = new Map();
+const unconsumed = new Map();
+
+function notifyGrant(key, event) {
+  grantBuffer.set(key, event);
+  notify(event);
+}
+
 export function onPurchaseEvent(fn) {
   listeners.add(fn);
+  grantBuffer.forEach((event) => {
+    try {
+      fn(event);
+    } catch (_) {}
+  });
   return () => listeners.delete(fn);
+}
+
+export async function confirmConsumableGranted(token) {
+  const key = `consumable:${token}`;
+  grantBuffer.delete(key);
+  const purchase = unconsumed.get(token);
+  unconsumed.delete(token);
+  if (!purchase) return;
+  try {
+    await finishTransaction({ purchase, isConsumable: true });
+  } catch (_) {}
+}
+
+function emitTreatPack(pid, purchase) {
+  const pack = getTreatPack(pid);
+  const token = purchaseTokenOf(purchase);
+  if (!pack || !token) return false;
+  unconsumed.set(token, purchase);
+  notifyGrant(`consumable:${token}`, {
+    type: 'consumable_granted',
+    productId: pid,
+    treats: pack.treats,
+    token,
+    purchase
+  });
+  return true;
+}
+
+export function __resetPurchaseBuffersForTests() {
+  grantBuffer.clear();
+  unconsumed.clear();
+  listeners.clear();
 }
 
 export function getPremiumProduct() {
@@ -131,9 +181,12 @@ export function purchasePriceDetails(purchase, info = productInfo) {
 async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
   const pid = purchaseProductId(purchase) || PREMIUM_PRODUCT_ID;
   const consumable = isConsumableProduct(pid);
-  try {
-    await finishTransaction({ purchase, isConsumable: consumable });
-  } catch (_) {}
+  // Treat packs are consumed only after the UI confirms the treats are stored.
+  if (!consumable) {
+    try {
+      await finishTransaction({ purchase, isConsumable: false });
+    } catch (_) {}
+  }
 
   const details = purchasePriceDetails(purchase, productsById[pid] || productInfo);
   if (isNewPurchase) {
@@ -156,20 +209,12 @@ async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
   }
 
   if (pid === STARTER_PACK_ID) {
-    notify({ type: 'starter_granted', productId: pid, purchase });
+    notifyGrant('starter', { type: 'starter_granted', productId: pid, purchase });
     resolveWaiters({ status: 'purchased', productId: pid });
     return;
   }
 
-  const pack = getTreatPack(pid);
-  if (pack) {
-    notify({
-      type: 'consumable_granted',
-      productId: pid,
-      treats: pack.treats,
-      token: purchaseTokenOf(purchase) || `${pid}:${Date.now()}`,
-      purchase
-    });
+  if (emitTreatPack(pid, purchase)) {
     resolveWaiters({ status: 'purchased', productId: pid });
   }
 }
@@ -290,7 +335,15 @@ export async function restorePremium({ silent = false } = {}) {
       try {
         await finishTransaction({ purchase: starterMatch, isConsumable: false });
       } catch (_) {}
-      notify({ type: 'starter_restored', productId: STARTER_PACK_ID, purchase: starterMatch });
+      notifyGrant('starter', { type: 'starter_restored', productId: STARTER_PACK_ID, purchase: starterMatch });
+    }
+    // Treat packs that were paid for but never consumed (app closed before the
+    // treats were stored) are granted now; the token check stops double grants.
+    if (Array.isArray(owned)) {
+      for (const p of owned) {
+        const pid = purchaseProductId(p);
+        if (pid && isConsumableProduct(pid) && isProductPurchase(p, pid)) emitTreatPack(pid, p);
+      }
     }
     if (match) {
       try {

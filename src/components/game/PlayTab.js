@@ -50,7 +50,7 @@ import PremiumSheet from './PremiumSheet';
 import { livesNow, canStartRun, useLife, addLife, formatWait, firstDayRemainingMs, formatHoursLeft, MAX_LIVES } from '../../game/lives';
 import { recordRunForInterstitial, shouldShowInterstitial, recordInterstitialShown } from '../../game/interstitial';
 import { getAdsStatus, onAdsStatusChange, showRewardedAd, showInterstitialAd } from '../../game/ads';
-import { onPurchaseEvent } from '../../game/purchases';
+import { onPurchaseEvent, confirmConsumableGranted } from '../../game/purchases';
 import { canOfferDoubleTreats, recordDoubleTreats } from '../../game/doubleTreats';
 import {
   PREMIUM_BONUS_TREATS,
@@ -143,6 +143,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
               lifetimeTreats: g.lifetimeTreats + granted
             }));
           }
+          // Stored (or already stored earlier): now let Play consume the pack.
+          confirmConsumableGranted(ev.token);
         }
       }),
     [setPremium, store.premiumBonusGranted, store.starterBought, store.processedTokens, updateStore, updateExtraSavers, updateGame]

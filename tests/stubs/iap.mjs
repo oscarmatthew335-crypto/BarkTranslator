@@ -23,10 +23,11 @@ export async function requestPurchase() {
 }
 
 export async function getAvailablePurchases() {
-  return [];
+  return globalThis.__iapOwned || [];
 }
 
-export async function finishTransaction() {
+export async function finishTransaction(args) {
+  (globalThis.__iapFinished ||= []).push(args);
   return true;
 }
 
