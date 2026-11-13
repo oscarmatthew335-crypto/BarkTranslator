@@ -14,7 +14,10 @@ Pawlingo is live with paid install ads (Google ~R8 per install). Today a player 
 - Do the parts **in order, one commit each**. If a part is blocked (e.g. a library doesn't support RN 0.86), stop that part, say so in the PR, and carry on with the next.
 
 ## Part A: measurement (Firebase Analytics)
-- Add `@react-native-firebase/app` + `@react-native-firebase/analytics` (Expo config plugins). `google-services.json` path comes from `app.config.js`. The owner will add the file; if it's missing, the plugin isn't added and analytics calls are no-ops (GitHub APK workflow, local dev).
+- Add `@react-native-firebase/app` + `@react-native-firebase/analytics` (Expo config plugins). If the file is missing, the plugin isn't added and analytics calls are no-ops (GitHub APK workflow, local dev).
+- **The repo is public: never commit `google-services.json`.** Add it to `.gitignore`. `app.config.js` sets `android.googleServicesFile` to `process.env.GOOGLE_SERVICES_JSON ?? './google-services.json'` (only when that file exists). The owner has the file locally in the project folder; for EAS builds it is uploaded as a secret file variable. Put this one-time command in the PR description for the owner to run:
+  `eas env:create --name GOOGLE_SERVICES_JSON --type file --value ./google-services.json --environment production --visibility secret`
+- Add a test that fails if `google-services.json` is tracked by git.
 - `src/game/analytics.js`: a thin wrapper, `track(event, params)`, no-op when unavailable. Collection is on only when UMP consent allows (same result `ads.js` gathers).
 - Events (no names, pet names, typed text or anything personal):
   - `tutorial_complete`
@@ -29,7 +32,7 @@ Pawlingo is live with paid install ads (Google ~R8 per install). Today a player 
 - Link note in the PR: the owner links Firebase to AdMob and Google Ads in their consoles.
 
 ## Part B: Meta SDK
-Do everything in `pawlingo-2.7-meta-sdk-ANTIGRAVITY.md` (in the repo's `docs/briefs/` or attached). Meta App ID is `1715784240586694`; the client token goes in the `production` env in `eas.json` (owner provides it).
+Do everything in `pawlingo-2.7-meta-sdk-ANTIGRAVITY.md` (in the repo's `docs/briefs/` or attached). Meta App ID is `1715784240586694`; the client token is an EAS environment variable the owner sets (never in `eas.json`: the repo is public).
 
 ## Part C: reasons to come back
 `daily.js` already has the day key, streak, streak saver and daily challenge. Build on it:

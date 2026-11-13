@@ -15,7 +15,7 @@ We're going to run Facebook/Instagram **app-install ads** for Pawlingo. For Meta
 ## What to build
 
 ### 1. Config
-- The Meta **App ID** and **Client token** come from environment variables: `EXPO_PUBLIC_META_APP_ID` and `EXPO_PUBLIC_META_CLIENT_TOKEN`. I'll give you the two values; put them **only in the `production` profile's `env` in `eas.json`**, next to the AdMob IDs.
+- The Meta **App ID** and **Client token** come from environment variables: `EXPO_PUBLIC_META_APP_ID` and `EXPO_PUBLIC_META_CLIENT_TOKEN`. The App ID (`1715784240586694`) goes **only in the `production` profile's `env` in `eas.json`**, next to the AdMob IDs. The repo is public, so the **client token never goes in `eas.json` or any file**: the owner stores it as an EAS environment variable (`production` environment, sensitive), which EAS injects at build time. Don't add an empty placeholder for it in `eas.json` (EAS rejects empty values).
 - `app.config.js` adds the `react-native-fbsdk-next` config plugin **only when both values are set**. With no values (the GitHub APK workflow, local dev), the plugin is not added and every Meta call is a no-op, so test builds never send events to Meta.
 - Plugin settings: display name "Pawlingo", `autoLogAppEventsEnabled: false`, `advertiserIDCollectionEnabled: false`, `autoInitEnabled: false` at build time. The app turns them on at runtime only after consent (next section).
 
@@ -41,6 +41,6 @@ Facebook Login, share dialogs, deep links from ads, Meta Audience Network ads, i
 ## Done means
 - [ ] `npm test` passes, with tests for: no Meta calls when IDs are missing; no Meta calls without consent or when `ADS_NON_PERSONALISED` is true; `initMeta` is safe when the native module is absent; the config plugin is only added when both env values are set; the two custom events carry only the allowed parameters.
 - [ ] The GitHub APK builds and runs with no Meta IDs (plugin absent) and nothing crashes.
-- [ ] Real IDs appear only in the `production` profile in `eas.json`.
+- [ ] The App ID appears only in the `production` profile in `eas.json`; the client token appears in no tracked file.
 - [ ] Privacy pages and `data-safety.md` updated.
 - [ ] The PR description lists what changed, anything you couldn't do, and exactly what I should see in Meta Events Manager to confirm it works (which events, and how to test with Meta's "Test events" tool on an internal-testing build).
