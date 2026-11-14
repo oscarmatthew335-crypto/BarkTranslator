@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, Pressable, ScrollView, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -15,8 +15,21 @@ import PetPreview from './PetPreview';
 
 // Dress the pet up with treats collected while playing. All cosmetic, all
 // earned by playing or via optional treat packs.
-export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onColour, onBuy, onWear, onBack }) {
+export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onColour, onBuy, onWear, onBack, focusPacks = false }) {
   const { t } = useI18n();
+  const scrollRef = useRef(null);
+  const packsY = useRef(null);
+  const didFocus = useRef(false);
+  const scrollToPacks = () => {
+    if (packsY.current != null) scrollRef.current?.scrollTo({ y: Math.max(0, packsY.current - 12), animated: true });
+  };
+  const onPacksLayout = (e) => {
+    packsY.current = e.nativeEvent.layout.y;
+    if (focusPacks && !didFocus.current) {
+      didFocus.current = true;
+      scrollToPacks();
+    }
+  };
   const [products, setProducts] = useState(() => getStoreProducts());
   const [busySku, setBusySku] = useState(null);
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
@@ -44,13 +57,14 @@ export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onC
     }
   };
   return (
-    <ScrollView style={s.container} contentContainerStyle={s.content}>
+    <ScrollView ref={scrollRef} style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.wardrobe.title', { petName: pet.name })} subtitle={t('game.wardrobe.sub')} />
       <Sticker radius={24} innerStyle={s.hero}>
         <PetPreview species={pet.species} wardrobe={wardrobe} size={150} />
         <Text style={s.bank}>
           {treatEmoji} {bank}
         </Text>
+        <StickerButton small color={C.butter} label={`+ ${t('game.store.getMore')}`} onPress={scrollToPacks} />
       </Sticker>
 
       <Text style={s.section}>{t('game.wardrobe.colour')}</Text>
@@ -112,7 +126,9 @@ export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onC
           </View>
         </View>
       ))}
-      <Text style={s.section}>{t('game.store.treatsTitle')}</Text>
+      <Text style={s.section} onLayout={onPacksLayout}>
+        {t('game.store.treatsTitle')}
+      </Text>
       {showStarter && (
         <Sticker radius={20} color={C.butter} style={{ marginBottom: 10 }} innerStyle={s.packCard}>
           <View style={{ flex: 1 }}>
