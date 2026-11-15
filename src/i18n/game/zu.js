@@ -345,6 +345,7 @@ export default {
   'game.share.freeOnPlay': "Mahhala ku-Google Play",
   'game.lives.unlimitedToday': "❤️ ∞ namuhla · {time}",
   'game.end.doubleTreats': "Phinda kabili amathriti (+{n}) · Bukela isikhangiso",
+  'game.store.getMore': "Thola amathriti",
   'game.store.treatsTitle': "Amaphakethe amathriti",
   'game.store.starterTitle': "Iphakethe lokuqala (isipho samahora angama-48)",
   'game.store.starterSub': "500 {emoji} + Umqhele + Izivikeli zochungechunge ezi-3",

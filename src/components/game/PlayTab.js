@@ -73,7 +73,7 @@ const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef }) {
+export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef, autoStart = false, onAutoStarted }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const {
@@ -198,9 +198,9 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     setPremiumOpen(true);
   }, []);
 
-  const openWardrobe = useCallback((source = 'hub') => {
+  const openWardrobe = useCallback((source = 'hub', { packs = false } = {}) => {
     track('store_open', { source: typeof source === 'string' ? source : 'wardrobe' });
-    setScreen({ name: 'wardrobe' });
+    setScreen({ name: 'wardrobe', packs });
   }, []);
 
   // Power-ups waiting from a treat round or photo challenge go into the
@@ -253,6 +253,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     },
     [game, lives, premium, updateGame, updateLives]
   );
+
+  // First launch (QuickStart): go straight into the first run instead of the hub.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !ready || !game || !moments.ready) return;
+    autoStarted.current = true;
+    onAutoStarted?.();
+    startStage(suggestedStage(game.progress, pet.species));
+  }, [autoStart, ready, game, moments.ready, startStage, onAutoStarted, pet.species]);
 
   const finish = useCallback(
     (result) => {
@@ -562,6 +571,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         onBuy={(id) => updateGame((g) => ({ ...g, ...buy(g.wardrobe, g.bank, id) }))}
         onWear={(id) => updateGame((g) => ({ ...g, wardrobe: toggleWear(g.wardrobe, id) }))}
         onBack={() => setScreen({ name: 'hub' })}
+        focusPacks={Boolean(screen.packs)}
       />
     );
 
@@ -741,9 +751,17 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       <Sticker radius={24} innerStyle={s.hero}>
         <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} />
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={s.heroLine} accessibilityLabel={t('game.treatsA11y', { n: game.bank })}>
-            {treatEmoji} {game.bank}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Text style={s.heroLine} accessibilityLabel={t('game.treatsA11y', { n: game.bank })}>
+              {treatEmoji} {game.bank}
+            </Text>
+            <StickerButton
+              small
+              color={C.butter}
+              label={`+ ${t('game.store.getMore')}`}
+              onPress={() => openWardrobe('hub_get_treats', { packs: true })}
+            />
+          </View>
           <Text style={s.heroLine}>⭐ {totalStars(game.progress)}</Text>
           <Text style={s.heroSmall}>
             {streak > 0 ? t('game.streak.days', { n: streak }) : t('game.streak.none')}

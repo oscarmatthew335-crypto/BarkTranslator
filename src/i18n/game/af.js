@@ -345,6 +345,7 @@ export default {
   'game.share.freeOnPlay': "Gratis op Google Play",
   'game.lives.unlimitedToday': "❤️ ∞ vandag · {time}",
   'game.end.doubleTreats': "Verdubbel lekkernye (+{n}) · Kyk advertensie",
+  'game.store.getMore': "Kry lekkernye",
   'game.store.treatsTitle': "Lekkernypakkies",
   'game.store.starterTitle': "Beginpakket (48h-aanbod)",
   'game.store.starterSub': "500 {emoji} + Kroon + 3 Reeksredders",

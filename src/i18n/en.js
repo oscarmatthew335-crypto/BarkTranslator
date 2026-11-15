@@ -7,6 +7,9 @@ export default {
   'tab.journal': 'Journal',
   'tab.journalCount': 'Journal {count}',
 
+  'quick.title': 'Ready to play?',
+  'quick.sub': 'Pick your pet and start your first run. You can name them and try the translator later.',
+  'quick.play': 'Play now',
   'onboarding.title': "Who's doing the talking?",
   'onboarding.sub': 'Add your pet. {appName} learns their language as you go and gets better the more you use it.',
   'onboarding.petNameLabel': "What's your {species} called?",

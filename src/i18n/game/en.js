@@ -344,6 +344,7 @@ export default {
   'game.share.freeOnPlay': "Free on Google Play",
   'game.lives.unlimitedToday': "❤️ ∞ today · {time}",
   'game.end.doubleTreats': "Double treats (+{n}) · Watch ad",
+  'game.store.getMore': "Get treats",
   'game.store.treatsTitle': "Treat packs",
   'game.store.starterTitle': "Starter Pack (48h offer)",
   'game.store.starterSub': "500 {emoji} + Crown + 3 Streak Savers",
