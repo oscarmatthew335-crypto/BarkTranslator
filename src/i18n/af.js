@@ -8,6 +8,9 @@ export default {
   'tab.journal': 'Joernaal',
   'tab.journalCount': 'Joernaal {count}',
 
+  'quick.title': 'Gereed om te speel?',
+  'quick.sub': 'Kies jou troeteldier en begin jou eerste lopie. Jy kan hulle later \'n naam gee en die vertaler probeer.',
+  'quick.play': 'Speel nou',
   'onboarding.title': 'Wie gesels hier?',
   'onboarding.sub': 'Kies jou troeteldier. {appName} leer hul taal soos jy aangaan en word al hoe beter hoe meer jy dit gebruik.',
   'onboarding.petNameLabel': 'Wat is jou {species} se naam?',

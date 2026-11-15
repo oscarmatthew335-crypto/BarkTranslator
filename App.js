@@ -10,6 +10,7 @@ import useAppData from './src/state/useAppData';
 import useTranslate from './src/state/useTranslate';
 import ErrorBoundary from './src/components/ErrorBoundary';
 import Onboarding from './src/components/Onboarding';
+import QuickStart from './src/components/QuickStart';
 import ConsentScreen from './src/components/ConsentScreen';
 import AgeCheck from './src/components/AgeCheck';
 import ScannerScreen from './src/components/ScannerScreen';
@@ -53,6 +54,8 @@ function PetApp() {
   const [torch, setTorch] = useState(false);
   const [activeTab, setActiveTab] = useState('play');
   const [gameRunning, setGameRunning] = useState(false);
+  // Set by QuickStart: the Play tab starts the first run straight away.
+  const [autoStartRun, setAutoStartRun] = useState(false);
   const [petsOpen, setPetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const cameraRef = useRef(null);
@@ -129,13 +132,14 @@ function PetApp() {
   if (!pet)
     return (
       <I18nProvider language={data.settings.language}>
-        <Onboarding
-          onDone={({ species: sp, name, breedId = null, home = null, contextId = null }) => {
-            const created = data.addPet({ species: sp || 'dog', name, breedId, home });
-            if (contextId && created?.id) {
-              data.updatePet(created.id, { contextId, contextSetAt: Date.now() });
-            }
+        <QuickStart
+          onDone={({ species: sp }) => {
+            const created = data.addPet({ species: sp || 'dog' });
+            // Name, breed, home and first sound are asked when the translator is first opened.
+            if (created?.id) data.updatePet(created.id, { detailsDone: false });
             data.updateSettings({ ageConfirmed: true });
+            setActiveTab('play');
+            setAutoStartRun(true);
             track('tutorial_complete');
           }}
         />
@@ -155,7 +159,24 @@ function PetApp() {
     <I18nProvider language={data.settings.language}>
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.main}>
-        {activeTab === 'scanner' &&
+        {activeTab === 'scanner' && pet.detailsDone === false && (
+          <Onboarding
+            mode="details"
+            initialSpecies={pet.species}
+            initialName={pet.name === species.defaultName ? '' : pet.name}
+            onDone={({ name, breedId = null, home = null, contextId = null }) => {
+              data.updatePet(pet.id, {
+                name,
+                breedId,
+                home,
+                ...(contextId ? { contextId, contextSetAt: Date.now() } : {}),
+                detailsDone: true
+              });
+              track('pet_details_complete');
+            }}
+          />
+        )}
+        {activeTab === 'scanner' && pet.detailsDone !== false &&
           (data.shareClips === null ? (
             <ConsentScreen petName={pet.name} onChoose={data.setShareClips} />
           ) : (
@@ -223,6 +244,8 @@ function PetApp() {
             onUpdateSettings={data.updateSettings}
             onRunningChange={setGameRunning}
             backRef={playBackRef}
+            autoStart={autoStartRun}
+            onAutoStarted={() => setAutoStartRun(false)}
           />
         )}
       </View>

@@ -8,6 +8,9 @@ export default {
   'tab.journal': 'Idayari',
   'tab.journalCount': 'Idayari {count}',
 
+  'quick.title': 'Ulungele ukudlala?',
+  'quick.sub': 'Khetha isilwane sakho uqale umjaho wakho wokuqala. Ungasiqamba igama futhi uzame umhumushi kamuva.',
+  'quick.play': 'Dlala manje',
   'onboarding.title': 'Ubani okhulumayo?',
   'onboarding.sub': 'Khetha isilwane sakho. I-{appName} ifunda ulimi lwaso njengoba uqhubeka futhi iba ngcono uma uyisebenzisa.',
   'onboarding.petNameLabel': 'Ubani igama le-{species} yakho?',

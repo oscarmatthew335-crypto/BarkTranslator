@@ -23,12 +23,16 @@ import { useI18n } from '../i18n';
 //   Step 2: Pick breed & indoor or garden
 //   Step 3: Teach your first sound (how learning works + pick first situation)
 // Shown once when no pet exists yet; skippable; does not affect existing users.
-export default function Onboarding({ onDone }) {
+// mode="details": the pet already exists (made by QuickStart for the game) and the
+// age check is done. Shown the first time the translator is opened, to ask the
+// name, breed, home and first sound. The species picker and age check are hidden.
+export default function Onboarding({ onDone, mode = 'full', initialSpecies = null, initialName = '' }) {
   const { t } = useI18n();
+  const details = mode === 'details';
   const [step, setStep] = useState(1); // 1 | 2 | 3
-  const [speciesId, setSpeciesId] = useState(null); // no default: a cat owner must not end up with a dog
-  const [name, setName] = useState('');
-  const [ageOk, setAgeOk] = useState(false);
+  const [speciesId, setSpeciesId] = useState(details ? initialSpecies : null); // no default: a cat owner must not end up with a dog
+  const [name, setName] = useState(details ? initialName : '');
+  const [ageOk, setAgeOk] = useState(details);
   const [home, setHome] = useState(null);
   const [breedId, setBreedId] = useState(null);
   const [firstContextId, setFirstContextId] = useState(null);
@@ -89,6 +93,7 @@ export default function Onboarding({ onDone }) {
                 {t('onboarding.sub', { appName: APP_NAME })}
               </Text>
 
+              {!details && (
               <View style={s.choices}>
                 {Object.values(SPECIES).map((opt) => {
                   const active = speciesId === opt.id;
@@ -120,6 +125,7 @@ export default function Onboarding({ onDone }) {
                   );
                 })}
               </View>
+              )}
 
               <View style={{ marginTop: 24 }}>
                 <Text style={s.label}>{t('onboarding.petNameLabel', { species: t(`species.${sp.id}`).toLowerCase() })}</Text>
@@ -137,9 +143,11 @@ export default function Onboarding({ onDone }) {
                 />
               </View>
 
+              {!details && (
               <View style={{ marginTop: 20 }}>
                 <Checkbox checked={ageOk} onToggle={() => setAgeOk((v) => !v)} label={t('onboarding.ageLabel', { minAge: MIN_AGE })} />
               </View>
+              )}
             </View>
           )}
           {step === 2 && (

@@ -73,7 +73,7 @@ const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef }) {
+export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef, autoStart = false, onAutoStarted }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const {
@@ -253,6 +253,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     },
     [game, lives, premium, updateGame, updateLives]
   );
+
+  // First launch (QuickStart): go straight into the first run instead of the hub.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !ready || !game || !moments.ready) return;
+    autoStarted.current = true;
+    onAutoStarted?.();
+    startStage(suggestedStage(game.progress, pet.species));
+  }, [autoStart, ready, game, moments.ready, startStage, onAutoStarted, pet.species]);
 
   const finish = useCallback(
     (result) => {
