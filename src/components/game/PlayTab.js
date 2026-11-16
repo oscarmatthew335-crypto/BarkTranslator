@@ -41,7 +41,7 @@ import {
   CHALLENGE_REWARD
 } from '../../game/daily';
 import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
-import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders, computeUsualPlayHour } from '../../game/reminders';
+import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders, computeUsualPlayHour, settleIgnoredReminder } from '../../game/reminders';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
@@ -168,13 +168,23 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       cancelStreakReminders();
       return;
     }
+    const ignored = settleIgnoredReminder({
+      lastReminderDay: options.lastReminderDay,
+      lastPlayedDay: game.streak?.lastDay,
+      today,
+      ignoredCount: options.reminderIgnoredCount
+    });
+    if (ignored.changed) {
+      setOptions({ reminderIgnoredCount: ignored.ignoredCount, lastReminderDay: null });
+      return;
+    }
     syncStreakReminder({
       enabled: Boolean(options.reminders),
       streak: game.streak,
       today,
       petName: pet.name,
       translateFn: t,
-      playHours: options.recentRunHours,
+      runHours: options.recentRunHours,
       livesEmptyAtClose: Boolean(options.livesEmptyAtClose),
       ignoredCount: options.reminderIgnoredCount || 0,
       lastScheduledDay: options.lastReminderDay,
@@ -888,7 +898,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
                   today,
                   petName: pet.name,
                   translateFn: t,
-                  playHours: options?.recentRunHours,
+                  runHours: options?.recentRunHours,
                   livesEmptyAtClose: Boolean(options?.livesEmptyAtClose),
                   ignoredCount: 0,
                   requestPermissionOnSchedule: true

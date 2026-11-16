@@ -164,3 +164,18 @@ test('2.8 parallaxOffsets: 0.1x sky, 0.3x far, 0.6x props, 1x ground; reduceMoti
   assert.deepEqual(parallaxOffsets(100, false), { sky: 10, far: 30, props: 60, ground: 100 });
   assert.deepEqual(parallaxOffsets(100, true), { sky: 0, far: 0, props: 0, ground: 100 });
 });
+
+test('reminder: a passed reminder day with no play counts as ignored, once', async () => {
+  const { settleIgnoredReminder, shouldScheduleStreakReminder } = await import('../src/game/reminders.js');
+  assert.deepEqual(settleIgnoredReminder({ lastReminderDay: '2026-11-16', lastPlayedDay: '2026-11-16', today: '2026-11-16', ignoredCount: 1 }), { changed: false, ignoredCount: 1 });
+  assert.deepEqual(settleIgnoredReminder({ lastReminderDay: '2026-11-16', lastPlayedDay: '2026-11-15', today: '2026-11-17', ignoredCount: 2 }), { changed: true, ignoredCount: 3 });
+  assert.deepEqual(settleIgnoredReminder({ lastReminderDay: '2026-11-16', lastPlayedDay: '2026-11-16', today: '2026-11-17', ignoredCount: 2 }), { changed: true, ignoredCount: 0 });
+  assert.equal(shouldScheduleStreakReminder({ enabled: true, streakCount: 3, today: '2026-11-18', ignoredCount: 3 }), false);
+});
+
+test('PlayTab passes run hours to syncStreakReminder under the name it reads', async () => {
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../src/components/game/PlayTab.js', import.meta.url), 'utf8');
+  assert.equal(/playHours:/.test(src), false);
+  assert.ok((src.match(/runHours: options\??\.recentRunHours/g) || []).length >= 2);
+});

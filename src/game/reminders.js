@@ -39,6 +39,17 @@ export function shouldOfferReminderPrompt({
   return !promptShown && Number(promptCount) < 1;
 }
 
+// A reminder day that has passed is "ignored" when the player didn't play on
+// or after that day. Returns the new ignored count and whether to clear
+// lastReminderDay (so each reminder is counted once). Playing a run resets the
+// count elsewhere (PlayTab run end).
+export function settleIgnoredReminder({ lastReminderDay = null, lastPlayedDay = null, today = null, ignoredCount = 0 } = {}) {
+  const count = Math.max(0, Math.floor(Number(ignoredCount) || 0));
+  if (!lastReminderDay || !today || lastReminderDay >= today) return { changed: false, ignoredCount: count };
+  const played = Boolean(lastPlayedDay) && lastPlayedDay >= lastReminderDay;
+  return { changed: true, ignoredCount: played ? 0 : count + 1 };
+}
+
 export function shouldScheduleStreakReminder({
   enabled = false,
   streakCount = 0,
