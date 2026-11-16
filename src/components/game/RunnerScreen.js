@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, StyleSheet, AppState, PanResponder, useWindowDimensions, BackHandler } from 'react-native';
-import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle } from 'react-native-svg';
+import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line } from 'react-native-svg';
 import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
+import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
 import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent } from '../../game/sfx';
 import { count } from '../../game/counters';
@@ -16,6 +16,37 @@ import { StickerButton } from '../ui';
 const SWIPE_PX = 22;
 const COUNTDOWN_STEP_MS = 500;
 const REDUCE_MOTION_START_MS = 400;
+const CONTINUE_RING_SECONDS = 5;
+const MAX_PARTICLES = 12;
+
+function spawnParticles(pool, kind, x, y) {
+  const next = pool.slice();
+  const push = (p) => {
+    if (next.length >= MAX_PARTICLES) next.shift();
+    next.push({ id: `${Date.now()}-${Math.random()}`, age: 0, ...p });
+  };
+  if (kind === 'jump' || kind === 'doubleJump' || kind === 'land') {
+    for (let i = 0; i < 3; i++) {
+      push({ kind: 'dot', x: x + (i - 1) * 6, y, vx: -40 - i * 18, vy: -18 - i * 12, life: 0.35, r: 3.2, color: C.paper });
+    }
+  } else if (kind === 'splash') {
+    for (let i = 0; i < 4; i++) {
+      push({ kind: 'dot', x: x + (i - 1.5) * 5, y, vx: (i - 1.5) * 32, vy: -60 - (i % 2) * 20, life: 0.42, r: 2.8, color: C.sky });
+    }
+  } else if (kind === 'collect') {
+    for (let i = 0; i < 3; i++) {
+      push({ kind: 'dot', x: x + (i - 1) * 7, y: y - i * 4, vx: 15 - i * 18, vy: -45, life: 0.38, r: 2.6, color: C.butter });
+    }
+  } else if (kind === 'nearMiss') {
+    push({ kind: 'streak', x, y: y - 4, vx: -120, vy: 0, life: 0.32, r: 16, color: C.tomato });
+    push({ kind: 'streak', x: x + 4, y: y + 4, vx: -130, vy: 0, life: 0.32, r: 12, color: C.butter });
+  } else if (kind === 'smash') {
+    for (let i = 0; i < 4; i++) {
+      push({ kind: 'dot', x: x + i * 3, y: y + (i % 2) * 6 - 3, vx: 40 + i * 22, vy: -35 + (i % 2) * 30, life: 0.45, r: 4, color: C.butter });
+    }
+  }
+  return next;
+}
 
 // One stage, daily, endless or chase run: the game loop, the drawing and the controls.
 // Tap (or the Jump button) to jump (and double-jump in the air); swipe down (or hold Duck) to duck.
@@ -30,6 +61,11 @@ export default function RunnerScreen({
   runGoal = null,
   instantStart = false,
   showHowTo = true,
+  showJumpDuckButtons = true,
+  treatBalance = 0,
+  continueTreatCost = 30,
+  onPayContinueTreats = null,
+  onTrack = null,
   reduceMotion,
   soundOn,
   vibrationOn = true,
@@ -43,11 +79,15 @@ export default function RunnerScreen({
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
   const input = useRef({ jump: false, duck: false, swipeDuck: false });
   const pausedRef = useRef(true);
+  const particlesRef = useRef([]);
   const [paused, setPaused] = useState(Boolean(showHowTo));
   const [started, setStarted] = useState(!showHowTo);
   const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : instantStart ? 1 : 3));
   const [continuePrompt, setContinuePrompt] = useState(false);
   const [continueBusy, setContinueBusy] = useState(false);
+  const [continueTimer, setContinueTimer] = useState(CONTINUE_RING_SECONDS);
+  const [duckPressed, setDuckPressed] = useState(false);
+  const [jumpPressed, setJumpPressed] = useState(false);
   const [, setTick] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const { height: winHeight } = useWindowDimensions();
@@ -57,6 +97,8 @@ export default function RunnerScreen({
   fpsRef.current = onFps;
   const premiumRef = useRef(premium);
   premiumRef.current = premium;
+  const trackRef = useRef(onTrack);
+  trackRef.current = onTrack;
 
   const setPause = (p) => {
     pausedRef.current = p;
@@ -125,6 +167,22 @@ export default function RunnerScreen({
         input.current.jump = false;
         input.current.swipeDuck = false;
         next.events.forEach(gameEvent);
+        if (!reduceMotion) {
+          let pool = particlesRef.current
+            .map((p) => ({ ...p, age: p.age + dt, x: p.x + p.vx * dt, y: p.y + p.vy * dt }))
+            .filter((p) => p.age < p.life);
+          const py = GROUND - next.player.height - 4;
+          for (const ev of next.events) {
+            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, PLAYER_X + 18, py);
+            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, PLAYER_X + 20, GROUND - 3);
+            else if (ev === 'collect') pool = spawnParticles(pool, ev, PLAYER_X + 34, py - 20);
+            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, PLAYER_X + 10, py - 18);
+            else if (ev === 'smash') pool = spawnParticles(pool, ev, PLAYER_X + 40, py - 16);
+          }
+          particlesRef.current = pool;
+        } else if (particlesRef.current.length) {
+          particlesRef.current = [];
+        }
         runRef.current = next;
         frames += 1;
         frameTime += dt;
@@ -135,9 +193,12 @@ export default function RunnerScreen({
         }
         setTick((n) => (n + 1) % 1000000);
         if (next.done) {
-          if (canContinueRun(next) && (premiumRef.current || isRewardedReady('continue'))) {
+          const canPayTreats = Boolean(onPayContinueTreats && treatBalance >= continueTreatCost);
+          if (canContinueRun(next) && (premiumRef.current || isRewardedReady('continue') || canPayTreats)) {
             pausedRef.current = true;
             count('continuesOffered');
+            trackRef.current?.('continue_offered', { stage_id: next.stage?.id });
+            setContinueTimer(CONTINUE_RING_SECONDS);
             setContinuePrompt(true);
           } else {
             finishRef.current(resultOf(next));
@@ -166,6 +227,24 @@ export default function RunnerScreen({
     }
   };
 
+  const acceptContinue = (method) => {
+    count('continuesTaken');
+    trackRef.current?.('continue_taken', { stage_id: stage.id, method });
+    runRef.current = continueRun(runRef.current);
+    input.current = { jump: false, duck: false, swipeDuck: false };
+    setContinuePrompt(false);
+    setPaused(false);
+    pausedRef.current = true;
+    setCountdown(reduceMotion ? 0 : 3);
+    setTick((n) => (n + 1) % 1000000);
+  };
+
+  const handleDeclineContinue = (reason = 'declined') => {
+    trackRef.current?.('continue_declined', { stage_id: stage.id, reason });
+    setContinuePrompt(false);
+    finishRef.current(resultOf(runRef.current));
+  };
+
   const handleContinue = async () => {
     if (continueBusy) return;
     setContinueBusy(true);
@@ -176,27 +255,36 @@ export default function RunnerScreen({
         granted = Boolean(res?.rewarded);
       }
       if (granted) {
-        count('continuesTaken');
-        runRef.current = continueRun(runRef.current);
-        input.current = { jump: false, duck: false, swipeDuck: false };
-        setContinuePrompt(false);
-        setPaused(false);
-        pausedRef.current = true;
-        setCountdown(reduceMotion ? 0 : 3);
-        setTick((n) => (n + 1) % 1000000);
+        acceptContinue(premium ? 'premium' : 'ad');
       } else {
-        setContinuePrompt(false);
-        finishRef.current(resultOf(runRef.current));
+        handleDeclineContinue('ad_dismissed');
       }
     } finally {
       setContinueBusy(false);
     }
   };
 
-  const handleDeclineContinue = () => {
-    setContinuePrompt(false);
-    finishRef.current(resultOf(runRef.current));
+  const handleContinueTreats = () => {
+    if (continueBusy || !onPayContinueTreats) return;
+    if (onPayContinueTreats(continueTreatCost)) {
+      acceptContinue('treats');
+    }
   };
+
+  useEffect(() => {
+    if (!continuePrompt || continueBusy) return;
+    const iv = setInterval(() => {
+      setContinueTimer((prev) => {
+        const next = Math.max(0, +(prev - 0.1).toFixed(1));
+        if (next <= 0) {
+          clearInterval(iv);
+          handleDeclineContinue('timeout');
+        }
+        return next;
+      });
+    }, 100);
+    return () => clearInterval(iv);
+  }, [continuePrompt, continueBusy]);
 
   const pan = useMemo(() => {
     let swiped = false;
@@ -244,6 +332,13 @@ export default function RunnerScreen({
   if (run.power.shield) activePowers.unshift('shield');
   const shownBest = Math.max(bestScore || 0, run.score || 0);
   const stageTargetH = Math.max(260, Math.round(winHeight * 0.6));
+  const maxStageSpeed = run.stage.endless ? 380 : run.stage.speedEnd || run.stage.speed || 260;
+  const panting = currentSpeed(run) > maxStageSpeed * 0.75;
+  const happy = nearMissFresh || (run.treatStreak || 0) >= 3;
+  const dashWarning = things.some((e) => (e.type === 'catDash' || e.type === 'dogDash') && e.sx > VIEW_W - 60);
+  const ringR = 22;
+  const ringCirc = 2 * Math.PI * ringR;
+  const ringOffset = ringCirc * (1 - Math.max(0, Math.min(1, continueTimer / CONTINUE_RING_SECONDS)));
 
   return (
     <View style={s.wrap}>
@@ -312,18 +407,29 @@ export default function RunnerScreen({
               </ClipPath>
             </Defs>
             <G transform={shake ? `translate(${shake} 0)` : undefined}>
-              <Backdrop theme={stage.theme} />
-              <Midground theme={stage.theme} dist={run.dist} />
+              <Backdrop theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
+              <Midground theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
               {goalX != null && goalX < VIEW_W + 60 ? (
                 <G transform={`translate(${goalX} ${GROUND})`}>
                   <Goal />
                 </G>
               ) : null}
-              {things.map((e) => (
-                <G key={e.id} transform={`translate(${e.sx} ${e.sy})`}>
-                  <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+              {things.map((e) => {
+                const sy = e.type === 'bird' && !reduceMotion ? e.sy + Math.sin(run.t * 8 + e.x * 0.05) * 4 : e.sy;
+                return (
+                  <G key={e.id} transform={`translate(${e.sx} ${sy})`}>
+                    <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+                  </G>
+                );
+              })}
+              {dashWarning ? (
+                <G transform={`translate(${VIEW_W - 22} ${GROUND - 24})`}>
+                  <Circle cx={0} cy={0} r={11} fill={C.butter} stroke={C.ink} strokeWidth={2} />
+                  <SvgText x={0} y={4} fontSize={13} fontFamily={F.bold} fill={C.ink} textAnchor="middle">
+                    !
+                  </SvgText>
                 </G>
-              ))}
+              ) : null}
               {run.stage.chase && (
                 <G transform={`translate(${chaserX} ${GROUND - 38 - chaserBounce})`}>
                   <Chaser chaser={stage.chaser} />
@@ -337,9 +443,18 @@ export default function RunnerScreen({
                   equipped={wardrobe.equipped}
                   phase={Math.floor(run.dist / 18)}
                   pose={pose}
+                  panting={panting}
+                  happy={happy}
                 />
                 <NameTag name={pet.name} faceUri={faceUri} />
               </G>
+              {particlesRef.current.map((p) => {
+                const alpha = Math.max(0, 1 - p.age / p.life);
+                if (p.kind === 'streak') {
+                  return <Line key={p.id} x1={p.x} y1={p.y} x2={p.x - p.r} y2={p.y} stroke={p.color} strokeWidth={2.5} strokeLinecap="round" opacity={alpha} />;
+                }
+                return <Circle key={p.id} cx={p.x} cy={p.y} r={p.r} fill={p.color} opacity={alpha} />;
+              })}
             </G>
           </Svg>
         )}
@@ -374,6 +489,26 @@ export default function RunnerScreen({
         )}
         {continuePrompt && (
           <View style={s.overlay}>
+            <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+              <Svg width={58} height={58} viewBox="0 0 58 58">
+                <Circle cx={29} cy={29} r={ringR} stroke={C.paper} strokeWidth={5} fill="none" />
+                <Circle
+                  cx={29}
+                  cy={29}
+                  r={ringR}
+                  stroke={C.tomato}
+                  strokeWidth={5}
+                  fill="none"
+                  strokeDasharray={`${ringCirc} ${ringCirc}`}
+                  strokeDashoffset={ringOffset}
+                  strokeLinecap="round"
+                  transform="rotate(-90 29 29)"
+                />
+                <SvgText x={29} y={35} fontSize={18} fontFamily={F.bold} fill={C.ink} textAnchor="middle">
+                  {Math.ceil(continueTimer)}
+                </SvgText>
+              </Svg>
+            </View>
             <Text style={s.overlayTitle}>
               {stage.chase
                 ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
@@ -383,18 +518,29 @@ export default function RunnerScreen({
               {stage.chase ? t('game.continueRun.chaseSub') : t('game.continueRun.endlessSub')}
             </Text>
             <View style={s.overlayButtons}>
-              <StickerButton
-                label={premium ? t('game.continueRun.freeBtn') : t('game.continueRun.adBtn')}
-                emoji={premium ? '👑' : '🎬'}
-                color={C.butter}
-                disabled={continueBusy}
-                onPress={handleContinue}
-              />
+              {(premium || isRewardedReady('continue')) ? (
+                <StickerButton
+                  label={premium ? t('game.continueRun.freeBtn') : t('game.continueRun.adBtn')}
+                  emoji={premium ? '👑' : '🎬'}
+                  color={C.butter}
+                  disabled={continueBusy}
+                  onPress={handleContinue}
+                />
+              ) : null}
+              {onPayContinueTreats && treatBalance >= continueTreatCost ? (
+                <StickerButton
+                  label={t('game.continueRun.treatBtn', { n: continueTreatCost })}
+                  emoji={pet.species === 'cat' ? '🐟' : '🦴'}
+                  color={C.mint}
+                  disabled={continueBusy}
+                  onPress={handleContinueTreats}
+                />
+              ) : null}
               <StickerButton
                 label={t('game.continueRun.endBtn')}
                 color={C.paper}
                 disabled={continueBusy}
-                onPress={handleDeclineContinue}
+                onPress={() => handleDeclineContinue('declined')}
               />
             </View>
           </View>
@@ -420,35 +566,41 @@ export default function RunnerScreen({
         )}
       </View>
 
-      <View style={s.controls}>
-        <Pressable
-          style={[s.ctrl, { backgroundColor: C.sky }]}
-          onPressIn={() => {
-            input.current.duck = true;
-          }}
-          onPressOut={() => {
-            input.current.duck = false;
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('game.duck')}
-        >
-          <Text style={s.ctrlText} maxFontSizeMultiplier={1.6}>
-            ⬇️ {t('game.duck')}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[s.ctrl, { backgroundColor: C.butter }]}
-          onPressIn={() => {
-            input.current.jump = true;
-          }}
-          accessibilityRole="button"
-          accessibilityLabel={t('game.jump')}
-        >
-          <Text style={s.ctrlText} maxFontSizeMultiplier={1.6}>
-            ⬆️ {t('game.jump')}
-          </Text>
-        </Pressable>
-      </View>
+      {showJumpDuckButtons ? (
+        <View style={s.controls}>
+          <Pressable
+            style={[s.ctrl, { backgroundColor: C.sky, opacity: duckPressed ? 1 : 0.3 }]}
+            onPressIn={() => {
+              setDuckPressed(true);
+              input.current.duck = true;
+            }}
+            onPressOut={() => {
+              setDuckPressed(false);
+              input.current.duck = false;
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={t('game.duck')}
+          >
+            <Text style={s.ctrlText} maxFontSizeMultiplier={1.6}>
+              ⬇️ {t('game.duck')}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[s.ctrl, { backgroundColor: C.butter, opacity: jumpPressed ? 1 : 0.3 }]}
+            onPressIn={() => {
+              setJumpPressed(true);
+              input.current.jump = true;
+            }}
+            onPressOut={() => setJumpPressed(false)}
+            accessibilityRole="button"
+            accessibilityLabel={t('game.jump')}
+          >
+            <Text style={s.ctrlText} maxFontSizeMultiplier={1.6}>
+              ⬆️ {t('game.jump')}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }

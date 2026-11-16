@@ -1,14 +1,53 @@
 // Local on-device streak reminders via expo-notifications.
-// Off by default; schedules at most one notification per day at 18:00 local
-// time when the player has a streak >= 2 and hasn't played yet that day.
+// Off by default; schedules at most one notification per day at the player's
+// usual play hour (clamped 08:00-20:00, fallback 18:00) from a 1-day streak.
 
 import * as Notifications from 'expo-notifications';
 import { dayKey } from './daily';
 
 export const REMINDER_HOUR_LOCAL = 18;
+export const MIN_REMINDER_HOUR = 8;
+export const MAX_REMINDER_HOUR = 20;
+export const REPROMPT_DELAY_MS = 3 * 24 * 60 * 60 * 1000;
+export const MAX_IGNORED_REMINDERS = 3;
 
-export function shouldOfferReminderPrompt({ streakCount = 0, promptShown = false, remindersEnabled = false } = {}) {
-  return Number(streakCount) >= 1 && !promptShown && !remindersEnabled;
+export function computeUsualPlayHour(runHours = []) {
+  const valid = (Array.isArray(runHours) ? runHours : [])
+    .slice(-5)
+    .map((h) => Number(h))
+    .filter((h) => Number.isFinite(h) && h >= 0 && h <= 23);
+  if (valid.length === 0) return REMINDER_HOUR_LOCAL;
+  valid.sort((a, b) => a - b);
+  const mid = Math.floor(valid.length / 2);
+  const median = valid.length % 2 === 1 ? valid[mid] : Math.round((valid[mid - 1] + valid[mid]) / 2);
+  return Math.max(MIN_REMINDER_HOUR, Math.min(MAX_REMINDER_HOUR, median));
+}
+
+export function shouldOfferReminderPrompt({
+  streakCount = 0,
+  promptShown = false,
+  promptCount = 0,
+  promptDismissedAt = null,
+  remindersEnabled = false,
+  nowMs = Date.now()
+} = {}) {
+  if (remindersEnabled) return false;
+  if (Number(streakCount) < 1) return false;
+  if (promptDismissedAt != null) {
+    return Number(promptCount) < 2 && nowMs - Number(promptDismissedAt) >= REPROMPT_DELAY_MS;
+  }
+  return !promptShown && Number(promptCount) < 1;
+}
+
+// A reminder day that has passed is "ignored" when the player didn't play on
+// or after that day. Returns the new ignored count and whether to clear
+// lastReminderDay (so each reminder is counted once). Playing a run resets the
+// count elsewhere (PlayTab run end).
+export function settleIgnoredReminder({ lastReminderDay = null, lastPlayedDay = null, today = null, ignoredCount = 0 } = {}) {
+  const count = Math.max(0, Math.floor(Number(ignoredCount) || 0));
+  if (!lastReminderDay || !today || lastReminderDay >= today) return { changed: false, ignoredCount: count };
+  const played = Boolean(lastPlayedDay) && lastPlayedDay >= lastReminderDay;
+  return { changed: true, ignoredCount: played ? 0 : count + 1 };
 }
 
 export function shouldScheduleStreakReminder({
@@ -16,47 +55,60 @@ export function shouldScheduleStreakReminder({
   streakCount = 0,
   lastPlayedDay = null,
   today = null,
-  lastScheduledDay = null
+  lastScheduledDay = null,
+  ignoredCount = 0
 } = {}) {
   if (!enabled) return false;
-  if (Number(streakCount) < 2) return false;
+  if (Number(streakCount) < 1) return false;
+  if (Number(ignoredCount) >= MAX_IGNORED_REMINDERS) return false;
   if (!today) return false;
   if (lastPlayedDay === today) return false;
   if (lastScheduledDay === today) return false;
   return true;
 }
 
-// Compute the next 18:00 local Date. If the player hasn't played today and it
-// is still before 18:00 local time, returns 18:00 today; otherwise returns
-// 18:00 tomorrow (so if they don't play tomorrow before 18:00, it fires once).
-export function nextReminderDate(nowMs = Date.now(), { playedToday = false } = {}) {
+export function nextReminderDate(nowMs = Date.now(), { playedToday = false, hour = REMINDER_HOUR_LOCAL } = {}) {
+  const clampedHour = Math.max(MIN_REMINDER_HOUR, Math.min(MAX_REMINDER_HOUR, Math.round(Number(hour) || REMINDER_HOUR_LOCAL)));
   const now = new Date(nowMs);
   const target = new Date(nowMs);
-  target.setHours(REMINDER_HOUR_LOCAL, 0, 0, 0);
+  target.setHours(clampedHour, 0, 0, 0);
   if (playedToday || target.getTime() <= now.getTime()) {
     target.setDate(target.getDate() + 1);
-    target.setHours(REMINDER_HOUR_LOCAL, 0, 0, 0);
+    target.setHours(clampedHour, 0, 0, 0);
   }
   return target;
 }
 
-export function buildStreakReminderMessage({ petName = 'Your pet', streakCount = 2, translateFn } = {}) {
+export function buildStreakReminderMessage({
+  petName = 'Your pet',
+  streakCount = 1,
+  livesEmptyAtClose = false,
+  rotationIndex = 0,
+  translateFn
+} = {}) {
   const cleanName = String(petName || 'Your pet').trim() || 'Your pet';
-  const n = Math.max(2, Math.floor(Number(streakCount) || 2));
-  if (typeof translateFn === 'function') {
-    const body = translateFn('game.reminder.body', { petName: cleanName, n });
-    const title = translateFn('game.reminder.title', { petName: cleanName });
-    if (body && body !== 'game.reminder.body') {
-      return {
-        title: title && title !== 'game.reminder.title' ? title : 'Pawlingo',
-        body
-      };
-    }
+  const n = Math.max(1, Math.floor(Number(streakCount) || 1));
+
+  const variants = [{ key: 'game.reminder.dailyReady', fallback: `${cleanName}'s daily run is ready 🐾`, vars: { petName: cleanName } }];
+  if (n >= 2) {
+    variants.push({ key: 'game.reminder.body', fallback: `${cleanName} is waiting! Keep your ${n}-day streak 🔥`, vars: { petName: cleanName, n } });
   }
-  return {
-    title: 'Pawlingo',
-    body: `${cleanName} is waiting! Keep your ${n}-day streak 🔥`
-  };
+  if (livesEmptyAtClose) {
+    variants.push({ key: 'game.reminder.livesFull', fallback: 'Lives are full: one quick run?', vars: {} });
+  }
+
+  const chosen = variants[Math.abs(Math.floor(rotationIndex || 0)) % variants.length];
+  let body = chosen.fallback;
+  let title = 'Pawlingo';
+
+  if (typeof translateFn === 'function') {
+    const trBody = translateFn(chosen.key, chosen.vars);
+    const trTitle = translateFn('game.reminder.title', { petName: cleanName });
+    if (trBody && trBody !== chosen.key) body = trBody;
+    if (trTitle && trTitle !== 'game.reminder.title') title = trTitle;
+  }
+
+  return { title, body };
 }
 
 export async function requestReminderPermission() {
@@ -83,16 +135,22 @@ export async function syncStreakReminder({
   petName = 'Your pet',
   translateFn = null,
   nowMs = Date.now(),
-  lastScheduledDay = null
+  lastScheduledDay = null,
+  runHours = [],
+  ignoredCount = 0,
+  livesEmptyAtClose = false,
+  rotationIndex = 0,
+  requestPermissionOnSchedule = false
 } = {}) {
   const streakCount = Number(streak?.count || 0);
-  if (!enabled || streakCount < 2) {
+  if (!enabled || streakCount < 1 || Number(ignoredCount) >= MAX_IGNORED_REMINDERS) {
     await cancelStreakReminders();
     return { scheduled: false, scheduledForDay: null };
   }
 
   const playedToday = streak?.lastDay === today;
-  const triggerDate = nextReminderDate(nowMs, { playedToday });
+  const hour = computeUsualPlayHour(runHours);
+  const triggerDate = nextReminderDate(nowMs, { playedToday, hour });
   const targetDay = dayKey(triggerDate.getTime());
 
   // At most one local notification per target day.
@@ -102,19 +160,30 @@ export async function syncStreakReminder({
       streakCount,
       lastPlayedDay: streak?.lastDay || null,
       today: targetDay,
-      lastScheduledDay
+      lastScheduledDay,
+      ignoredCount
     })
   ) {
     return { scheduled: false, scheduledForDay: lastScheduledDay };
   }
 
-  const permitted = await requestReminderPermission();
+  const existingPerm = await Notifications.getPermissionsAsync?.();
+  let permitted = Boolean(existingPerm?.granted || existingPerm?.status === 'granted');
+  if (!permitted && requestPermissionOnSchedule) {
+    permitted = await requestReminderPermission();
+  }
   if (!permitted) {
     return { scheduled: false, scheduledForDay: null };
   }
 
   await cancelStreakReminders();
-  const { title, body } = buildStreakReminderMessage({ petName, streakCount, translateFn });
+  const { title, body } = buildStreakReminderMessage({
+    petName,
+    streakCount,
+    livesEmptyAtClose,
+    rotationIndex,
+    translateFn
+  });
   try {
     const triggerType = Notifications.SchedulableTriggerInputTypes?.DATE || 'date';
     await Notifications.scheduleNotificationAsync?.({

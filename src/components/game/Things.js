@@ -80,6 +80,38 @@ const OBSTACLE_ART = {
       <Line x1={w - 8} y1={h - 6} x2={w - 8} y2={h} stroke={INK} strokeWidth={4} strokeLinecap="round" />
       <Path d={`M${w - 4} ${h - 18} L${w + 4} ${h - 28}`} stroke={INK} strokeWidth={4} strokeLinecap="round" />
     </G>
+  ),
+  catDash: ({ w, h }) => (
+    <G>
+      <Ellipse cx={w / 2} cy={h + 1} rx={w / 2 - 2} ry={3.5} fill="rgba(26,18,43,0.22)" />
+      <Ellipse cx={w / 2 + 3} cy={h - 11} rx={w / 2 - 5} ry={8} fill="#7B6D8D" stroke={INK} strokeWidth={SW} />
+      <Circle cx={10} cy={h - 18} r={8.5} fill="#7B6D8D" stroke={INK} strokeWidth={SW} />
+      <Polygon points={`4,${h - 24} 6,${h - 32} 11,${h - 25}`} fill="#7B6D8D" stroke={INK} strokeWidth={1.8} />
+      <Polygon points={`12,${h - 25} 16,${h - 32} 17,${h - 23}`} fill="#7B6D8D" stroke={INK} strokeWidth={1.8} />
+      <Circle cx={7} cy={h - 19} r={1.5} fill={C.butter} />
+      <Circle cx={3} cy={h - 16} r={1.4} fill={C.pink} />
+      <Path d={`M${w - 3} ${h - 14} C ${w + 5} ${h - 22}, ${w + 2} ${h - 30}, ${w - 4} ${h - 28}`} stroke={INK} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    </G>
+  ),
+  dogDash: ({ w, h }) => (
+    <G>
+      <Ellipse cx={w / 2} cy={h + 1} rx={w / 2 - 2} ry={3.5} fill="rgba(26,18,43,0.22)" />
+      <Ellipse cx={w / 2 + 4} cy={h - 12} rx={w / 2 - 5} ry={9} fill="#C98B4B" stroke={INK} strokeWidth={SW} />
+      <Circle cx={10} cy={h - 20} r={9.5} fill="#C98B4B" stroke={INK} strokeWidth={SW} />
+      <Ellipse cx={4} cy={h - 17} rx={3.5} ry={3} fill="#C98B4B" stroke={INK} strokeWidth={1.8} />
+      <Circle cx={2} cy={h - 18} r={1.6} fill={INK} />
+      <Circle cx={9} cy={h - 22} r={1.5} fill={INK} />
+      <Path d={`M14 ${h - 27} C 19 ${h - 27}, 19 ${h - 18}, 16 ${h - 16}`} fill={INK} />
+      <Path d={`M${w - 3} ${h - 16} L${w + 5} ${h - 25}`} stroke={INK} strokeWidth={4} strokeLinecap="round" />
+    </G>
+  ),
+  bird: ({ w, h }) => (
+    <G>
+      <Ellipse cx={w / 2 + 2} cy={h / 2 + 2} rx={w / 2 - 4} ry={h / 2 - 4} fill={C.sky} stroke={INK} strokeWidth={SW} />
+      <Path d={`M${w / 2 - 4} ${h / 2 - 2} Q ${w / 2 + 2} -4 ${w / 2 + 10} ${h / 2 - 2}`} fill={C.paper} stroke={INK} strokeWidth={1.8} />
+      <Polygon points={`2,${h / 2 + 1} 8,${h / 2 - 2} 8,${h / 2 + 4}`} fill={C.butter} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
+      <Circle cx={11} cy={h / 2 - 1} r={1.6} fill={INK} />
+    </G>
   )
 };
 

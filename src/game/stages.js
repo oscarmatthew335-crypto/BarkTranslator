@@ -19,8 +19,22 @@ export const OBSTACLES = {
   postman: { lane: 'high', w: 40, h: 34, y: 30, move: 30, emoji: '📦' },
   cucumber: { lane: 'low', w: 46, h: 16, y: 0, move: 0, emoji: '🥒' },
   spray: { lane: 'high', w: 44, h: 28, y: 30, move: 0, emoji: '💦' },
-  dog: { lane: 'low', w: 50, h: 36, y: 0, move: 45, emoji: '🐕' }
+  dog: { lane: 'low', w: 50, h: 36, y: 0, move: 45, emoji: '🐕' },
+  catDash: { lane: 'low', w: 46, h: 30, y: 0, move: 110, emoji: '🐈', warningS: 0.6 },
+  dogDash: { lane: 'low', w: 50, h: 34, y: 0, move: 110, emoji: '🐕', warningS: 0.6 },
+  bird: { lane: 'high', w: 40, h: 26, y: 32, move: 55, bob: true, emoji: '🐦' }
 };
+
+export const SURPRISE_OBSTACLES = new Set(['catDash', 'dogDash', 'bird']);
+export const SURPRISE_ENDLESS_DIST = 5000; // 500 m (10 world units per metre)
+
+export function isSurpriseObstacleAllowed(stage, type, dist = 0) {
+  if (!SURPRISE_OBSTACLES.has(type)) return true;
+  if (!stage) return false;
+  if (stage.endless) return Number(dist || 0) >= SURPRISE_ENDLESS_DIST;
+  if (stage.chase) return Number(dist || 0) >= SURPRISE_ENDLESS_DIST;
+  return Number(stage.index ?? -1) >= 3;
+}
 
 export const COLLECTIBLES = {
   dog: ['bone', 'ball'],
@@ -43,17 +57,17 @@ const DOG_MIX = {
   garden: { puddle: 3, sprinkler: 3, postman: 1 },
   park: { puddle: 3, sprinkler: 2, postman: 2 },
   beach: { puddle: 4, sprinkler: 2, postman: 1 },
-  braai: { puddle: 2, sprinkler: 2, vacuum: 1, postman: 2 },
-  vet: { puddle: 2, vacuum: 3, sprinkler: 2, postman: 1 },
-  home: { vacuum: 4, puddle: 1, postman: 3, sprinkler: 1 }
+  braai: { puddle: 2, sprinkler: 2, vacuum: 1, postman: 2, catDash: 1, bird: 1 },
+  vet: { puddle: 2, vacuum: 3, sprinkler: 2, postman: 1, catDash: 1, bird: 1 },
+  home: { vacuum: 4, puddle: 1, postman: 3, sprinkler: 1, catDash: 2, bird: 2 }
 };
 const CAT_MIX = {
   garden: { cucumber: 3, spray: 3, dog: 1 },
   park: { cucumber: 2, spray: 2, dog: 3 },
   beach: { cucumber: 3, spray: 3, dog: 2 },
-  braai: { cucumber: 3, spray: 2, dog: 2, vacuum: 1 },
-  vet: { cucumber: 2, spray: 3, vacuum: 3 },
-  home: { vacuum: 4, cucumber: 3, spray: 2, dog: 1 }
+  braai: { cucumber: 3, spray: 2, dog: 2, vacuum: 1, dogDash: 1, bird: 1 },
+  vet: { cucumber: 2, spray: 3, vacuum: 3, dogDash: 1, bird: 1 },
+  home: { vacuum: 4, cucumber: 3, spray: 2, dog: 1, dogDash: 2, bird: 2 }
 };
 
 const build = (species, mix) =>

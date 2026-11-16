@@ -6,7 +6,7 @@
 // same spot on screen while the world scrolls by `dist`.
 
 import { makeRng, pick, hashString } from './random';
-import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED } from './stages';
+import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED, isSurpriseObstacleAllowed } from './stages';
 
 export const VIEW_W = 400;
 export const VIEW_H = 220;
@@ -23,7 +23,9 @@ export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
 export const HIT_INVULN_S = 1.2;
 export const HIT_SLOW_S = 0.6;
 
-export const POWER_DURATION = { speed: 5, magnet: 8, double: 10 }; // shield lasts until it is used
+export const POWER_DURATION = { speed: 4, magnet: 8, double: 10 }; // shield lasts until it is used
+export const ZOOMIES_END_INVULN_S = 0.8;
+export const CONTINUE_MIN_SECONDS = 15;
 export const SPEED_BOOST = 1.4;
 export const MAGNET_RANGE = 150;
 export const MAGNET_PULL = 520;
@@ -189,9 +191,13 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
   while (x < endX) {
     const progress = Math.min(1, x / 18000);
     const speed = Math.min(maxSpeed, stage.speed + (stage.ramp || 180) * progress);
-    const type = weighted(rng, stage.obstacles);
+    const allowedMix = {};
+    for (const [k, w] of Object.entries(stage.obstacles || {})) {
+      if (isSurpriseObstacleAllowed(stage, k, x)) allowedMix[k] = w;
+    }
+    const type = weighted(rng, Object.keys(allowedMix).length ? allowedMix : stage.obstacles);
     const o = OBSTACLES[type];
-    entities.push({ id: id++, kind: 'obstacle', type, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
+    entities.push({ id: id++, kind: 'obstacle', type, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move, bob: Boolean(o.bob), warningS: o.warningS || 0 });
 
     const treat = pick(rng, treatTypes);
     if (rng() < 0.8) {
@@ -365,6 +371,8 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     power: { speed: 0, magnet: 0, double: 0, shield: false },
     powerUpsUsed: 0,
     continued: false,
+    continueOffered: false,
+    lastHitObstacle: null,
     done: false,
     events: []
   };
@@ -407,11 +415,15 @@ export function step(run, dt, input = {}) {
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, jumps = 0, nearMissTimer = 0, invuln, slow, hearts, cleanTime = 0 } = run;
+  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, jumps = 0, nearMissTimer = 0, invuln, slow, hearts, cleanTime = 0, lastHitObstacle = null } = run;
 
   // timers
+  const prevSpeed = power.speed || 0;
   for (const k of Object.keys(POWER_DURATION)) power[k] = Math.max(0, power[k] - dt);
   invuln = Math.max(0, invuln - dt);
+  if (prevSpeed > 0 && power.speed === 0) {
+    invuln = Math.max(invuln, ZOOMIES_END_INVULN_S);
+  }
   slow = Math.max(0, slow - dt);
   nearMissTimer = Math.max(0, nearMissTimer - dt);
 
@@ -473,7 +485,7 @@ export function step(run, dt, input = {}) {
       e = { ...e, x: e.x - e.move * dt };
       changed.set(i, e);
     }
-    if (e.kind === 'treat' && power.magnet > 0) {
+    if (e.kind === 'treat' && (power.magnet > 0 || power.speed > 0)) {
       const dx = dist + PLAYER_W / 2 - (e.x + e.w / 2);
       const dy = player.height + PLAYER_H / 2 - (e.y + e.h / 2);
       const d = Math.hypot(dx, dy);
@@ -508,10 +520,15 @@ export function step(run, dt, input = {}) {
       else power[e.type] = Math.max(power[e.type], POWER_DURATION[e.type]);
       events.push('power');
     } else if (e.kind === 'obstacle' && !e.hit) {
+      if (e.type === 'puddle' && player.height <= 4) {
+        events.push('splash');
+      }
       if (invuln > 0 || power.speed > 0) {
-        if (power.speed > 0 && invuln <= 0) {
-          changed.set(i, { ...e, hit: true });
-          events.push('smash');
+        if (power.speed > 0) {
+          changed.set(i, { ...e, hit: true, smashed: true, gone: true });
+          nearMissTimer = 0.22;
+          treatPoints += 5 * multiplier;
+          events.push('smash', 'nearMiss');
         }
         continue;
       }
@@ -523,6 +540,7 @@ export function step(run, dt, input = {}) {
       } else {
         hits += 1;
         frameHits += 1;
+        lastHitObstacle = e.type;
         combo = 0;
         multiplier = 1;
         cleanTime = 0;
@@ -597,6 +615,7 @@ export function step(run, dt, input = {}) {
     failed: outOfHearts && !run.stage.daily && !run.stage.endless,
     invuln,
     slow,
+    lastHitObstacle,
     cursor,
     entities: nextEntities,
     done,
@@ -607,9 +626,11 @@ export function step(run, dt, input = {}) {
   return nextRun;
 }
 
-// Continue once per Endless or Chase run after running out of hearts or getting caught.
+// Continue once per Endless or Chase run after running out of hearts or getting caught,
+// and only if the run lasted at least 15 seconds.
 export function canContinueRun(run) {
-  if (!run || !run.done || run.continued) return false;
+  if (!run || !run.done || run.continued || run.continueOffered) return false;
+  if (Number(run.t || 0) < CONTINUE_MIN_SECONDS) return false;
   return Boolean(run.stage?.endless || run.stage?.chase);
 }
 
@@ -678,15 +699,25 @@ export function scoreFor({ treats, dist, hits }) {
   return Math.max(0, treats * 10 + Math.floor(dist / 25) - hits * 15);
 }
 
+export const worldToMetres = (dist) => Math.max(0, Math.floor((Number(dist) || 0) / 10));
+
 export function resultOf(run) {
   const isEndlessOrChase = Boolean(run.stage.endless || run.stage.chase);
+  const distanceMetres = worldToMetres(run.dist);
+  const endCause = run.caught ? 'caught' : run.lastHitObstacle || (run.failed ? 'hit' : 'goal');
   return {
     stageId: run.stage.id,
+    theme: run.stage.theme || 'garden',
+    nameKey: run.stage.nameKey || 'game.place.garden',
+    species: run.stage.species || 'dog',
     mode: run.stage.mode || (run.stage.daily ? 'daily' : 'stage'),
     daily: Boolean(run.stage.daily),
     endless: Boolean(run.stage.endless),
     chase: Boolean(run.stage.chase),
     caught: Boolean(run.caught),
+    dist: Math.round(run.dist || 0),
+    distanceMetres,
+    endCause,
     treats: run.treats,
     collected: run.collected,
     totalTreats: run.totalTreats,
