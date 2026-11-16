@@ -9,7 +9,7 @@ import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
 import { shouldShowHowTo, recordModeRun } from '../../game/gameStore';
 import { recordStage, nextStageAfter, totalStars, suggestedStage, isUnlocked } from '../../game/progress';
-import { stagesFor, dailyStage, milestonesReached, milestoneReward } from '../../game/stages';
+import { stagesFor, dailyStage, milestonesReached, milestoneReward, PLACES } from '../../game/stages';
 import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
@@ -41,7 +41,7 @@ import {
   CHALLENGE_REWARD
 } from '../../game/daily';
 import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
-import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders } from '../../game/reminders';
+import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders, computeUsualPlayHour } from '../../game/reminders';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
@@ -58,7 +58,7 @@ import {
   grantConsumableOnce,
   shouldTriggerStarterOffer
 } from '../../game/storeItems';
-import { track, scoreBucket, msBucket, runModeFor } from '../../game/analytics';
+import { track, scoreBucket, distanceBucket, msBucket, runModeFor } from '../../game/analytics';
 import { logMetaRunFinished } from '../../game/meta';
 import ScoreShareCard from './ScoreShareCard';
 import { canShareRunScore, buildScoreShareMessage } from '../../game/shareScore';
@@ -174,13 +174,30 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       today,
       petName: pet.name,
       translateFn: t,
-      lastScheduledDay: options.lastReminderDay
+      playHours: options.recentRunHours,
+      livesEmptyAtClose: Boolean(options.livesEmptyAtClose),
+      ignoredCount: options.reminderIgnoredCount || 0,
+      lastScheduledDay: options.lastReminderDay,
+      requestPermissionOnSchedule: false
     }).then((res) => {
       if (res?.scheduled && res.scheduledForDay && res.scheduledForDay !== options.lastReminderDay) {
         setOptions({ lastReminderDay: res.scheduledForDay });
       }
     });
-  }, [ready, game?.streak?.count, game?.streak?.lastDay, options?.reminders, options?.lastReminderDay, pet.name, today, t, setOptions]);
+  }, [
+    ready,
+    game?.streak?.count,
+    game?.streak?.lastDay,
+    options?.reminders,
+    options?.lastReminderDay,
+    options?.recentRunHours,
+    options?.livesEmptyAtClose,
+    options?.reminderIgnoredCount,
+    pet.name,
+    today,
+    t,
+    setOptions
+  ]);
 
   const showNotice = useCallback(
     (message, action) =>
@@ -314,9 +331,24 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         : { kind: 'none' };
       track('run_end', {
         mode: modeKey,
+        stage_id: result.stageId || modeKey,
         score_bucket: scoreBucket(result.score),
+        distance_bucket: distanceBucket(result.distanceMetres || 0),
+        end_cause: result.endCause || (result.failed ? 'out_of_hearts' : 'finished'),
+        continued: Boolean(result.continued),
         treats: result.treats || 0
       });
+      const nowHour = new Date().getHours();
+      const prevHours = Array.isArray(options?.recentRunHours) ? options.recentRunHours : [];
+      const currentLives = livesNow(lives, Date.now(), { premium }).lives;
+      setOptions({
+        recentRunHours: [...prevHours, nowHour].slice(-5),
+        reminderIgnoredCount: 0,
+        livesEmptyAtClose: currentLives <= 0
+      });
+      if (newBest || wkOut.isNewWeeklyBest) {
+        track('share_card_shown', { mode: modeKey, stage_id: result.stageId || modeKey, score_bucket: scoreBucket(result.score) });
+      }
       logMetaRunFinished(modeKey);
       if (goalCompleted) {
         track('run_goal_done', { type: goalCompleted.type, mode: modeKey });
@@ -368,6 +400,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         previousWeeklyBest: wkOut.previousWeeklyBest,
         newWeeklyBest: wkOut.isNewWeeklyBest,
         streakReward: sReward,
+        autoShareOpen: Boolean(newBest || wkOut.isNewWeeklyBest),
         goalCompleted,
         deathAt: Date.now(),
         milestones: reached,
@@ -508,9 +541,14 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     if (screen.name !== 'end' || !screen.result) return;
     const mode = runModeFor(screen.result);
     track('share_score', { mode, score_bucket: scoreBucket(screen.result.score) });
+    track('share_tapped', { mode, stage_id: screen.stage?.id || mode, score_bucket: scoreBucket(screen.result.score) });
     const chaserLabel = t(screen.stage?.chaser?.nameKey || 'game.chaser.bath');
+    const place = t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden');
     const message = buildScoreShareMessage({
       petName: pet.name,
+      species: pet.species,
+      distance: screen.result.distanceMetres || 0,
+      place,
       score: screen.result.score,
       isChase: Boolean(screen.result.chase),
       chaserLabel,
@@ -526,7 +564,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     try {
       await Share.share({ message });
     } catch (_) {}
-  }, [screen, pet.name, t]);
+  }, [screen, pet.name, pet.species, t]);
 
   const handleDoubleTreats = useCallback(async () => {
     if (screen.name !== 'end' || screen.doubleClaimed) return;
@@ -612,6 +650,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         }
         showHowTo={screen.showHowTo}
         instantStart={Boolean(screen.instantStart)}
+        showJumpDuckButtons={options?.showJumpDuckButtons !== false}
+        treatBalance={game.bank}
+        continueTreatCost={30}
+        onPayContinueTreats={(cost) => {
+          if (game.bank < cost) return false;
+          updateGame((g) => ({ ...g, bank: Math.max(0, g.bank - cost) }));
+          return true;
+        }}
+        onTrack={track}
         runGoal={screen.runGoal}
         reduceMotion={reduceMotion}
         soundOn={options.sound}
@@ -700,22 +747,57 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           photoSituation={situation}
           onNext={() => startStage(next)}
           onReplay={() => {
+            track('replay_tapped', { mode: runModeFor(screen.result), stage_id: screen.stage?.id || runModeFor(screen.result) });
             if (screen.deathAt) {
               track('play_again_tap', { ms_bucket: msBucket(Date.now() - screen.deathAt) });
             }
             startStage(screen.stage, [], { fromReplay: true });
           }}
           onOpenWardrobe={() => openWardrobe('end_unlock')}
-          onShareScore={canShareRunScore(screen.result, { newBest: screen.newBest }) ? handleShareScore : null}
+          onShareScore={canShareRunScore(screen.result, { newBest: screen.newBest, newWeeklyBest: screen.newWeeklyBest }) ? handleShareScore : null}
           onDoubleTreats={offerDouble ? handleDoubleTreats : null}
           doubleTreatsAmount={offerDouble ? screen.result.treats : 0}
           onMap={() => setScreen({ name: 'hub' })}
-        />
+        >
+          {screen.autoShareOpen ? (
+            <Sticker radius={22} color={C.butter} style={{ marginTop: 16 }} innerStyle={{ padding: 14, gap: 10 }}>
+              <Text style={s.photoTitle}>🏆 {t('game.share.newBestTitle')}</Text>
+              <Text style={s.photoSub}>
+                {t('game.share.ranPlace', {
+                  petName: pet.name,
+                  distance: screen.result.distanceMetres || 0,
+                  place: t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden')
+                })}
+              </Text>
+              <View style={s.row}>
+                <StickerButton
+                  color={C.mint}
+                  label={t('game.share.whatsappBtn')}
+                  emoji="💬"
+                  onPress={async () => {
+                    await handleShareScore();
+                    setScreen((sc) => (sc.name === 'end' ? { ...sc, autoShareOpen: false } : sc));
+                  }}
+                />
+                <StickerButton
+                  small
+                  color={C.paper}
+                  label={t('game.photo.notNow')}
+                  onPress={() => setScreen((sc) => (sc.name === 'end' ? { ...sc, autoShareOpen: false } : sc))}
+                />
+              </View>
+            </Sticker>
+          ) : null}
+        </StageEnd>
         <ScoreShareCard
           ref={scoreCardRef}
           pet={pet}
           wardrobe={game.wardrobe}
+          faceUri={faceUri}
           score={screen.result.score}
+          distance={screen.result.distanceMetres || 0}
+          place={t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden')}
+          theme={screen.stage?.theme || 'garden'}
           isChase={Boolean(screen.result.chase)}
           chaserLabel={t(screen.stage?.chaser?.nameKey || 'game.chaser.bath')}
         />
@@ -729,7 +811,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const upcomingStreak = nextStreakReward(streak);
   const showReminderPrompt = shouldOfferReminderPrompt({
     streakCount: streak,
-    promptShown: options?.reminderPromptShown,
+    promptShown: Boolean(options?.reminderPromptShown),
+    promptCount: options?.reminderPromptCount ?? (options?.reminderPromptShown ? 1 : 0),
+    promptDismissedAt: options?.reminderDismissedAt,
+    nowMs: Date.now(),
     remindersEnabled: options?.reminders
   });
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
@@ -795,14 +880,39 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             <StickerButton
               small
               color={C.mint}
-              label={t('game.reminder.turnOn')}
-              onPress={() => setOptions({ reminders: true, reminderPromptShown: true, lastReminderDay: null })}
+              label={t('game.reminder.yesPlease')}
+              onPress={async () => {
+                await syncStreakReminder({
+                  enabled: true,
+                  streak: game.streak,
+                  today,
+                  petName: pet.name,
+                  translateFn: t,
+                  playHours: options?.recentRunHours,
+                  livesEmptyAtClose: Boolean(options?.livesEmptyAtClose),
+                  ignoredCount: 0,
+                  requestPermissionOnSchedule: true
+                });
+                setOptions({
+                  reminders: true,
+                  reminderPromptShown: true,
+                  reminderPromptCount: (options?.reminderPromptCount || 0) + 1,
+                  lastReminderDay: null
+                });
+                track('reminder_enabled', { hour: computeUsualPlayHour(options?.recentRunHours) });
+              }}
             />
             <StickerButton
               small
               color={C.paper}
               label={t('game.photo.notNow')}
-              onPress={() => setOptions({ reminderPromptShown: true })}
+              onPress={() =>
+                setOptions({
+                  reminderPromptShown: true,
+                  reminderPromptCount: (options?.reminderPromptCount || 0) + 1,
+                  reminderDismissedAt: Date.now()
+                })
+              }
             />
           </View>
         </Sticker>

@@ -7,24 +7,48 @@ const INK = C.ink;
 
 // The player's pet, drawn in a 56 x 44 box with its feet on y = 44.
 // `phase` (0-3) moves the legs while running; `pose` is run | jump | duck | hurt.
-function PetSprite({ species = 'dog', colour = 'golden', equipped = {}, phase = 0, pose = 'run' }) {
+function PetSprite({
+  species = 'dog',
+  colour = 'golden',
+  equipped = {},
+  phase = 0,
+  pose = 'run',
+  panting = false,
+  happy = false,
+}) {
   const col = getColour(colour);
   const body = col.hex;
   const cat = species === 'cat';
   const duck = pose === 'duck';
   const legSwing = pose === 'jump' ? 0 : [3, 0, -3, 0][phase % 4];
+  const frame3 = phase % 3;
+  const catTailD =
+    pose === 'hurt'
+      ? 'M8 27 C 0 26, -1 18, 2 14'
+      : ['M8 26 C -2 20, 0 6, 6 4', 'M8 26 C -4 18, 1 5, 9 5', 'M8 26 C -1 22, -2 8, 4 3'][frame3];
+  const dogTailD =
+    pose === 'hurt'
+      ? 'M9 27 L1 33'
+      : ['M9 25 L1 16', 'M9 25 L0 19', 'M9 25 L3 14'][frame3];
+  const earDy = pose === 'jump' ? -2 : [0, 1.5, -1][frame3];
+  const headBob = pose === 'run' ? [0, -1, 0, 1][phase % 4] : happy ? -1.5 : 0;
+  const outerTransform = duck
+    ? 'translate(0 17) scale(1 0.62)'
+    : happy && pose !== 'hurt'
+      ? 'translate(0 -2)'
+      : undefined;
   return (
-    <G transform={duck ? 'translate(0 17) scale(1 0.62)' : undefined}>
+    <G transform={outerTransform}>
       {/* tail */}
       {cat ? (
-        <Path d="M8 26 C -2 20, 0 6, 6 4" stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" />
+        <Path d={catTailD} stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" />
       ) : (
-        <Path d={pose === 'hurt' ? 'M9 27 L1 33' : 'M9 25 L1 16'} stroke={INK} strokeWidth={6} strokeLinecap="round" />
+        <Path d={dogTailD} stroke={INK} strokeWidth={6} strokeLinecap="round" />
       )}
       {cat ? (
-        <Path d="M8 26 C -2 20, 0 6, 6 4" stroke={body} strokeWidth={4} fill="none" strokeLinecap="round" />
+        <Path d={catTailD} stroke={body} strokeWidth={4} fill="none" strokeLinecap="round" />
       ) : (
-        <Path d={pose === 'hurt' ? 'M9 27 L1 33' : 'M9 25 L1 16'} stroke={body} strokeWidth={3.5} strokeLinecap="round" />
+        <Path d={dogTailD} stroke={body} strokeWidth={3.5} strokeLinecap="round" />
       )}
       {/* legs */}
       <Line x1={14} y1={32} x2={14 + legSwing} y2={43} stroke={INK} strokeWidth={5} strokeLinecap="round" />
@@ -42,30 +66,52 @@ function PetSprite({ species = 'dog', colour = 'golden', equipped = {}, phase = 
       {/* neck items under the head */}
       <NeckItem item={getItem(equipped.neck)} />
       <CollarItem item={getItem(equipped.collar)} />
-      {/* head */}
-      {cat ? (
-        <>
-          <Polygon points="37,10 39,0 45,7" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
-          <Polygon points="47,7 53,0 54,11" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
-          <Circle cx={46} cy={15} r={10} fill={body} stroke={INK} strokeWidth={2.5} />
-          <Line x1={51} y1={18} x2={58} y2={16} stroke={INK} strokeWidth={1} />
-          <Line x1={51} y1={20} x2={58} y2={21} stroke={INK} strokeWidth={1} />
-        </>
-      ) : (
-        <>
-          <Circle cx={45} cy={15} r={10.5} fill={body} stroke={INK} strokeWidth={2.5} />
-          <Ellipse cx={53} cy={19} rx={5} ry={4} fill={body} stroke={INK} strokeWidth={2.2} />
-          <Path d="M38 8 C 33 10, 33 20, 37 22 C 40 18, 41 13, 41 9 Z" fill={col.id === 'black' ? '#5B5266' : INK} />
-        </>
-      )}
-      {pose === 'hurt' ? (
-        <Path d="M45 11 l4 4 M49 11 l-4 4" stroke={INK} strokeWidth={2} strokeLinecap="round" />
-      ) : (
-        <Circle cx={47.5} cy={13} r={2} fill={INK} />
-      )}
-      <Circle cx={cat ? 55 : 57.5} cy={cat ? 16 : 18} r={cat ? 1.6 : 2.4} fill={cat ? C.pink : INK} />
-      <GlassesItem item={getItem(equipped.glasses)} />
-      <HatItem item={getItem(equipped.hat)} cat={cat} />
+      {/* head + accessories bob together so hats stay aligned */}
+      <G transform={headBob ? `translate(0 ${headBob})` : undefined}>
+        {cat ? (
+          <>
+            <Polygon points="37,10 39,0 45,7" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+            <Polygon points="47,7 53,0 54,11" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+            <Circle cx={46} cy={15} r={10} fill={body} stroke={INK} strokeWidth={2.5} />
+            <Line x1={51} y1={18} x2={58} y2={16} stroke={INK} strokeWidth={1} />
+            <Line x1={51} y1={20} x2={58} y2={21} stroke={INK} strokeWidth={1} />
+          </>
+        ) : (
+          <>
+            <Circle cx={45} cy={15} r={10.5} fill={body} stroke={INK} strokeWidth={2.5} />
+            <Ellipse cx={53} cy={19} rx={5} ry={4} fill={body} stroke={INK} strokeWidth={2.2} />
+            <Path
+              d="M38 8 C 33 10, 33 20, 37 22 C 40 18, 41 13, 41 9 Z"
+              fill={col.id === 'black' ? '#5B5266' : INK}
+              transform={earDy ? `translate(0 ${earDy})` : undefined}
+            />
+          </>
+        )}
+        {panting && pose !== 'hurt' ? (
+          <Path
+            d={cat ? 'M50 20 Q52 24 49 24 Q47 23 48 20 Z' : 'M51 22 Q53 26 50 26 Q48 25 49 22 Z'}
+            fill={C.pink}
+            stroke={INK}
+            strokeWidth={1.2}
+          />
+        ) : null}
+        {pose === 'hurt' ? (
+          <Path d="M44 11 L49 13.5 L44 16" stroke={INK} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        ) : (
+          <Circle cx={47.5} cy={13} r={2} fill={INK} />
+        )}
+        <Circle cx={cat ? 55 : 57.5} cy={cat ? 16 : 18} r={cat ? 1.6 : 2.4} fill={cat ? C.pink : INK} />
+        <GlassesItem item={getItem(equipped.glasses)} />
+        <HatItem item={getItem(equipped.hat)} cat={cat} />
+        {happy && pose !== 'hurt' ? (
+          <Path
+            d="M54 2 c -1.5 -2, -4.5 0, -2 2.5 l 2 2 l 2 -2 c 2.5 -2.5, -0.5 -4.5, -2 -2.5 Z"
+            fill={C.pink}
+            stroke={INK}
+            strokeWidth={1}
+          />
+        ) : null}
+      </G>
     </G>
   );
 }

@@ -1,36 +1,49 @@
 import React, { forwardRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { C, F, INK_WIDTH } from '../../theme';
 import { APP_NAME } from '../../species';
 import { useI18n } from '../../i18n';
-import { SCORE_SHARE_URL, formatShareHeadline } from '../../game/shareScore';
+import { SCORE_SHARE_URL, formatShareHeadline, formatShareChallenge } from '../../game/shareScore';
+import { THEMES } from './Scenery';
 import PetPreview from './PetPreview';
 
 const W = 360;
 const H = 450;
 
 // Portrait 4:5 score card rendered off-screen and captured via view-shot when
-// the player taps Share after a new personal best or a 30s+ Chase run.
+// sharing after a new personal/weekly best or a 30s+ Chase run.
 const ScoreShareCard = forwardRef(function ScoreShareCard(
-  { pet, wardrobe, score = 0, isChase = false, chaserLabel = 'bath time' },
+  { pet, wardrobe, faceUri = null, score = 0, distance = 0, place = 'Garden', theme = 'garden', isChase = false, chaserLabel = 'bath time' },
   ref
 ) {
   const { t } = useI18n();
+  const th = THEMES[theme] || THEMES.garden;
   const headline = formatShareHeadline({
     petName: pet?.name,
+    distance,
+    place,
     isChase,
     chaserLabel,
     translateFn: t
   });
+  const challenge = formatShareChallenge({ species: pet?.species, translateFn: t });
   return (
     <View style={s.offscreen} pointerEvents="none">
-      <View ref={ref} collapsable={false} style={s.card}>
+      <View ref={ref} collapsable={false} style={[s.card, { backgroundColor: th.sky }]}>
+        <View style={[s.groundStrip, { backgroundColor: th.ground, borderTopColor: th.edge }]} />
         <View style={s.body}>
           <View style={s.petWrap}>
-            <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={160} />
+            {faceUri ? (
+              <Image source={{ uri: faceUri }} style={s.facePhoto} />
+            ) : (
+              <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={150} />
+            )}
           </View>
           <Text style={s.headline} numberOfLines={2}>
             {headline}
+          </Text>
+          <Text style={s.challenge} numberOfLines={1}>
+            {challenge}
           </Text>
           <View style={s.scorePill}>
             <Text style={s.scoreText}>{t('game.end.score', { n: score })}</Text>
@@ -64,29 +77,50 @@ const s = StyleSheet.create({
     borderColor: C.ink,
     overflow: 'hidden'
   },
+  groundStrip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 64,
+    height: 44,
+    borderTopWidth: 4
+  },
   body: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
     paddingBottom: 56,
-    gap: 10
+    gap: 8
   },
   petWrap: {
     backgroundColor: C.paper,
-    borderRadius: 28,
+    borderRadius: 999,
     borderWidth: INK_WIDTH,
     borderColor: C.ink,
-    padding: 12,
+    padding: 10,
     alignItems: 'center',
     justifyContent: 'center'
   },
+  facePhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 2,
+    borderColor: C.ink
+  },
   headline: {
     fontFamily: F.bold,
-    fontSize: 22,
+    fontSize: 21,
     color: C.ink,
     textAlign: 'center',
-    lineHeight: 28
+    lineHeight: 26
+  },
+  challenge: {
+    fontFamily: F.semibold,
+    fontSize: 15,
+    color: C.inkSoft,
+    textAlign: 'center'
   },
   scorePill: {
     backgroundColor: C.butter,

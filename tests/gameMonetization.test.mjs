@@ -123,9 +123,9 @@ test('lives: handles phone clock moving backwards without getting stuck, and add
 });
 
 test('continueRun: restores 1 heart in Endless or 40 gap in Chase once per run with invulnerability', () => {
-  // Endless run out of hearts
+  // Endless run out of hearts (after >= 15s)
   let endless = newRun(endlessStage('dog'), { seed: 7 });
-  endless = { ...endless, hearts: 0, done: true };
+  endless = { ...endless, t: 16, hearts: 0, done: true };
   assert.equal(canContinueRun(endless), true);
 
   const continuedEndless = continueRun(endless);
@@ -137,9 +137,9 @@ test('continueRun: restores 1 heart in Endless or 40 gap in Chase once per run w
   assert.equal(canContinueRun({ ...continuedEndless, hearts: 0, done: true }), false);
   assert.equal(resultOf(continuedEndless).continued, true);
 
-  // Chase run caught
+  // Chase run caught (after >= 15s)
   let chase = newRun(chaseStage('cat'), { seed: 9 });
-  chase = { ...chase, chaseGap: 0, caught: true, done: true };
+  chase = { ...chase, t: 16, chaseGap: 0, caught: true, done: true };
   assert.equal(canContinueRun(chase), true);
 
   const continuedChase = continueRun(chase);

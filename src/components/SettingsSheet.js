@@ -181,6 +181,13 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 onChange={(v) => setOptions({ reminders: Boolean(v), reminderPromptShown: true, lastReminderDay: null })}
                 divider
               />
+              <Row
+                title={t('settings.jumpDuckButtonsTitle')}
+                sub={t('settings.jumpDuckButtonsSub')}
+                value={options?.showJumpDuckButtons !== false}
+                onChange={(v) => setOptions({ showJumpDuckButtons: Boolean(v) })}
+                divider
+              />
             </View>
             <Text style={s.privacyNote}>
               {t('settings.clipPrivacyNote')}
