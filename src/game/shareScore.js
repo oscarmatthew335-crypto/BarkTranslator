@@ -14,6 +14,7 @@ export function canShareRunScore(result, { newBest = false, newWeeklyBest = fals
 
 export function formatShareHeadline({
   petName = 'My pet',
+  characterLabel = null,
   distance = 0,
   place = 'Garden',
   isChase = false,
@@ -22,23 +23,24 @@ export function formatShareHeadline({
 } = {}) {
   const name = String(petName || 'My pet').trim() || 'My pet';
   const chaser = String(chaserLabel || 'bath time').trim() || 'bath time';
+  const displayPet = characterLabel ? `${name} as ${characterLabel}` : name;
   const cleanDist = Math.max(0, Math.floor(Number(distance) || 0));
   const cleanPlace = String(place || 'Garden').trim() || 'Garden';
   if (typeof translateFn === 'function') {
     if (isChase) {
-      const out = translateFn('game.share.escaped', { petName: name, chaser });
+      const out = translateFn('game.share.escaped', { petName: displayPet, chaser });
       if (out && out !== 'game.share.escaped') return out;
     } else if (cleanDist > 0) {
-      const out = translateFn('game.share.ranPlace', { petName: name, distance: cleanDist, place: cleanPlace });
+      const out = translateFn('game.share.ranPlace', { petName: displayPet, distance: cleanDist, place: cleanPlace });
       if (out && out !== 'game.share.ranPlace') return out;
     } else {
-      const out = translateFn('game.share.newBestLine', { petName: name, chaser });
+      const out = translateFn('game.share.newBestLine', { petName: displayPet, chaser });
       if (out && out !== 'game.share.newBestLine') return out;
     }
   }
-  if (isChase) return `${name} escaped ${chaser}!`;
-  if (cleanDist > 0) return `${name} ran ${cleanDist} m in the ${cleanPlace}!`;
-  return `${name} set a new personal best!`;
+  if (isChase) return `${displayPet} escaped ${chaser}!`;
+  if (cleanDist > 0) return `${displayPet} ran ${cleanDist} m in the ${cleanPlace}!`;
+  return `${displayPet} set a new personal best!`;
 }
 
 export function formatShareChallenge({ species = 'dog', translateFn = null } = {}) {
@@ -53,6 +55,7 @@ export function formatShareChallenge({ species = 'dog', translateFn = null } = {
 
 export function buildScoreShareMessage({
   petName = 'My pet',
+  characterLabel = null,
   species = 'dog',
   distance = 0,
   place = 'Garden',
@@ -61,7 +64,7 @@ export function buildScoreShareMessage({
   chaserLabel = 'bath time',
   translateFn = null
 } = {}) {
-  const headline = formatShareHeadline({ petName, distance, place, isChase, chaserLabel, translateFn });
+  const headline = formatShareHeadline({ petName, characterLabel, distance, place, isChase, chaserLabel, translateFn });
   const challenge = formatShareChallenge({ species, translateFn });
   const cleanScore = Math.max(0, Math.floor(Number(score) || 0));
   return `${headline} ${challenge} (${cleanScore} pts) 🐾\nFree on Google Play: ${SCORE_SHARE_URL}`;

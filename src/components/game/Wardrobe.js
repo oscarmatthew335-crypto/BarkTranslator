@@ -4,6 +4,7 @@ import { C, F, INK_WIDTH } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle } from '../ui';
 import { BODY_COLOURS, ITEMS, SLOTS, canBuy } from '../../game/wardrobe';
+import { CHARACTERS, getCharacter, isCharacterOwned, canUnlockCharacter } from '../../game/characters';
 import {
   TREAT_PACKS,
   STARTER_PACK,
@@ -15,11 +16,27 @@ import PetPreview from './PetPreview';
 
 // Dress the pet up with treats collected while playing. All cosmetic, all
 // earned by playing or via optional treat packs.
-export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onColour, onBuy, onWear, onBack, focusPacks = false }) {
+export default function Wardrobe({
+  pet,
+  species,
+  wardrobe,
+  bank,
+  storeState,
+  onColour,
+  onBuy,
+  onWear,
+  onBuyCharacter,
+  onEquipCharacter,
+  onViewCharacter,
+  onTryCharacter,
+  onBack,
+  focusPacks = false
+}) {
   const { t } = useI18n();
   const scrollRef = useRef(null);
   const packsY = useRef(null);
   const didFocus = useRef(false);
+  const [tryCharId, setTryCharId] = useState(null);
   const scrollToPacks = () => {
     if (packsY.current != null) scrollRef.current?.scrollTo({ y: Math.max(0, packsY.current - 12), animated: true });
   };
@@ -56,16 +73,118 @@ export default function Wardrobe({ pet, species, wardrobe, bank, storeState, onC
       setBusySku(null);
     }
   };
+  const previewCharId = tryCharId ?? wardrobe.activeCharacter ?? null;
+  const tryChar = tryCharId ? getCharacter(tryCharId) : null;
+  const tryProduct = tryChar?.productId ? products[tryChar.productId] : null;
+  const tryPlayPrice = tryProduct?.displayPrice || tryProduct?.localizedPrice || tryProduct?.price || null;
+  const tryNeed = tryChar && tryChar.price != null ? Math.max(0, tryChar.price - bank) : 0;
+
   return (
     <ScrollView ref={scrollRef} style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.wardrobe.title', { petName: pet.name })} subtitle={t('game.wardrobe.sub')} />
       <Sticker radius={24} innerStyle={s.hero}>
-        <PetPreview species={pet.species} wardrobe={wardrobe} size={150} />
+        <PetPreview species={pet.species} wardrobe={wardrobe} character={previewCharId} size={150} />
         <Text style={s.bank}>
           {treatEmoji} {bank}
         </Text>
         <StickerButton small color={C.butter} label={`+ ${t('game.store.getMore')}`} onPress={scrollToPacks} />
       </Sticker>
+
+      {tryChar && (
+        <Sticker radius={20} color={C.butter} style={{ marginTop: 12 }} innerStyle={{ padding: 12, gap: 8 }}>
+          <Text style={s.packTitle}>{t('game.char.petAs', { petName: pet.name, character: t(tryChar.nameKey) })}</Text>
+          <View style={s.tryRow}>
+            {tryChar.productId ? (
+              <StickerButton
+                small
+                color={C.mint}
+                disabled={!tryPlayPrice || Boolean(busySku)}
+                label={tryPlayPrice ? String(tryPlayPrice) : t('game.char.unavailable')}
+                onPress={() => handleBuyPack(tryChar.productId)}
+              />
+            ) : canUnlockCharacter(wardrobe, bank, tryChar.id) ? (
+              <StickerButton
+                small
+                color={C.mint}
+                label={t('game.char.unlockFor', { n: tryChar.price, emoji: treatEmoji })}
+                onPress={() => {
+                  onBuyCharacter?.(tryChar.id);
+                  setTryCharId(null);
+                }}
+              />
+            ) : (
+              <StickerButton
+                small
+                color={C.paper}
+                label={t('game.char.needMore', { n: tryNeed })}
+                onPress={scrollToPacks}
+              />
+            )}
+            <StickerButton small color={C.paper} label={t('game.back')} onPress={() => setTryCharId(null)} />
+          </View>
+        </Sticker>
+      )}
+
+      <Text style={s.section}>{t('game.char.section')}</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.charRow}>
+        <Pressable
+          onPress={() => {
+            setTryCharId(null);
+            onEquipCharacter?.(null);
+          }}
+          style={[s.charCard, !wardrobe.activeCharacter && s.charCardOn]}
+          accessibilityRole="button"
+        >
+          <PetPreview species={pet.species} wardrobe={wardrobe} character={null} size={84} />
+          <Text style={s.charName} numberOfLines={1}>{t('game.char.myPet')}</Text>
+          <Text style={s.charBadge}>
+            {!wardrobe.activeCharacter ? t('game.char.wearing') : t('game.wardrobe.wear')}
+          </Text>
+        </Pressable>
+        {CHARACTERS.map((ch) => {
+          const owned = isCharacterOwned(wardrobe, ch.id);
+          const wearing = wardrobe.activeCharacter === ch.id;
+          const p = ch.productId ? products[ch.productId] : null;
+          const playPrice = p?.displayPrice || p?.localizedPrice || p?.price || null;
+          const pct = ch.price ? Math.min(1, Math.max(0, bank / ch.price)) : 0;
+          return (
+            <Pressable
+              key={ch.id}
+              onPress={() => {
+                onViewCharacter?.(ch.id);
+                if (owned) {
+                  setTryCharId(null);
+                  onEquipCharacter?.(ch.id);
+                } else {
+                  setTryCharId(ch.id);
+                  onTryCharacter?.(ch.id);
+                }
+              }}
+              style={[s.charCard, wearing && s.charCardOn, !owned && s.charCardLocked]}
+              accessibilityRole="button"
+            >
+              <PetPreview species={pet.species} wardrobe={wardrobe} character={ch.id} size={84} />
+              <Text style={s.charName} numberOfLines={2}>
+                {t('game.char.petAs', { petName: pet.name, character: t(ch.nameKey) })}
+              </Text>
+              {owned ? (
+                <Text style={s.charBadge}>{wearing ? t('game.char.wearing') : t('game.wardrobe.wear')}</Text>
+              ) : ch.productId ? (
+                <Text style={s.charBadge}>{playPrice || t('game.char.unavailable')}</Text>
+              ) : (
+                <View style={s.charProgWrap}>
+                  <View style={s.charProgTrack}>
+                    <View style={[s.charProgFill, { width: `${Math.round(pct * 100)}%` }]} />
+                  </View>
+                  <Text style={s.charProgText}>
+                    {Math.min(bank, ch.price)} / {ch.price} {treatEmoji}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          );
+        })}
+      </ScrollView>
 
       <Text style={s.section}>{t('game.wardrobe.colour')}</Text>
       <View style={s.chips}>
@@ -194,5 +313,16 @@ const s = StyleSheet.create({
   packTitle: { fontFamily: F.bold, fontSize: 16, color: C.ink },
   packSub: { fontFamily: F.regular, fontSize: 13, color: C.ink, marginTop: 2 },
   strikePrice: { fontFamily: F.medium, fontSize: 12, color: C.inkSoft, textDecorationLine: 'line-through', marginTop: 2 },
-  note: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 16, lineHeight: 17 }
+  note: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 16, lineHeight: 17 },
+  tryRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  charRow: { gap: 10, paddingVertical: 4 },
+  charCard: { width: 132, padding: 10, borderRadius: 18, borderWidth: 2, borderColor: 'rgba(36,22,74,0.2)', backgroundColor: C.paper, alignItems: 'center', gap: 4 },
+  charCardOn: { borderColor: C.ink, borderWidth: INK_WIDTH, backgroundColor: '#E6FFF3' },
+  charCardLocked: { opacity: 0.78 },
+  charName: { fontFamily: F.bold, fontSize: 13, color: C.ink, textAlign: 'center', minHeight: 32 },
+  charBadge: { fontFamily: F.semibold, fontSize: 12, color: C.ink },
+  charProgWrap: { width: '100%', gap: 3, alignItems: 'center' },
+  charProgTrack: { width: '100%', height: 7, borderRadius: 4, borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.bg, overflow: 'hidden' },
+  charProgFill: { height: '100%', backgroundColor: C.mint },
+  charProgText: { fontFamily: F.medium, fontSize: 11, color: C.inkSoft }
 });

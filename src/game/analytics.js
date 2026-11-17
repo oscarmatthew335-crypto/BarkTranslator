@@ -22,7 +22,12 @@ export const ALLOWED_EVENTS = new Set([
   'share_tapped',
   'reminder_prompt_shown',
   'reminder_enabled',
-  'replay_tapped'
+  'replay_tapped',
+  'character_viewed',
+  'character_tried',
+  'character_unlocked',
+  'character_equipped',
+  'character_unequipped'
 ]);
 
 const FORBIDDEN_PARAM_KEYS = new Set([

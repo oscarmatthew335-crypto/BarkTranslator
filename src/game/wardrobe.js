@@ -55,7 +55,13 @@ export function defaultColour(pet) {
 }
 
 export function emptyWardrobe(pet) {
-  return { colour: defaultColour(pet), owned: ['collar-red'], equipped: { collar: 'collar-red' } };
+  return {
+    colour: defaultColour(pet),
+    owned: ['collar-red'],
+    equipped: { collar: 'collar-red' },
+    ownedCharacters: [],
+    activeCharacter: null
+  };
 }
 
 export function canBuy(wardrobe, bank, itemId) {
