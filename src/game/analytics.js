@@ -15,6 +15,14 @@ export const ALLOWED_EVENTS = new Set([
   'run_goal_done',
   'play_again_tap',
   'near_miss_shown',
+  'continue_offered',
+  'continue_taken',
+  'continue_declined',
+  'share_card_shown',
+  'share_tapped',
+  'reminder_prompt_shown',
+  'reminder_enabled',
+  'replay_tapped',
   'character_viewed',
   'character_tried',
   'character_unlocked',
@@ -25,9 +33,14 @@ export const ALLOWED_EVENTS = new Set([
 const FORBIDDEN_PARAM_KEYS = new Set([
   'name',
   'petname',
+  'pet_name',
   'dogname',
+  'dog_name',
   'catname',
+  'cat_name',
   'username',
+  'freetext',
+  'free_text',
   'text',
   'comment',
   'note',
@@ -66,6 +79,15 @@ export function scoreBucket(score) {
   if (n < 1000) return '500_999';
   if (n < 2500) return '1000_2499';
   return '2500_plus';
+}
+
+export function distanceBucket(dist) {
+  const n = Math.max(0, Math.floor(Number(dist) || 0));
+  if (n < 100) return '0-100';
+  if (n < 250) return '100-250';
+  if (n < 500) return '250-500';
+  if (n < 1000) return '500-1000';
+  return '1000+';
 }
 
 export function msBucket(ms) {

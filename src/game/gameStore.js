@@ -83,7 +83,20 @@ export const emptyGameState = () => ({
   extraSavers: 0,
   store: emptyStoreState(),
   premium: false,
-  options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null, lastCharacterNudgeDay: null }
+  options: {
+    sound: true,
+    vibration: true,
+    reminders: false,
+    reminderPromptShown: false,
+    reminderPromptCount: 0,
+    reminderDismissedAt: null,
+    reminderIgnoredCount: 0,
+    recentRunHours: [],
+    livesEmptyAtClose: false,
+    lastReminderDay: null,
+    showJumpDuckButtons: true,
+    lastCharacterNudgeDay: null
+  }
 });
 
 export function bestScoreFor(state, species, mode) {

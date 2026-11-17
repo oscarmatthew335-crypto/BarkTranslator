@@ -73,28 +73,39 @@ function Prop({ type }) {
   }
 }
 
-// Sky and far hills never move, so they are drawn once.
-export const Backdrop = memo(function Backdrop({ theme }) {
+import { parallaxOffsets } from '../../game/parallax';
+export { parallaxOffsets };
+
+function wrapX(base, offset, span, pad) {
+  return ((((base - offset) % span) + span) % span) - pad;
+}
+
+// Sky and clouds drift at 0.1x (wrapping), far hills at 0.3x; frozen when reduceMotion is set.
+export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion = false }) {
   const th = THEMES[theme] || THEMES.garden;
+  const off = parallaxOffsets(dist, reduceMotion);
+  const cloudSpan = VIEW_W + 120;
+  const farSpan = VIEW_W + 320;
   return (
     <G>
       {/* sky reaches far up: tall screens show more of it */}
       <Rect x={0} y={-1200} width={VIEW_W} height={VIEW_H + 1200} fill={th.sky} />
-      <Ellipse cx={80} cy={-30} rx={34} ry={12} fill={C.paper} opacity={0.8} />
-      <Ellipse cx={230} cy={-80} rx={44} ry={14} fill={C.paper} opacity={0.8} />
+      <Ellipse cx={wrapX(80, off.sky, cloudSpan, 60)} cy={-30} rx={34} ry={12} fill={C.paper} opacity={0.8} />
+      <Ellipse cx={wrapX(230, off.sky, cloudSpan, 60)} cy={-80} rx={44} ry={14} fill={C.paper} opacity={0.8} />
       <Circle cx={VIEW_W - 50} cy={-70} r={18} fill={C.butter} stroke={INK} strokeWidth={2} />
-      <Ellipse cx={90} cy={GROUND + 6} rx={140} ry={60} fill={th.far} />
-      <Ellipse cx={320} cy={GROUND + 10} rx={160} ry={50} fill={th.far} />
+      <Ellipse cx={wrapX(90, off.far, farSpan, 160)} cy={GROUND + 6} rx={140} ry={60} fill={th.far} />
+      <Ellipse cx={wrapX(320, off.far, farSpan, 160)} cy={GROUND + 10} rx={160} ry={50} fill={th.far} />
     </G>
   );
 });
 
-// Props scroll at half speed for depth; the ground stripes at full speed.
-// Both repeat, so only the offset changes from frame to frame.
-export function Midground({ theme, dist }) {
+// Props scroll at 0.6x for depth; the ground stripes at full speed (1x).
+// When reduceMotion is on, only the ground moves.
+export function Midground({ theme, dist, reduceMotion = false }) {
   const th = THEMES[theme] || THEMES.garden;
-  const off = -((dist * 0.5) % PROP_GAP);
-  const stripe = -(dist % 40);
+  const p = parallaxOffsets(dist, reduceMotion);
+  const off = -(p.props % PROP_GAP);
+  const stripe = -(p.ground % 40);
   return (
     <G>
       <G transform={`translate(${off} 0)`}>
