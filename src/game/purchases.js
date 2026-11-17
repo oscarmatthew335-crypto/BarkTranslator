@@ -24,6 +24,7 @@ import { logMetaPremiumPurchased } from './meta';
 import {
   PREMIUM_PRODUCT_ID as STORE_PREMIUM_ID,
   STARTER_PACK_ID,
+  CHARACTER_PRODUCTS,
   ALL_PRODUCT_IDS,
   getTreatPack,
   isConsumableProduct
@@ -214,6 +215,17 @@ async function acknowledgeAndGrant(purchase, { isNewPurchase = false } = {}) {
     return;
   }
 
+  if (CHARACTER_PRODUCTS[pid]) {
+    notifyGrant(`char:${pid}`, {
+      type: 'character_granted',
+      productId: pid,
+      characterId: CHARACTER_PRODUCTS[pid],
+      purchase
+    });
+    resolveWaiters({ status: 'purchased', productId: pid });
+    return;
+  }
+
   if (emitTreatPack(pid, purchase)) {
     resolveWaiters({ status: 'purchased', productId: pid });
   }
@@ -336,6 +348,22 @@ export async function restorePremium({ silent = false } = {}) {
         await finishTransaction({ purchase: starterMatch, isConsumable: false });
       } catch (_) {}
       notifyGrant('starter', { type: 'starter_restored', productId: STARTER_PACK_ID, purchase: starterMatch });
+    }
+    if (Array.isArray(owned)) {
+      for (const p of owned) {
+        const pid = purchaseProductId(p);
+        if (pid && CHARACTER_PRODUCTS[pid] && isProductPurchase(p, pid)) {
+          try {
+            await finishTransaction({ purchase: p, isConsumable: false });
+          } catch (_) {}
+          notifyGrant(`char:${pid}`, {
+            type: 'character_restored',
+            productId: pid,
+            characterId: CHARACTER_PRODUCTS[pid],
+            purchase: p
+          });
+        }
+      }
     }
     // Treat packs that were paid for but never consumed (app closed before the
     // treats were stored) are granted now; the token check stops double grants.

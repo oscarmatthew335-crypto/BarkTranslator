@@ -12,25 +12,33 @@ export function canShareRunScore(result, { newBest = false } = {}) {
   return false;
 }
 
-export function formatShareHeadline({ petName = 'My pet', isChase = false, chaserLabel = 'bath time', translateFn = null } = {}) {
+export function formatShareHeadline({
+  petName = 'My pet',
+  characterLabel = null,
+  isChase = false,
+  chaserLabel = 'bath time',
+  translateFn = null
+} = {}) {
   const name = String(petName || 'My pet').trim() || 'My pet';
   const chaser = String(chaserLabel || 'bath time').trim() || 'bath time';
+  const displayPet = characterLabel ? `${name} as ${characterLabel}` : name;
   if (typeof translateFn === 'function') {
     const key = isChase ? 'game.share.escaped' : 'game.share.newBestLine';
-    const out = translateFn(key, { petName: name, chaser });
+    const out = translateFn(key, { petName: displayPet, chaser });
     if (out && out !== key) return out;
   }
-  return isChase ? `${name} escaped ${chaser}!` : `${name} set a new personal best!`;
+  return isChase ? `${displayPet} escaped ${chaser}!` : `${displayPet} set a new personal best!`;
 }
 
 export function buildScoreShareMessage({
   petName = 'My pet',
+  characterLabel = null,
   score = 0,
   isChase = false,
   chaserLabel = 'bath time',
   translateFn = null
 } = {}) {
-  const headline = formatShareHeadline({ petName, isChase, chaserLabel, translateFn });
+  const headline = formatShareHeadline({ petName, characterLabel, isChase, chaserLabel, translateFn });
   const cleanScore = Math.max(0, Math.floor(Number(score) || 0));
   return `${headline} Score: ${cleanScore} 🐾\nFree on Google Play: ${SCORE_SHARE_URL}`;
 }

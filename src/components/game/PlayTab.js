@@ -41,6 +41,7 @@ import {
   CHALLENGE_REWARD
 } from '../../game/daily';
 import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
+import { getCharacter, buyCharacter, unlockCharacter, equipCharacter, characterNudge } from '../../game/characters';
 import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders } from '../../game/reminders';
 import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
@@ -131,6 +132,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
               wardrobe: unlockItem(g.wardrobe, STARTER_PACK.itemId),
               bank: g.bank + STARTER_PACK.treats,
               lifetimeTreats: g.lifetimeTreats + STARTER_PACK.treats
+            }));
+          }
+        } else if (ev?.type === 'character_granted' || ev?.type === 'character_restored') {
+          const cid = ev.characterId;
+          if (cid) {
+            if (ev.type === 'character_granted') track('character_unlocked', { id: cid, method: 'paid' });
+            updateGame((g) => ({
+              ...g,
+              wardrobe: unlockCharacter(g.wardrobe, cid, { equip: ev.type === 'character_granted' })
             }));
           }
         } else if (ev?.type === 'consumable_granted') {
@@ -315,7 +325,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       track('run_end', {
         mode: modeKey,
         score_bucket: scoreBucket(result.score),
-        treats: result.treats || 0
+        treats: result.treats || 0,
+        character: game.wardrobe?.activeCharacter || 'none'
       });
       logMetaRunFinished(modeKey);
       if (goalCompleted) {
@@ -348,6 +359,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           ? { day, best: g.daily.day === day ? Math.max(g.daily.best, result.score) : result.score, plays: (g.daily.day === day ? g.daily.plays : 0) + 1 }
           : g.daily
       }));
+      const nextBank = (game.bank || 0) + result.treats + (justDone ? CHALLENGE_REWARD : 0) + tierBonus + sReward.treats + goalBonus;
+      const nextWardrobe = sReward.item ? unlockItem(game.wardrobe, sReward.item) : game.wardrobe;
+      const charNudge = options?.lastCharacterNudgeDay !== day ? characterNudge(nextWardrobe, nextBank) : null;
+      if (charNudge) setOptions({ lastCharacterNudgeDay: day });
       // Questions for the optional treat round, worked out once per end card.
       const roundItems = pickQuestions({
         pet,
@@ -368,6 +383,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         previousWeeklyBest: wkOut.previousWeeklyBest,
         newWeeklyBest: wkOut.isNewWeeklyBest,
         streakReward: sReward,
+        characterNudge: charNudge,
         goalCompleted,
         deathAt: Date.now(),
         milestones: reached,
@@ -509,8 +525,11 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     const mode = runModeFor(screen.result);
     track('share_score', { mode, score_bucket: scoreBucket(screen.result.score) });
     const chaserLabel = t(screen.stage?.chaser?.nameKey || 'game.chaser.bath');
+    const activeChar = getCharacter(game?.wardrobe?.activeCharacter);
+    const characterLabel = activeChar ? t(activeChar.nameKey) : null;
     const message = buildScoreShareMessage({
       petName: pet.name,
+      characterLabel,
       score: screen.result.score,
       isChase: Boolean(screen.result.chase),
       chaserLabel,
@@ -570,6 +589,20 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         onColour={(c) => updateGame((g) => ({ ...g, wardrobe: setColour(g.wardrobe, c) }))}
         onBuy={(id) => updateGame((g) => ({ ...g, ...buy(g.wardrobe, g.bank, id) }))}
         onWear={(id) => updateGame((g) => ({ ...g, wardrobe: toggleWear(g.wardrobe, id) }))}
+        onBuyCharacter={(id) => {
+          updateGame((g) => {
+            const res = buyCharacter(g.wardrobe, g.bank, id);
+            if (res.bank !== g.bank) track('character_unlocked', { id, method: 'treats' });
+            return { ...g, ...res };
+          });
+        }}
+        onEquipCharacter={(id) => {
+          if (id == null) track('character_unequipped', {});
+          else track('character_equipped', { id });
+          updateGame((g) => ({ ...g, wardrobe: equipCharacter(g.wardrobe, id) }));
+        }}
+        onViewCharacter={(id) => track('character_viewed', { id })}
+        onTryCharacter={(id) => track('character_tried', { id })}
         onBack={() => setScreen({ name: 'hub' })}
         focusPacks={Boolean(screen.packs)}
       />
@@ -698,6 +731,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           onTreatRound={startRound}
           onPhotoChallenge={() => setScreen({ name: 'photo' })}
           photoSituation={situation}
+          characterNudge={screen.characterNudge || null}
           onNext={() => startStage(next)}
           onReplay={() => {
             if (screen.deathAt) {

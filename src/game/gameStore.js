@@ -83,7 +83,7 @@ export const emptyGameState = () => ({
   extraSavers: 0,
   store: emptyStoreState(),
   premium: false,
-  options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null }
+  options: { sound: true, vibration: true, reminders: false, reminderPromptShown: false, lastReminderDay: null, lastCharacterNudgeDay: null }
 });
 
 export function bestScoreFor(state, species, mode) {
@@ -177,6 +177,14 @@ export function petGame(state, pet) {
       chase: Math.max(speciesBest.chase || 0, saved.bestScores?.chase || 0)
     },
     weeklyBest: { ...base.weeklyBest, ...(saved.weeklyBest || {}) },
+    wardrobe: {
+      ...base.wardrobe,
+      ...(saved.wardrobe || {}),
+      owned: Array.isArray(saved.wardrobe?.owned) ? saved.wardrobe.owned : base.wardrobe.owned,
+      equipped: { ...base.wardrobe.equipped, ...(saved.wardrobe?.equipped || {}) },
+      ownedCharacters: Array.isArray(saved.wardrobe?.ownedCharacters) ? saved.wardrobe.ownedCharacters : [],
+      activeCharacter: saved.wardrobe?.activeCharacter ?? null
+    },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     recentRuns: Array.isArray(saved.recentRuns) ? saved.recentRuns : [],
     round: { ...base.round, ...(saved.round || {}) }

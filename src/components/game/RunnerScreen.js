@@ -335,6 +335,7 @@ export default function RunnerScreen({
                   species={pet.species}
                   colour={wardrobe.colour}
                   equipped={wardrobe.equipped}
+                  character={wardrobe.activeCharacter}
                   phase={Math.floor(run.dist / 18)}
                   pose={pose}
                 />

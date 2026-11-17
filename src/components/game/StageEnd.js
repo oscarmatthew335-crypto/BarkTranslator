@@ -42,6 +42,7 @@ export default function StageEnd({
   onTreatRound,
   onPhotoChallenge,
   photoSituation,
+  characterNudge = null,
   children
 }) {
   const { t } = useI18n();
@@ -153,6 +154,16 @@ export default function StageEnd({
         ) : null}
         <StickerButton label={t('game.end.map')} emoji="🗺️" color={C.paper} onPress={onMap} />
       </View>
+
+      {characterNudge ? (
+        <Pressable onPress={onOpenWardrobe} accessibilityRole="button" style={{ marginTop: 12 }}>
+          <Sticker radius={18} color={C.butter} innerStyle={s.unlockBox}>
+            <Text style={s.unlockText}>
+              ✨ {t('game.char.nudge', { n: characterNudge.remaining, emoji: treatEmoji, character: t(characterNudge.character.nameKey) })}
+            </Text>
+          </Sticker>
+        </Pressable>
+      ) : null}
 
       {nextUnlock && (
         <Pressable onPress={onOpenWardrobe} accessibilityRole="button" style={{ marginTop: 14 }}>

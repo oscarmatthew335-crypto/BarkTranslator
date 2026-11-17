@@ -5,6 +5,10 @@ export const PREMIUM_PRODUCT_ID = 'pawlingo_premium';
 export const PREMIUM_BONUS_TREATS = 500;
 
 export const STARTER_PACK_ID = 'starter_pack';
+export const CHAR_GOLD_PRODUCT_ID = 'char_gold';
+export const CHARACTER_PRODUCTS = {
+  [CHAR_GOLD_PRODUCT_ID]: 'char-gold'
+};
 export const STARTER_PACK_TRIGGER_RUN = 3;
 export const STARTER_PACK_WINDOW_MS = 48 * 60 * 60 * 1000;
 
@@ -25,7 +29,8 @@ export const STARTER_PACK = {
 export const ALL_PRODUCT_IDS = [
   PREMIUM_PRODUCT_ID,
   ...TREAT_PACKS.map((p) => p.id),
-  STARTER_PACK_ID
+  STARTER_PACK_ID,
+  CHAR_GOLD_PRODUCT_ID
 ];
 
 export function getTreatPack(productId) {

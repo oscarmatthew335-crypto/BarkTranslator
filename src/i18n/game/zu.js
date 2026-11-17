@@ -373,5 +373,19 @@ export default {
   'game.end.soCloseBest': "Sondela kakhulu! Sekusele {n} kuphela kokuhle kakhulu.",
   'game.end.soCloseWeekly': "Sondela kakhulu! Sekusele {n} kokuhle kakhulu kwaleli viki.",
   'game.end.nextUnlock': "Izidlo ezingeziwe ezi-{n} ze-{item}",
-  'game.end.readyUnlock': "Kulungele ukuvula i-{item}!"
+  'game.end.readyUnlock': "Kulungele ukuvula i-{item}!",
+  'game.char.section': "Abalingisi",
+  'game.char.myPet': "Isilwane sami",
+  'game.char.wearing': "Ugqokile",
+  'game.char.petAs': "U-{petName} njengo-{character}",
+  'game.char.unlockFor': "Vula ngo-{n} {emoji}",
+  'game.char.needMore': "Kudingeka okungu-{n} ngaphezulu",
+  'game.char.unavailable': "Akutholakali",
+  'game.char.nudge': "Sekusele {n} {emoji} kuphela ukuze uvule u-{character}!",
+  'game.char.cyber': "Cyber",
+  'game.char.royal': "Wobukhosi",
+  'game.char.astro': "Umkhathi",
+  'game.char.ninja': "Ninja",
+  'game.char.zebra': "Imigqa yeDube",
+  'game.char.gold': "Owegolide"
 };

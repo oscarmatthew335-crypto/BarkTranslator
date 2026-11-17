@@ -372,5 +372,19 @@ export default {
   'game.end.soCloseBest': "So close! Only {n} from your best.",
   'game.end.soCloseWeekly': "So close! Only {n} from this week's best.",
   'game.end.nextUnlock': "{n} more treats for {item}",
-  'game.end.readyUnlock': "Ready to unlock {item}!"
+  'game.end.readyUnlock': "Ready to unlock {item}!",
+  'game.char.section': "Characters",
+  'game.char.myPet': "My pet",
+  'game.char.wearing': "Wearing",
+  'game.char.petAs': "{petName} as {character}",
+  'game.char.unlockFor': "Unlock for {n} {emoji}",
+  'game.char.needMore': "Need {n} more",
+  'game.char.unavailable': "Unavailable",
+  'game.char.nudge': "Only {n} {emoji} to unlock {character}!",
+  'game.char.cyber': "Cyber",
+  'game.char.royal': "Royal",
+  'game.char.astro': "Astro",
+  'game.char.ninja': "Ninja",
+  'game.char.zebra': "Zebra Stripes",
+  'game.char.gold': "Golden"
 };

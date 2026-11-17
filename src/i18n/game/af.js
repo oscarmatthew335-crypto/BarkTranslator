@@ -373,5 +373,19 @@ export default {
   'game.end.soCloseBest': "So naby! Net {n} van jou beste.",
   'game.end.soCloseWeekly': "So naby! Net {n} van hierdie week se beste.",
   'game.end.nextUnlock': "Nog {n} lekkernye vir {item}",
-  'game.end.readyUnlock': "Gereed om {item} oop te sluit!"
+  'game.end.readyUnlock': "Gereed om {item} oop te sluit!",
+  'game.char.section': "Karakters",
+  'game.char.myPet': "My troeteldier",
+  'game.char.wearing': "Dra nou",
+  'game.char.petAs': "{petName} as {character}",
+  'game.char.unlockFor': "Ontsluit vir {n} {emoji}",
+  'game.char.needMore': "Benodig nog {n}",
+  'game.char.unavailable': "Nie beskikbaar nie",
+  'game.char.nudge': "Net nog {n} {emoji} om {character} oop te sluit!",
+  'game.char.cyber': "Kuber",
+  'game.char.royal': "Koninklik",
+  'game.char.astro': "Ruimtevaarder",
+  'game.char.ninja': "Ninja",
+  'game.char.zebra': "Sebrastrepe",
+  'game.char.gold': "Goue"
 };

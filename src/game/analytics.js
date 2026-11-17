@@ -14,7 +14,12 @@ export const ALLOWED_EVENTS = new Set([
   'run_goal_shown',
   'run_goal_done',
   'play_again_tap',
-  'near_miss_shown'
+  'near_miss_shown',
+  'character_viewed',
+  'character_tried',
+  'character_unlocked',
+  'character_equipped',
+  'character_unequipped'
 ]);
 
 const FORBIDDEN_PARAM_KEYS = new Set([

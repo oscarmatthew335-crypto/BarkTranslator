@@ -4,6 +4,7 @@ import { C, F, INK_WIDTH } from '../../theme';
 import { APP_NAME } from '../../species';
 import { useI18n } from '../../i18n';
 import { SCORE_SHARE_URL, formatShareHeadline } from '../../game/shareScore';
+import { getCharacter } from '../../game/characters';
 import PetPreview from './PetPreview';
 
 const W = 360;
@@ -16,8 +17,11 @@ const ScoreShareCard = forwardRef(function ScoreShareCard(
   ref
 ) {
   const { t } = useI18n();
+  const activeChar = getCharacter(wardrobe?.activeCharacter);
+  const characterLabel = activeChar ? t(activeChar.nameKey) : null;
   const headline = formatShareHeadline({
     petName: pet?.name,
+    characterLabel,
     isChase,
     chaserLabel,
     translateFn: t
