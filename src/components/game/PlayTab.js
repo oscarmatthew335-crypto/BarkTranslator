@@ -9,7 +9,7 @@ import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
 import { shouldShowHowTo, recordModeRun } from '../../game/gameStore';
 import { recordStage, nextStageAfter, totalStars, suggestedStage, isUnlocked } from '../../game/progress';
-import { stagesFor, dailyStage, milestonesReached, milestoneReward, PLACES } from '../../game/stages';
+import { stagesFor, dailyStage, milestonesReached, milestoneReward } from '../../game/stages';
 import { hashString } from '../../game/random';
 import { count, recordFps } from '../../game/counters';
 import RunnerScreen from './RunnerScreen';
@@ -571,7 +571,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     const chaserLabel = t(screen.stage?.chaser?.nameKey || 'game.chaser.bath');
     const activeChar = getCharacter(game?.wardrobe?.activeCharacter);
     const characterLabel = activeChar ? t(activeChar.nameKey) : null;
-    const place = t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden');
+    const place = placeName(t, screen.stage?.theme);
     const message = buildScoreShareMessage({
       petName: pet.name,
       characterLabel,
@@ -810,7 +810,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
                 {t('game.share.ranPlace', {
                   petName: pet.name,
                   distance: screen.result.distanceMetres || 0,
-                  place: t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden')
+                  place: placeName(t, screen.stage?.theme)
                 })}
               </Text>
               <View style={s.row}>
@@ -840,7 +840,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           faceUri={faceUri}
           score={screen.result.score}
           distance={screen.result.distanceMetres || 0}
-          place={t(PLACES[screen.stage?.theme]?.nameKey || 'game.place.garden')}
+          place={placeName(t, screen.stage?.theme)}
           theme={screen.stage?.theme || 'garden'}
           isChase={Boolean(screen.result.chase)}
           chaserLabel={t(screen.stage?.chaser?.nameKey || 'game.chaser.bath')}
@@ -1069,6 +1069,12 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
 }
 
 // The day's photo challenge, offered on the hub and after a stage. Optional.
+// The translated name of a stage's place ("Garden", "Park" ...), falling back to Garden.
+const PLACE_IDS = ['garden', 'park', 'beach', 'braai', 'vet', 'home'];
+function placeName(t, theme) {
+  return t(`game.place.${PLACE_IDS.includes(theme) ? theme : 'garden'}`);
+}
+
 function PhotoCard({ pet, situation, onPress }) {
   const { t } = useI18n();
   return (
