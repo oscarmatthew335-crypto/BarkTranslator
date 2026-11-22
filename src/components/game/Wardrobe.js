@@ -16,7 +16,7 @@ import PetPreview from './PetPreview';
 import { SlotTabIcon, ColourHeadTileSvg, ItemTileSvg } from './WardrobeIcons';
 
 const SIDE_TABS = ['colour', 'hat', 'glasses', 'neck', 'collar'];
-const BOTTOM_TABS = ['colour', 'hat', 'glasses', 'neck', 'characters', 'packs'];
+const BOTTOM_TABS = ['colour', 'hat', 'glasses', 'neck', 'collar', 'characters', 'packs'];
 
 // Folder-tab dress-up wardrobe matching the kawaii cartoon style guide.
 // All cosmetic, all earned by playing or via optional treat packs.
@@ -396,6 +396,9 @@ export default function Wardrobe({
       </Sticker>
 
       <Text style={s.note}>{t('game.wardrobe.note')}</Text>
+      <View style={{ marginTop: 14 }}>
+        <StickerButton label={t('game.back')} color={C.paper} onPress={onBack} />
+      </View>
     </ScrollView>
   );
 }
