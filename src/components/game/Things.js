@@ -1,6 +1,7 @@
 import React, { memo } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon } from 'react-native-svg';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
+import { SPRITES } from './sprites';
 
 const INK = C.ink;
 const SW = 2.2;
@@ -67,40 +68,18 @@ const OBSTACLE_ART = {
     </G>
   ),
   dog: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2 + 4} cy={h - 14} rx={w / 2 - 6} ry={10} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-      <Circle cx={10} cy={h - 22} r={10} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-      <Ellipse cx={4} cy={h - 19} rx={4} ry={3.5} fill="#E0A97B" stroke={INK} strokeWidth={1.8} />
-      <Circle cx={2} cy={h - 20} r={1.8} fill={INK} />
-      <Circle cx={9} cy={h - 25} r={1.6} fill={INK} />
-      <Path d={`M14 ${h - 30} C 20 ${h - 30}, 20 ${h - 20}, 17 ${h - 18}`} fill="#63391F" stroke={INK} strokeWidth={1.5} />
-      <Line x1={18} y1={h - 6} x2={18} y2={h} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-      <Line x1={w - 8} y1={h - 6} x2={w - 8} y2={h} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-      <Path d={`M${w - 4} ${h - 18} L${w + 4} ${h - 28}`} stroke={INK} strokeWidth={4} strokeLinecap="round" />
+    <G transform={`translate(${w} 0) scale(-1 1)`}>
+      <SvgImage href={SPRITES.dogChaser} x={0} y={-2} width={w + 8} height={h + 4} preserveAspectRatio="xMidYMid meet" />
     </G>
   ),
   catDash: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2} cy={h + 1} rx={w / 2 - 2} ry={3.5} fill="rgba(26,18,43,0.22)" />
-      <Ellipse cx={w / 2 + 3} cy={h - 11} rx={w / 2 - 5} ry={8} fill="#7B6D8D" stroke={INK} strokeWidth={SW} />
-      <Circle cx={10} cy={h - 18} r={8.5} fill="#7B6D8D" stroke={INK} strokeWidth={SW} />
-      <Polygon points={`4,${h - 24} 6,${h - 32} 11,${h - 25}`} fill="#7B6D8D" stroke={INK} strokeWidth={1.8} />
-      <Polygon points={`12,${h - 25} 16,${h - 32} 17,${h - 23}`} fill="#7B6D8D" stroke={INK} strokeWidth={1.8} />
-      <Circle cx={7} cy={h - 19} r={1.5} fill={C.butter} />
-      <Circle cx={3} cy={h - 16} r={1.4} fill={C.pink} />
-      <Path d={`M${w - 3} ${h - 14} C ${w + 5} ${h - 22}, ${w + 2} ${h - 30}, ${w - 4} ${h - 28}`} stroke={INK} strokeWidth={3.5} fill="none" strokeLinecap="round" />
+    <G transform={`translate(${w} 0) scale(-1 1)`}>
+      <SvgImage href={SPRITES.catHero} x={-4} y={-8} width={w + 8} height={h + 12} preserveAspectRatio="xMidYMid meet" />
     </G>
   ),
   dogDash: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2} cy={h + 1} rx={w / 2 - 2} ry={3.5} fill="rgba(26,18,43,0.22)" />
-      <Ellipse cx={w / 2 + 4} cy={h - 12} rx={w / 2 - 5} ry={9} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-      <Circle cx={10} cy={h - 20} r={9.5} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-      <Ellipse cx={4} cy={h - 17} rx={3.5} ry={3} fill="#E0A97B" stroke={INK} strokeWidth={1.8} />
-      <Circle cx={2} cy={h - 18} r={1.6} fill={INK} />
-      <Circle cx={9} cy={h - 22} r={1.5} fill={INK} />
-      <Path d={`M14 ${h - 27} C 19 ${h - 27}, 19 ${h - 18}, 16 ${h - 16}`} fill="#63391F" />
-      <Path d={`M${w - 3} ${h - 16} L${w + 5} ${h - 25}`} stroke={INK} strokeWidth={4} strokeLinecap="round" />
+    <G transform={`translate(${w} 0) scale(-1 1)`}>
+      <SvgImage href={SPRITES.dogChaser} x={-4} y={-2} width={w + 10} height={h + 4} preserveAspectRatio="xMidYMid meet" />
     </G>
   ),
   bird: ({ w, h }) => (
@@ -115,43 +94,15 @@ const OBSTACLE_ART = {
 
 function Treat({ type }) {
   if (type === 'bone')
-    return (
-      <G>
-        <Circle cx={11} cy={11} r={10} fill={C.butter} stroke={INK} strokeWidth={1.6} />
-        <Circle cx={11} cy={11} r={7.2} fill={C.butterLight} stroke={C.butterDark} strokeWidth={1} />
-        <Rect x={6.5} y={8.8} width={9} height={4.4} fill={C.paper} stroke={INK} strokeWidth={1.3} />
-        <Circle cx={6} cy={8.5} r={2.5} fill={C.paper} stroke={INK} strokeWidth={1.2} />
-        <Circle cx={6} cy={13.5} r={2.5} fill={C.paper} stroke={INK} strokeWidth={1.2} />
-        <Circle cx={16} cy={8.5} r={2.5} fill={C.paper} stroke={INK} strokeWidth={1.2} />
-        <Circle cx={16} cy={13.5} r={2.5} fill={C.paper} stroke={INK} strokeWidth={1.2} />
-      </G>
-    );
+    return <SvgImage href={SPRITES.iconBone} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
   if (type === 'ball')
-    return (
-      <G>
-        <Circle cx={11} cy={11} r={9.5} fill="#85E06F" stroke={INK} strokeWidth={1.8} />
-        <Path d="M4.5 6 Q 11 11 4.5 16 M17.5 6 Q 11 11 17.5 16" stroke={C.paper} strokeWidth={1.8} fill="none" />
-      </G>
-    );
+    return <SvgImage href={SPRITES.iconStar} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
   if (type === 'fish')
-    return (
-      <G>
-        <Polygon points="15.5,11 22.5,5.5 20.5,11 22.5,16.5" fill="#48B8F8" stroke="#1E5B8A" strokeWidth={1.6} strokeLinejoin="round" />
-        <Ellipse cx={9.5} cy={11} rx={8} ry={5.5} fill="#48B8F8" stroke="#1E5B8A" strokeWidth={1.6} />
-        <Ellipse cx={9.5} cy={9} rx={5.5} ry={2.1} fill="#85D4FF" opacity={0.85} />
-        <Path d="M10.5 7.5 Q12 11 10.5 14.5" stroke="#1E5B8A" strokeWidth={1.3} fill="none" />
-        <Circle cx={5.5} cy={10} r={1.4} fill="#FFFFFF" />
-        <Circle cx={5.5} cy={10} r={0.8} fill={INK} />
-      </G>
-    );
+    return <SvgImage href={SPRITES.fish} x={-2} y={0} width={26} height={21} preserveAspectRatio="xMidYMid meet" />;
   return (
     <G>
-      <Circle cx={11} cy={11} r={9.5} fill={C.butter} stroke={INK} strokeWidth={1.8} />
-      <Circle cx={11} cy={11} r={6.8} fill={C.butterLight} stroke={C.butterDark} strokeWidth={1.1} />
-      <Circle cx={11} cy={12.5} r={2.4} fill={C.butterDark} />
-      <Circle cx={8.2} cy={8.6} r={1.1} fill={C.butterDark} />
-      <Circle cx={11} cy={7.8} r={1.1} fill={C.butterDark} />
-      <Circle cx={13.8} cy={8.6} r={1.1} fill={C.butterDark} />
+      <Circle cx={11} cy={11} r={10} fill={C.butter} stroke={INK} strokeWidth={1.5} />
+      <SvgImage href={SPRITES.iconPaw} x={3.5} y={3.5} width={15} height={15} preserveAspectRatio="xMidYMid meet" />
     </G>
   );
 }
@@ -178,38 +129,24 @@ function PowerBox({ type }) {
 }
 
 // The chaser drawn behind the pet on the left of the screen in Chase mode.
-export function Chaser({ chaser }) {
+export function Chaser({ chaser, phase = 0 }) {
   const id = chaser?.id || 'bath';
   if (id === 'dog') {
-    // Expressive cartoon brown chasing dog facing right toward the cat.
+    const a = (Number(phase) || 0) * 1.45;
+    const bob = Math.sin(a * 2) * 2.2;
+    const pitch = Math.sin(a) * 5;
+    const stretchX = 1 + Math.cos(a) * 0.04;
+    const stretchY = 1 - Math.sin(a) * 0.04;
+
     return (
       <G>
-        <Ellipse cx={23} cy={38} rx={19} ry={3.5} fill="rgba(36,29,59,0.2)" />
-        {/* wagging tail */}
-        <Path d="M4 20 Q -4 14 -2 8" stroke={INK} strokeWidth={6} fill="none" strokeLinecap="round" />
-        <Path d="M4 20 Q -4 14 -2 8" stroke="#B8733E" strokeWidth={3.2} fill="none" strokeLinecap="round" />
-        {/* running legs */}
-        <Path d="M12 30 L5 37" stroke={INK} strokeWidth={4.5} strokeLinecap="round" />
-        <Path d="M18 31 L14 38" stroke={INK} strokeWidth={4.5} strokeLinecap="round" />
-        <Path d="M31 30 L38 36" stroke={INK} strokeWidth={4.5} strokeLinecap="round" />
-        {/* body + tan belly */}
-        <Ellipse cx={22} cy={24} rx={16.5} ry={10} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-        <Ellipse cx={24} cy={28} rx={10} ry={4.2} fill="#E0A97B" opacity={0.9} />
-        {/* red collar */}
-        <Path d="M31 19 Q34 25 32 29" stroke="#E84855" strokeWidth={3.5} fill="none" strokeLinecap="round" />
-        {/* head, snout & floppy dark ear */}
-        <Circle cx={38} cy={16} r={10} fill="#B8733E" stroke={INK} strokeWidth={SW} />
-        <Ellipse cx={45.5} cy={18.5} rx={5.2} ry={4.2} fill="#E0A97B" stroke={INK} strokeWidth={1.8} />
-        {/* open barking/panting mouth + pink tongue */}
-        <Path d="M41 20 Q46 22 49 19.5 Q47 26 42 24 Z" fill="#8C2D42" stroke={INK} strokeWidth={1.4} strokeLinejoin="round" />
-        <Path d="M43 22.5 Q45 28.5 42 29 Q39.5 27.5 41 22.5 Z" fill="#FF6B8B" stroke={INK} strokeWidth={1.1} />
-        <Polygon points="44,20 45.5,20 44.8,21.5" fill="#FFFFFF" />
-        {/* big wide eye + nose */}
-        <Circle cx={40} cy={13} r={2.8} fill="#FFFFFF" stroke={INK} strokeWidth={1.1} />
-        <Circle cx={40.7} cy={13} r={1.6} fill={INK} />
-        <Circle cx={48.8} cy={17.2} r={2} fill={INK} />
-        {/* floppy dark brown ear */}
-        <Path d="M34 8 C 27 8.5, 27.5 20, 32 21.5 C 35 18, 36 12, 35.5 8 Z" fill="#63391F" stroke={INK} strokeWidth={1.8} strokeLinejoin="round" />
+        <Ellipse cx={24} cy={39} rx={19} ry={3.5} fill="rgba(36,29,59,0.24)" />
+        {Math.sin(a) > 0.2 ? (
+          <SvgImage href={SPRITES.dustPuff} x={-22} y={24} width={28} height={14} preserveAspectRatio="xMidYMid meet" />
+        ) : null}
+        <G transform={`translate(0 ${bob.toFixed(2)}) rotate(${pitch.toFixed(1)} 24 24) translate(24 39) scale(${stretchX.toFixed(3)} ${stretchY.toFixed(3)}) translate(-24 -39)`}>
+          <SvgImage href={SPRITES.dogChaser} x={-4} y={-6} width={58} height={47} preserveAspectRatio="xMidYMid meet" />
+        </G>
       </G>
     );
   }

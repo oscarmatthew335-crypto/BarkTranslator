@@ -1,0 +1,22 @@
+// Bundled sprite assets extracted and stripped of white backgrounds.
+export const SPRITES = {
+  parkBg: require('../../../assets/sprites/park_bg.png'),
+  catHero: require('../../../assets/sprites/cat_hero.png'),
+  dogChaser: require('../../../assets/sprites/dog_chaser.png'),
+  bench: require('../../../assets/sprites/bench.png'),
+  trashCan: require('../../../assets/sprites/trash_can.png'),
+  fish: require('../../../assets/sprites/fish.png'),
+  treesCluster: require('../../../assets/sprites/trees_cluster.png'),
+  hillsParallax: require('../../../assets/sprites/hills_parallax.png'),
+  pathDetails: require('../../../assets/sprites/path_details.png'),
+  dustPuff: require('../../../assets/sprites/dust_puff.png'),
+  sparkles: require('../../../assets/sprites/sparkles.png'),
+  impactAlert: require('../../../assets/sprites/impact_alert.png'),
+  bannerWood: require('../../../assets/sprites/banner_wood.png'),
+  iconBone: require('../../../assets/sprites/icon_bone.png'),
+  iconStar: require('../../../assets/sprites/icon_star.png'),
+  iconPaw: require('../../../assets/sprites/icon_paw.png'),
+  iconFish: require('../../../assets/sprites/icon_fish.png'),
+  btnLeft: require('../../../assets/sprites/btn_left.png'),
+  btnUp: require('../../../assets/sprites/btn_up.png'),
+};

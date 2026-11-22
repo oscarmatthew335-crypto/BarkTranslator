@@ -1,13 +1,15 @@
 import React, { memo } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon } from 'react-native-svg';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
+import { SPRITES } from './sprites';
 
 const INK = C.ink;
 
 // The player's pet, drawn in a 56 x 44 box with its feet on y = 44.
-// `phase` (0-3) moves the legs while running; `pose` is run | jump | duck | hurt | front.
+// Uses stripped painted sprite bases while running/jumping/ducking and layers
+// equipped cosmetics or character skins on top; keeps 'front' SVG pose for wardrobe.
 function PetSprite({
   species = 'dog',
   colour = 'golden',
@@ -39,154 +41,89 @@ function PetSprite({
   }
 
   const duck = pose === 'duck';
-  const legSwing = pose === 'jump' ? 4 : [3.5, 0, -3.5, 0][phase % 4];
-  const frame3 = phase % 3;
-  const tabby = cat && !char && (col.id === 'grey' || col.id === 'ginger' || col.id === 'golden' || col.id === 'brown');
-  const stripeCol = col.id === 'ginger' ? '#C45B1A' : col.id === 'golden' ? '#B87A14' : col.id === 'brown' ? '#5E3818' : '#5F5C74';
-  const bellyCol = col.id === 'black' ? '#544B63' : '#FFF8EE';
-  const irisCol = char?.palette?.eye || (col.id === 'grey' || col.id === 'white' ? '#38B6FF' : '#241D3B');
+  const isJump = pose === 'jump';
+  const a = (Number(phase) || 0) * 1.35;
+  const strideSin = Math.sin(a);
+  const strideCos = Math.cos(a);
+  const bobY = isJump ? 0 : pose === 'hurt' ? 2 : Math.abs(strideSin) * -3.5;
+  const pitch = isJump ? -8 : pose === 'hurt' ? 6 : strideSin * 5;
+  const legStretchX = isJump ? 1.04 : 1 + strideCos * 0.04;
+  const legStretchY = isJump ? 1.0 : 1 - strideSin * 0.04;
 
-  const catTailD =
-    pose === 'hurt'
-      ? 'M8 27 C 0 26, -1 18, 2 14'
-      : ['M8 26 C -3 20, 0 6, 7 4', 'M8 26 C -4 18, 1 5, 9 5', 'M8 26 C -1 22, -2 8, 5 3'][frame3];
-  const dogTailD =
-    pose === 'hurt'
-      ? 'M9 27 L1 33'
-      : ['M9 25 C 2 20, 1 15, 2 13', 'M9 25 C 2 21, 0 17, 1 16', 'M9 25 C 3 19, 3 13, 5 11'][frame3];
-  const earDy = pose === 'jump' ? -2 : [0, 1.5, -1][frame3];
-  const headBob = pose === 'run' ? [0, -1, 0, 1][phase % 4] : happy ? -1.5 : 0;
-  const outerTransform = duck
-    ? 'translate(0 17) scale(1 0.62)'
-    : happy && pose !== 'hurt'
-      ? 'translate(0 -2)'
-      : undefined;
+  const hatItem = getItem(shownEquipped.hat);
+  const glassesItem = getItem(shownEquipped.glasses);
+  const neckItem = getItem(shownEquipped.neck);
+  const collarItem = getItem(shownEquipped.collar);
 
-  return (
-    <G transform={outerTransform}>
-      {/* tail */}
-      {cat ? (
-        <>
-          <Path d={catTailD} stroke={INK} strokeWidth={7} fill="none" strokeLinecap="round" />
-          <Path d={catTailD} stroke={body} strokeWidth={4} fill="none" strokeLinecap="round" />
-          {tabby ? <Circle cx={5.5} cy={5} r={1.8} fill={stripeCol} /> : null}
-        </>
-      ) : (
-        <>
-          <Path d={dogTailD} stroke={INK} strokeWidth={6.5} fill="none" strokeLinecap="round" />
-          <Path d={dogTailD} stroke={body} strokeWidth={3.5} fill="none" strokeLinecap="round" />
-        </>
-      )}
+  const transformParts = [];
+  if (duck) transformParts.push('translate(0 16) scale(1.06 0.64)');
+  else {
+    if (bobY) transformParts.push(`translate(0 ${bobY.toFixed(2)})`);
+    transformParts.push(`rotate(${pitch.toFixed(1)} 28 28)`);
+    transformParts.push(`translate(28 44) scale(${legStretchX.toFixed(3)} ${legStretchY.toFixed(3)}) translate(-28 -44)`);
+  }
 
-      {/* legs with white paw tips */}
-      <Leg x1={14} y1={32} x2={14 + legSwing} y2={43} pawCol={bellyCol} />
-      <Leg x1={22} y1={32} x2={22 - legSwing} y2={43} pawCol={bellyCol} />
-      <Leg x1={32} y1={32} x2={32 + legSwing} y2={43} pawCol={bellyCol} />
-      <Leg x1={39} y1={32} x2={39 - legSwing} y2={43} pawCol={bellyCol} />
-
-      {/* body */}
-      <Ellipse cx={26} cy={27} rx={cat ? 17 : 19} ry={cat ? 9.2 : 10.5} fill={body} stroke={INK} strokeWidth={2.5} />
-      <Ellipse cx={27} cy={31.5} rx={cat ? 11 : 12.5} ry={4.2} fill={bellyCol} opacity={0.88} />
-      {tabby ? (
-        <>
-          <Path d="M18 19 Q20 22 18 25" stroke={stripeCol} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-          <Path d="M24 18.5 Q26 22 24 25" stroke={stripeCol} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-        </>
-      ) : null}
-      {!char && col.spots ? (
-        <>
-          <Circle cx={20} cy={25} r={3.5} fill={col.spots} />
-          <Circle cx={30} cy={29} r={2.5} fill={col.spots} />
-        </>
-      ) : null}
-      <CharacterBodyParts char={char} cat={cat} />
-
-      {/* neck items under the head */}
-      <NeckItem item={getItem(shownEquipped.neck)} />
-      <CollarItem item={getItem(shownEquipped.collar)} />
-
-      {/* head + accessories bob together so hats stay aligned */}
-      <G transform={headBob ? `translate(0 ${headBob})` : undefined}>
-        {cat ? (
-          <>
-            <Polygon points="37,10 39,0 45,7" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
-            <Polygon points="39,9 40,2.8 43.5,7.2" fill={C.pinkSoft} />
-            <Polygon points="47,7 53,0 54,11" fill={body} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
-            <Polygon points="48.5,7.5 52.3,3 53,9.8" fill={C.pinkSoft} />
-            <Circle cx={46} cy={15} r={10.2} fill={body} stroke={INK} strokeWidth={2.5} />
-            {/* soft muzzle patch */}
-            <Ellipse cx={51.5} cy={18.2} rx={5} ry={3.8} fill={bellyCol} opacity={0.92} />
-            {tabby ? (
-              <>
-                <Line x1={43.5} y1={6} x2={44.5} y2={9.2} stroke={stripeCol} strokeWidth={1.8} strokeLinecap="round" />
-                <Line x1={47} y1={5.8} x2={47.5} y2={9} stroke={stripeCol} strokeWidth={1.8} strokeLinecap="round" />
-              </>
-            ) : null}
-            <Line x1={52} y1={17.5} x2={59} y2={16} stroke={INK} strokeWidth={1} strokeLinecap="round" />
-            <Line x1={52} y1={19.5} x2={59} y2={20.5} stroke={INK} strokeWidth={1} strokeLinecap="round" />
-          </>
-        ) : (
-          <>
-            <Circle cx={45} cy={15} r={10.5} fill={body} stroke={INK} strokeWidth={2.5} />
-            <Ellipse cx={53} cy={19} rx={5.2} ry={4.2} fill={bellyCol} stroke={INK} strokeWidth={2.2} />
-            <Path
-              d="M38 8 C 32.5 10.5, 32.5 21, 37 22.5 C 40 18.5, 41 13, 41 9 Z"
-              fill={char?.palette?.ear || (col.id === 'black' ? '#5B5266' : '#63391F')}
-              stroke={INK}
-              strokeWidth={1.6}
-              strokeLinejoin="round"
-              transform={earDy ? `translate(0 ${earDy})` : undefined}
-            />
-          </>
-        )}
-
-        {panting && pose !== 'hurt' ? (
-          <Path
-            d={cat ? 'M50 20 Q52 24 49 24 Q47 23 48 20 Z' : 'M51 22 Q53 26.5 50 26.5 Q48 25 49 22 Z'}
-            fill={C.pink}
-            stroke={INK}
-            strokeWidth={1.2}
-          />
-        ) : null}
-
-        {pose === 'hurt' ? (
-          <Path d="M44 11 L49 13.5 L44 16" stroke={char?.palette?.eye || INK} strokeWidth={2.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-        ) : (
-          <G>
-            <Circle cx={47.8} cy={13.2} r={2.8} fill={irisCol} stroke={INK} strokeWidth={0.9} />
-            <Circle cx={47.8} cy={13.2} r={1.6} fill={INK} />
-            <Circle cx={47} cy={12.3} r={0.85} fill="#FFFFFF" />
-          </G>
-        )}
-        <Circle
-          cx={cat ? 54.8 : 57.5}
-          cy={cat ? 16.5 : 18}
-          r={cat ? 1.6 : 2.3}
-          fill={char?.palette?.accent && char.parts === 'cyber' ? char.palette.accent : cat ? '#FF7BA3' : INK}
-        />
-
-        <GlassesItem item={getItem(shownEquipped.glasses)} />
-        <HatItem item={getItem(shownEquipped.hat)} cat={cat} />
-        <CharacterHeadParts char={char} cat={cat} pose={pose} />
-
-        {happy && pose !== 'hurt' ? (
-          <Path
-            d="M54 2 c -1.5 -2, -4.5 0, -2 2.5 l 2 2 l 2 -2 c 2.5 -2.5, -0.5 -4.5, -2 -2.5 Z"
-            fill={C.pink}
-            stroke={INK}
-            strokeWidth={1}
-          />
-        ) : null}
-      </G>
-    </G>
-  );
-}
-
-function Leg({ x1, y1, x2, y2, pawCol }) {
   return (
     <G>
-      <Line x1={x1} y1={y1} x2={x2} y2={y2} stroke={INK} strokeWidth={5.2} strokeLinecap="round" />
-      <Circle cx={x2} cy={y2} r={2.2} fill={pawCol} stroke={INK} strokeWidth={1.2} />
+      {/* Contact shadow under feet on ground when running */}
+      {!isJump ? <Ellipse cx={28} cy={44} rx={18} ry={3} fill="rgba(36,29,59,0.22)" /> : null}
+
+      {/* Painted sprint dust puff behind hind paws */}
+      {pose === 'run' && strideSin > 0.25 ? (
+        <SvgImage
+          href={SPRITES.dustPuff}
+          x={-26}
+          y={28}
+          width={32}
+          height={15}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      ) : null}
+
+      {/* Main animated sprite transform */}
+      <G transform={transformParts.join(' ')}>
+        {cat ? (
+          <SvgImage
+            href={SPRITES.catHero}
+            x={-4}
+            y={-20}
+            width={64}
+            height={65}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        ) : (
+          <SvgImage
+            href={SPRITES.dogChaser}
+            x={-4}
+            y={-4}
+            width={62}
+            height={51}
+            preserveAspectRatio="xMidYMid meet"
+          />
+        )}
+
+        {/* Character skin accents & overlays (supports all 6 unlockable characters) */}
+        <CharacterBodyParts char={char} cat={cat} />
+        <CharacterHeadParts char={char} cat={cat} pose={pose} />
+
+        {/* Layered custom cosmetics when different from default */}
+        {neckItem ? <NeckItem item={neckItem} /> : null}
+        {collarItem && collarItem.id !== 'collar-red' && collarItem.id !== 'collar-bell' ? <CollarItem item={collarItem} /> : null}
+        {glassesItem ? <GlassesItem item={glassesItem} /> : null}
+        {hatItem && hatItem.id !== 'hat-party' ? <HatItem item={hatItem} cat={cat} /> : null}
+      </G>
+
+      {/* Painted glints & sparkles around leaping or streaking pet */}
+      {happy && pose !== 'hurt' ? (
+        <SvgImage
+          href={SPRITES.sparkles}
+          x={-4}
+          y={-18}
+          width={34}
+          height={26}
+          preserveAspectRatio="xMidYMid meet"
+        />
+      ) : null}
     </G>
   );
 }
@@ -204,21 +141,14 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
 
   return (
     <G>
-      {/* curled tail on right side */}
       <Path d="M36 37 C 46 37, 48 25, 43 22" stroke={INK} strokeWidth={6.5} fill="none" strokeLinecap="round" />
       <Path d="M36 37 C 46 37, 48 25, 43 22" stroke={body} strokeWidth={3.6} fill="none" strokeLinecap="round" />
-
-      {/* seated body */}
       <Ellipse cx={28} cy={34} rx={10.5} ry={9.5} fill={body} stroke={INK} strokeWidth={2.5} />
       <Ellipse cx={28} cy={35.5} rx={6} ry={6.5} fill={creamCol} opacity={0.92} />
-
-      {/* front paws */}
       <Ellipse cx={23.5} cy={41.5} rx={3.3} ry={2.4} fill={creamCol} stroke={INK} strokeWidth={1.8} />
       <Ellipse cx={32.5} cy={41.5} rx={3.3} ry={2.4} fill={creamCol} stroke={INK} strokeWidth={1.8} />
       <Line x1={23.5} y1={35} x2={23.5} y2={39.5} stroke={INK} strokeWidth={2} strokeLinecap="round" />
       <Line x1={32.5} y1={35} x2={32.5} y2={39.5} stroke={INK} strokeWidth={2} strokeLinecap="round" />
-
-      {/* neck accessory */}
       {neck ? (
         neck.bowtie ? (
           <G transform="translate(28 28.5)">
@@ -230,8 +160,6 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
           <Polygon points="20,25 36,25 28,33" fill={neck.colour} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
         )
       ) : null}
-
-      {/* collar */}
       {collar ? (
         <G>
           <Path d="M19.5 25 Q28 28.5 36.5 25" stroke={INK} strokeWidth={4.5} fill="none" strokeLinecap="round" />
@@ -243,8 +171,6 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
           ) : null}
         </G>
       ) : null}
-
-      {/* ears */}
       {cat ? (
         <>
           <Polygon points="16,13 18,1 25,8" fill={body} stroke={INK} strokeWidth={2.3} strokeLinejoin="round" />
@@ -258,8 +184,6 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
           <Path d="M40 10 C 47 12, 47 23, 41.5 24 C 39 20, 38 14, 38.5 10 Z" fill={char?.palette?.ear || '#63391F'} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
         </>
       )}
-
-      {/* round kawaii head */}
       <Ellipse cx={28} cy={15.5} rx={12.8} ry={11} fill={body} stroke={INK} strokeWidth={2.5} />
       {tabby ? (
         <>
@@ -274,30 +198,21 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
           <Circle cx={35} cy={18} r={2.4} fill={col.spots} />
         </>
       ) : null}
-
-      {/* cream muzzle & pink cheeks */}
       <Ellipse cx={28} cy={20.2} rx={6.4} ry={4.2} fill={creamCol} opacity={0.95} />
       <Circle cx={19} cy={19} r={2} fill={C.pinkSoft} opacity={0.65} />
       <Circle cx={37} cy={19} r={2} fill={C.pinkSoft} opacity={0.65} />
-
-      {/* big shiny kawaii eyes */}
       <G>
         <Circle cx={22} cy={14.8} r={3.5} fill={irisCol} stroke={INK} strokeWidth={1.1} />
         <Circle cx={22} cy={14.8} r={2.2} fill="#1E1836" />
         <Circle cx={20.9} cy={13.5} r={1.1} fill="#FFFFFF" />
         <Circle cx={23.1} cy={15.8} r={0.55} fill="#FFFFFF" />
-
         <Circle cx={34} cy={14.8} r={3.5} fill={irisCol} stroke={INK} strokeWidth={1.1} />
         <Circle cx={34} cy={14.8} r={2.2} fill="#1E1836" />
         <Circle cx={32.9} cy={13.5} r={1.1} fill="#FFFFFF" />
         <Circle cx={35.1} cy={15.8} r={0.55} fill="#FFFFFF" />
       </G>
-
-      {/* cute pink nose + 'w' smile */}
       <Polygon points="26.5,18.2 29.5,18.2 28,19.8" fill={cat ? '#FF7BA3' : INK} stroke={INK} strokeWidth={0.8} strokeLinejoin="round" />
       <Path d="M25.2 20.6 Q26.6 22 28 20.4 Q29.4 22 30.8 20.6" stroke={INK} strokeWidth={1.3} fill="none" strokeLinecap="round" />
-
-      {/* whiskers */}
       {cat ? (
         <>
           <Line x1={16} y1={17.5} x2={11} y2={16.5} stroke={INK} strokeWidth={1.1} strokeLinecap="round" />
@@ -306,10 +221,7 @@ function FrontPet({ cat, col, body, char, shownEquipped, happy }) {
           <Line x1={40} y1={19.5} x2={45} y2={20.2} stroke={INK} strokeWidth={1.1} strokeLinecap="round" />
         </>
       ) : null}
-
-      {/* front-view glasses */}
       {glasses ? <FrontGlasses item={glasses} /> : null}
-      {/* front-view hat centered on cx = 28 */}
       {hat ? (
         <G transform="translate(-17 0)">
           <HatItem item={hat} cat={cat} />
@@ -473,9 +385,10 @@ function CollarItem({ item }) {
   if (!item) return null;
   return (
     <>
-      <Path d="M38 19 Q 41 26 47 25" stroke={item.colour} strokeWidth={4} fill="none" strokeLinecap="round" />
-      {item.bell || item.id === 'collar-red' ? <Circle cx={43} cy={27} r={2.6} fill={C.butter} stroke={INK} strokeWidth={1.2} /> : null}
-      {item.gem ? <Polygon points="43,23 45.5,26.5 43,30 40.5,26.5" fill={item.colour} stroke={INK} strokeWidth={1.1} /> : null}
+      <Path d="M36.5 19.5 Q 41 26.5 47.5 25" stroke={INK} strokeWidth={5} fill="none" strokeLinecap="round" />
+      <Path d="M36.5 19.5 Q 41 26.5 47.5 25" stroke={item.colour} strokeWidth={3} fill="none" strokeLinecap="round" />
+      {item.bell || item.id === 'collar-red' ? <Circle cx={44.5} cy={27.5} r={2.8} fill={C.butter} stroke={INK} strokeWidth={1.2} /> : null}
+      {item.gem ? <Polygon points="44.5,23.5 47,27 44.5,30.5 42,27" fill={item.colour} stroke={INK} strokeWidth={1.1} /> : null}
     </>
   );
 }
@@ -528,23 +441,24 @@ function GlassesItem({ item }) {
   if (item.cyber)
     return (
       <>
-        <Rect x={43} y={10.5} width={10} height={5} rx={2} fill={item.colour} stroke={INK} strokeWidth={1.4} />
-        <Line x1={45} y1={13} x2={51} y2={13} stroke={INK} strokeWidth={1.2} />
+        <Rect x={42} y={10.5} width={11} height={5} rx={2} fill={item.colour} stroke={INK} strokeWidth={1.4} />
+        <Line x1={44} y1={13} x2={51} y2={13} stroke={INK} strokeWidth={1.2} />
       </>
     );
   if (item.monocle)
     return (
       <>
-        <Circle cx={47.5} cy={13} r={3.6} fill="rgba(255,255,255,0.25)" stroke={item.colour} strokeWidth={1.8} />
-        <Path d="M44 15 Q 42 21 43 26" stroke={item.colour} strokeWidth={1.2} fill="none" />
+        <Circle cx={44.2} cy={14} r={3.6} fill="rgba(255,255,255,0.25)" stroke={item.colour} strokeWidth={1.8} />
+        <Path d="M41 16 Q 39 21 40 26" stroke={item.colour} strokeWidth={1.2} fill="none" />
       </>
     );
   return (
-    <>
-      <Circle cx={47.5} cy={13} r={3.8} fill={item.dark ? '#1E1A2E' : 'rgba(255,255,255,0.22)'} stroke={item.colour} strokeWidth={1.7} />
-      {item.dark ? <Line x1={45.5} y1={15} x2={49.5} y2={11} stroke="rgba(255,255,255,0.55)" strokeWidth={1.1} strokeLinecap="round" /> : null}
-      <Line x1={51} y1={13} x2={54} y2={13.5} stroke={item.colour} strokeWidth={1.6} />
-    </>
+    <G>
+      <Rect x={40.5} y={11} width={7} height={5.2} rx={item.dark ? 1.5 : 2.6} fill={item.dark ? '#1E1A2E' : 'rgba(255,255,255,0.22)'} stroke={item.colour} strokeWidth={1.6} />
+      <Rect x={49.5} y={11} width={5.8} height={5} rx={item.dark ? 1.5 : 2.5} fill={item.dark ? '#1E1A2E' : 'rgba(255,255,255,0.22)'} stroke={item.colour} strokeWidth={1.6} />
+      <Line x1={47.5} y1={13.5} x2={49.5} y2={13.5} stroke={item.colour} strokeWidth={1.6} />
+      {item.dark ? <Line x1={42} y1={15} x2={45.5} y2={11.5} stroke="rgba(255,255,255,0.55)" strokeWidth={1} strokeLinecap="round" /> : null}
+    </G>
   );
 }
 
@@ -552,15 +466,7 @@ function HatItem({ item, cat }) {
   if (!item) return null;
   const top = cat ? 2 : 5;
   if (item.id === 'hat-party')
-    return (
-      <G>
-        <Polygon points={`39,${top + 4} 51,${top + 4} 45,${top - 12}`} fill="#9B7EDE" stroke={INK} strokeWidth={1.7} strokeLinejoin="round" />
-        <Line x1={42.2} y1={top + 4} x2={45} y2={top - 8} stroke="#5CC8FF" strokeWidth={1.6} />
-        <Line x1={47.8} y1={top + 4} x2={45} y2={top - 8} stroke="#FF85A2" strokeWidth={1.6} />
-        <Path d={`M38 ${top + 4} L40 ${top + 1} L42.5 ${top + 3.5} L45 ${top} L47.5 ${top + 3.5} L50 ${top + 1} L52 ${top + 4} Z`} fill={C.butter} stroke={INK} strokeWidth={1.3} strokeLinejoin="round" />
-        <Circle cx={45} cy={top - 12.5} r={2.2} fill={C.butter} stroke={INK} strokeWidth={1.2} />
-      </G>
-    );
+    return null;
   if (item.id === 'hat-crown')
     return (
       <Polygon

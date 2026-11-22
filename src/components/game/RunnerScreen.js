@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet, AppState, PanResponder, useWindowDimensions, BackHandler } from 'react-native';
-import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line, Path, Polygon } from 'react-native-svg';
+import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line, Path } from 'react-native-svg';
 import { C, F, INK_WIDTH, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, VIEW_H, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
+import { VIEW_W, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
 import { getColour } from '../../game/wardrobe';
 import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent } from '../../game/sfx';
@@ -13,6 +13,7 @@ import PetSprite from './PetSprite';
 import Thing, { PowerIcon, Chaser } from './Things';
 import { Backdrop, Midground, Goal } from './Scenery';
 import { ColourHeadTileSvg } from './WardrobeIcons';
+import { SPRITES } from './sprites';
 import { StickerButton } from '../ui';
 
 const SWIPE_PX = 22;
@@ -20,6 +21,7 @@ const COUNTDOWN_STEP_MS = 500;
 const REDUCE_MOTION_START_MS = 400;
 const CONTINUE_RING_SECONDS = 5;
 const MAX_PARTICLES = 12;
+const CAM_SHIFT_X = 24; // shifts PLAYER_X (64) to x = 88 so chaser has room on left
 
 function spawnParticles(pool, kind, x, y) {
   const next = pool.slice();
@@ -50,8 +52,8 @@ function spawnParticles(pool, kind, x, y) {
   return next;
 }
 
-// One stage, daily, endless or chase run: full-bleed vector world with overlaid
-// translucent pill HUD and glossy circular arcade controls.
+// One stage, daily, endless or chase run: close-up framed runner card with
+// multi-layered scenery, translucent pill HUD, and non-overlapping soil controls.
 export default function RunnerScreen({
   stage,
   pet,
@@ -169,11 +171,11 @@ export default function RunnerScreen({
             .filter((p) => p.age < p.life);
           const py = GROUND - next.player.height - 4;
           for (const ev of next.events) {
-            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, PLAYER_X + 18, py);
-            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, PLAYER_X + 20, GROUND - 3);
-            else if (ev === 'collect') pool = spawnParticles(pool, ev, PLAYER_X + 34, py - 20);
-            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, PLAYER_X + 10, py - 18);
-            else if (ev === 'smash') pool = spawnParticles(pool, ev, PLAYER_X + 40, py - 16);
+            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 18, py);
+            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 20, GROUND - 3);
+            else if (ev === 'collect') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 34, py - 20);
+            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 10, py - 18);
+            else if (ev === 'smash') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 40, py - 16);
           }
           particlesRef.current = pool;
         } else if (particlesRef.current.length) {
@@ -308,7 +310,6 @@ export default function RunnerScreen({
   const goalProg = runGoal ? runGoalProgress(runGoal, run) : null;
   const blink = run.invuln > 0 && (reduceMotion ? true : Math.floor(run.t * 12) % 2 === 0);
   const pose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
-  const petTop = GROUND - run.player.height - 44;
   const isScoreMode = Boolean(run.stage.endless || run.stage.chase);
   const goalX = run.stage.daily || isScoreMode ? null : run.length - run.dist + PLAYER_X + 40;
   const progress = run.stage.chase
@@ -316,16 +317,18 @@ export default function RunnerScreen({
     : run.stage.daily
     ? Math.min(1, run.t / run.stage.seconds)
     : Math.min(1, run.dist / run.length);
-  const chaserX = run.stage.chase ? Math.round(2 + (1 - progress) * (PLAYER_X - 24)) : 0;
+  const playerX = PLAYER_X + CAM_SHIFT_X; // 88 inside zoomed 276-wide view
+  const chaserX = run.stage.chase ? Math.round(4 + (1 - progress) * (playerX - 42)) : 12;
+  const showChaserDog = Boolean(run.stage.chase || pet.species === 'cat');
+  const chaserObj = run.stage.chase ? stage.chaser : { id: 'dog' };
   const lowGap = Boolean(run.stage.chase && progress < 0.3);
   const meterFlash = lowGap && !reduceMotion && Math.floor(run.t * 8) % 2 === 1;
-  const chaserBounce = lowGap && !reduceMotion ? Math.abs(Math.sin(run.t * 14)) * 5 : 0;
+  const chaserBounce = lowGap && !reduceMotion ? Math.abs(Math.sin(run.t * 14)) * 4 : 0;
   const { width, height } = size;
-  const viewH = width ? Math.max(VIEW_H, (VIEW_W * height) / width) : VIEW_H;
+  const cardMaxH = Math.min(480, Math.max(360, Math.round(winHeight * 0.7)));
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
   const shownBest = Math.max(bestScore || 0, run.score || 0);
-  const stageTargetH = Math.max(320, Math.round(winHeight * 0.7));
   const maxStageSpeed = run.stage.endless ? 380 : run.stage.speedEnd || run.stage.speed || 260;
   const panting = currentSpeed(run) > maxStageSpeed * 0.75;
   const happy = nearMissFresh || (run.treatStreak || 0) >= 3;
@@ -335,344 +338,361 @@ export default function RunnerScreen({
   const ringOffset = ringCirc * (1 - Math.max(0, Math.min(1, continueTimer / CONTINUE_RING_SECONDS)));
   const petCol = getColour(wardrobe?.colour);
   const pct = Math.round(progress * 100);
+  const animPhase = run.dist / 10;
 
   return (
     <View style={s.wrap}>
-      <View
-        style={[s.stage, { minHeight: stageTargetH }]}
-        onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
-        {...pan.panHandlers}
-        accessible={!paused && countdown === null}
-        accessibilityLabel={t('game.playAreaA11y')}
-      >
-        {width > 0 && (
-          <Svg width={width} height={height} viewBox={`0 ${VIEW_H - viewH} ${VIEW_W} ${viewH}`} preserveAspectRatio="xMidYMax meet">
-            <Defs>
-              <ClipPath id="face">
-                <Circle cx={0} cy={0} r={9} />
-              </ClipPath>
-            </Defs>
-            <G transform={shake ? `translate(${shake} 0)` : undefined}>
-              <Backdrop theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
-              <Midground theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
-              {goalX != null && goalX < VIEW_W + 60 ? (
-                <G transform={`translate(${goalX} ${GROUND})`}>
-                  <Goal />
-                </G>
-              ) : null}
-              {things.map((e) => {
-                const sy = e.type === 'bird' && !reduceMotion ? e.sy + Math.sin(run.t * 8 + e.x * 0.05) * 4 : e.sy;
-                return (
-                  <G key={e.id} transform={`translate(${e.sx} ${sy})`}>
-                    <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+      <View style={[s.cardOuter, { maxHeight: cardMaxH }]}>
+        <View style={s.cardShadow} />
+        <View
+          style={s.stage}
+          onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+          {...pan.panHandlers}
+          accessible={!paused && countdown === null}
+          accessibilityLabel={t('game.playAreaA11y')}
+        >
+          {width > 0 && (
+            <Svg width={width} height={height} viewBox="0 -22 276 284" preserveAspectRatio="xMidYMid slice">
+              <Defs>
+                <ClipPath id="face">
+                  <Circle cx={0} cy={0} r={9} />
+                </ClipPath>
+              </Defs>
+              <G transform={shake ? `translate(${shake} 0)` : undefined}>
+                <Backdrop theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
+                <Midground theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
+                {goalX != null && goalX < VIEW_W + 60 ? (
+                  <G transform={`translate(${goalX + CAM_SHIFT_X} ${GROUND})`}>
+                    <Goal />
                   </G>
-                );
-              })}
-              {dashWarning ? (
-                <G transform={`translate(${VIEW_W - 22} ${GROUND - 24})`}>
-                  <Circle cx={0} cy={0} r={11} fill={C.butter} stroke={C.ink} strokeWidth={2} />
-                  <SvgText x={0} y={4} fontSize={13} fontFamily={F.bold} fill={C.ink} textAnchor="middle">
-                    !
-                  </SvgText>
+                ) : null}
+                {things.map((e) => {
+                  const sy = e.type === 'bird' && !reduceMotion ? e.sy + Math.sin(run.t * 8 + e.x * 0.05) * 4 : e.sy;
+                  return (
+                    <G key={e.id} transform={`translate(${e.sx + CAM_SHIFT_X} ${sy})`}>
+                      <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+                    </G>
+                  );
+                })}
+                {dashWarning ? (
+                  <SvgImage
+                    href={SPRITES.impactAlert}
+                    x={236}
+                    y={GROUND - 42}
+                    width={34}
+                    height={26}
+                    preserveAspectRatio="xMidYMid meet"
+                  />
+                ) : null}
+                {showChaserDog ? (
+                  <G transform={`translate(${chaserX} ${GROUND - chaserBounce}) scale(1.12) translate(0 -39)`}>
+                    <Chaser chaser={chaserObj} phase={animPhase} />
+                  </G>
+                ) : null}
+                <G transform={`translate(${playerX - 6} ${GROUND - run.player.height}) scale(1.18) translate(0 -44)`} opacity={blink ? 0.5 : 1}>
+                  {run.power.shield ? <Circle cx={28} cy={24} r={30} fill="rgba(92,200,255,0.25)" stroke={C.sky} strokeWidth={2} /> : null}
+                  <PetSprite
+                    species={pet.species}
+                    colour={wardrobe.colour}
+                    equipped={wardrobe.equipped}
+                    character={wardrobe.activeCharacter}
+                    phase={animPhase}
+                    pose={pose}
+                    panting={panting}
+                    happy={happy}
+                  />
+                  {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}
                 </G>
-              ) : null}
-              {run.stage.chase && (
-                <G transform={`translate(${chaserX} ${GROUND - 38 - chaserBounce})`}>
-                  <Chaser chaser={stage.chaser} />
-                </G>
-              )}
-              <G transform={`translate(${PLAYER_X - 6} ${petTop})`} opacity={blink ? 0.5 : 1}>
-                {run.power.shield ? <Circle cx={28} cy={24} r={30} fill="rgba(92,200,255,0.25)" stroke={C.sky} strokeWidth={2} /> : null}
-                <PetSprite
-                  species={pet.species}
-                  colour={wardrobe.colour}
-                  equipped={wardrobe.equipped}
-                  character={wardrobe.activeCharacter}
-                  phase={Math.floor(run.dist / 18)}
-                  pose={pose}
-                  panting={panting}
-                  happy={happy}
-                />
-                <NameTag name={pet.name} faceUri={faceUri} />
+                {particlesRef.current.map((p) => {
+                  const alpha = Math.max(0, 1 - p.age / p.life);
+                  if (p.kind === 'streak') {
+                    return <Line key={p.id} x1={p.x} y1={p.y} x2={p.x - p.r} y2={p.y} stroke={p.color} strokeWidth={2.5} strokeLinecap="round" opacity={alpha} />;
+                  }
+                  return <Circle key={p.id} cx={p.x} cy={p.y} r={p.r} fill={p.color} opacity={alpha} />;
+                })}
               </G>
-              {particlesRef.current.map((p) => {
-                const alpha = Math.max(0, 1 - p.age / p.life);
-                if (p.kind === 'streak') {
-                  return <Line key={p.id} x1={p.x} y1={p.y} x2={p.x - p.r} y2={p.y} stroke={p.color} strokeWidth={2.5} strokeLinecap="round" opacity={alpha} />;
-                }
-                return <Circle key={p.id} cx={p.x} cy={p.y} r={p.r} fill={p.color} opacity={alpha} />;
-              })}
-            </G>
-          </Svg>
-        )}
+            </Svg>
+          )}
 
-        {/* Overlaid Translucent Pill HUD */}
-        <View style={s.hudOverlay} pointerEvents="box-none">
-          <View style={s.hudTopRow}>
-            {/* Avatar badge + live pill */}
-            <View style={s.avatarPill}>
-              <View style={s.avatarRing}>
-                {faceUri ? (
-                  <Image source={{ uri: faceUri }} style={s.avatarImg} />
-                ) : (
-                  <ColourHeadTileSvg species={pet.species} colourObj={petCol} size={28} />
-                )}
-              </View>
-              <View>
-                <Text style={s.hudMiniLabel} numberOfLines={1}>
-                  {t(stage.nameKey)}
-                </Text>
-                <Text style={s.hudBigNum} numberOfLines={1}>
-                  {isScoreMode ? run.score : `${pct}%`}
-                </Text>
-              </View>
-            </View>
-
-            {/* Center Score / Best pill */}
-            {isScoreMode ? (
-              <View style={s.scorePill}>
-                <Text style={s.scoreLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                  {t('game.hud.score', { n: run.score })}
-                </Text>
-                <Text style={s.bestLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>
-                  {t('game.hud.best', { n: shownBest })}
-                </Text>
-              </View>
-            ) : (
-              <View style={s.scorePill}>
-                <Text
-                  style={s.heartsText}
-                  accessibilityLabel={t('game.heartsA11y', { n: run.hearts })}
-                  maxFontSizeMultiplier={1.3}
-                >
-                  {'❤️'.repeat(run.hearts)}
-                  {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
-                </Text>
-              </View>
-            )}
-
-            {/* Right Gap/Mode pill + Blue Square Pause Button */}
-            <View style={s.hudRightCluster}>
-              {run.stage.chase ? (
-                <View style={s.gapPill}>
-                  <Text style={s.gapLabel}>{t('game.chase.gapLabel')}</Text>
-                  <View style={[s.gapPlus, lowGap && { backgroundColor: C.coral }]}>
-                    <Text style={s.gapPlusText}>{lowGap ? '!' : '+'}</Text>
-                  </View>
+          {/* Overlaid Translucent Pill HUD */}
+          <View style={s.hudOverlay} pointerEvents="box-none">
+            <View style={s.hudTopRow}>
+              <View style={s.avatarPill}>
+                <View style={s.avatarRing}>
+                  {faceUri ? (
+                    <Image source={{ uri: faceUri }} style={s.avatarImg} />
+                  ) : (
+                    <ColourHeadTileSvg species={pet.species} colourObj={petCol} size={26} />
+                  )}
                 </View>
-              ) : null}
-              <Pressable
-                onPress={() => setPause(true)}
-                style={s.pauseBtn}
-                accessibilityRole="button"
-                accessibilityLabel={t('game.pause')}
-                hitSlop={8}
-              >
-                <View style={s.pauseHighlight} />
-                <Text style={s.pauseIcon}>⏸</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* Second HUD row: Treats pill + Dark Navy Progress Bar */}
-          <View style={s.hudSecondRow} pointerEvents="none">
-            <View style={s.treatsPill} accessibilityLabel={t('game.treatsA11y', { n: run.treats })}>
-              <Text style={s.treatsText}>
-                {pet.species === 'cat' ? '🐟' : '🦴'} {run.treats}
-              </Text>
-            </View>
-
-            <View
-              style={[s.progressTrack, meterFlash && { borderColor: C.coral }]}
-              accessibilityLabel={
-                run.stage.chase
-                  ? t('game.chase.gapA11y', { pct })
-                  : t('game.progressA11y', { pct })
-              }
-            >
-              <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: lowGap ? C.coral : C.lime }]} />
-              <Text style={s.flagText}>🏁</Text>
-            </View>
-          </View>
-
-          {/* Multiplier badge & Run Goal chip */}
-          {(run.multiplier > 1 || goalProg) ? (
-            <View style={s.goalRow} pointerEvents="none">
-              {run.multiplier > 1 ? (
-                <Text style={s.multText} accessibilityLabel={t('game.multiplierA11y', { n: run.multiplier })}>
-                  {t('game.multiplier', { n: run.multiplier })}
-                </Text>
-              ) : null}
-              {goalProg ? (
-                <View style={[s.goalChip, goalProg.done && s.goalChipDone]}>
-                  <Text style={s.goalChipText} numberOfLines={1}>
-                    {goalProg.done ? '✓ ' : ''}
-                    {t(`game.goal.${runGoal.type}`, { n: goalProg.target })} ({goalProg.current}/{goalProg.target})
+                <View>
+                  <Text style={s.hudMiniLabel} numberOfLines={1}>
+                    {t(stage.nameKey)}
+                  </Text>
+                  <Text style={s.hudBigNum} numberOfLines={1}>
+                    {isScoreMode ? run.score : `${pct}%`}
                   </Text>
                 </View>
-              ) : null}
+              </View>
+
+              {isScoreMode ? (
+                <View style={s.scorePill}>
+                  <Text style={s.scoreLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                    {t('game.hud.score', { n: run.score })}
+                  </Text>
+                  <Text style={s.bestLine} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                    {t('game.hud.best', { n: shownBest })}
+                  </Text>
+                </View>
+              ) : (
+                <View style={s.scorePill}>
+                  <Text
+                    style={s.heartsText}
+                    accessibilityLabel={t('game.heartsA11y', { n: run.hearts })}
+                    maxFontSizeMultiplier={1.3}
+                  >
+                    {'❤️'.repeat(run.hearts)}
+                    {'🤍'.repeat(Math.max(0, run.stage.hearts - run.hearts))}
+                  </Text>
+                </View>
+              )}
+
+              <View style={s.hudRightCluster}>
+                {run.stage.chase ? (
+                  <View style={s.gapPill}>
+                    <Text style={s.gapLabel}>{t('game.chase.gapLabel')}</Text>
+                    <View style={[s.gapPlus, lowGap && { backgroundColor: C.coral }]}>
+                      <Text style={s.gapPlusText}>{lowGap ? '!' : '+'}</Text>
+                    </View>
+                  </View>
+                ) : null}
+                <Pressable
+                  onPress={() => setPause(true)}
+                  style={s.pauseBtn}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('game.pause')}
+                  hitSlop={8}
+                >
+                  <View style={s.pauseHighlight} />
+                  <Text style={s.pauseIcon}>⏸</Text>
+                </Pressable>
+              </View>
             </View>
-          ) : null}
-        </View>
 
-        {/* Left vertical Chase/Stage meter matching reference */}
-        <View style={s.vertMeterWrap} pointerEvents="none">
-          <View style={s.vertMeterTop}>
-            <ColourHeadTileSvg species={pet.species} colourObj={petCol} size={18} />
-          </View>
-          <View style={s.vertMeterTrack}>
-            <View
-              style={[
-                s.vertMeterFill,
-                { height: `${pct}%`, backgroundColor: lowGap ? C.coral : C.lime }
-              ]}
-            />
-          </View>
-        </View>
-
-        {activePowers.length > 0 && (
-          <View style={s.powers} pointerEvents="none">
-            {activePowers.map((k) => (
-              <Svg key={k} width={26} height={26} viewBox="0 0 28 28">
-                <PowerIcon type={k} />
-              </Svg>
-            ))}
-          </View>
-        )}
-
-        {/* Overlaid Circular Arcade Controls over lower cutaway band */}
-        {showJumpDuckButtons ? (
-          <View style={s.controlsOverlay} pointerEvents="box-none">
-            <View style={s.ctrlLeftGroup}>
-              <Pressable
-                style={[s.circleBtn, s.circleBtnBlue, duckPressed && s.circleBtnPressed]}
-                onPressIn={() => {
-                  setDuckPressed(true);
-                  input.current.duck = true;
-                }}
-                onPressOut={() => {
-                  setDuckPressed(false);
-                  input.current.duck = false;
-                }}
-                accessibilityRole="button"
-                accessibilityLabel={t('game.duck')}
-              >
-                <View style={s.circleGloss} />
-                <Svg width={26} height={26} viewBox="0 0 24 24">
-                  <Path d="M12 5 L12 18 M6 13 L12 19 L18 13" stroke="#FFFFFF" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                </Svg>
-              </Pressable>
-            </View>
-            <Pressable
-              style={[s.circleBtn, s.circleBtnBlue, jumpPressed && s.circleBtnPressed]}
-              onPressIn={() => {
-                setJumpPressed(true);
-                input.current.jump = true;
-              }}
-              onPressOut={() => setJumpPressed(false)}
-              accessibilityRole="button"
-              accessibilityLabel={t('game.jump')}
-            >
-              <View style={s.circleGloss} />
-              <Svg width={26} height={26} viewBox="0 0 24 24">
-                <Path d="M12 19 L12 6 M6 11 L12 5 L18 11" stroke="#FFFFFF" strokeWidth={3.2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-              </Svg>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {!paused && countdown !== null && !reduceMotion && countdown > 0 && (
-          <View style={s.countdownOverlay} pointerEvents="none">
-            <View style={s.countdownBubble}>
-              <Text style={s.countdownText}>{countdown}</Text>
-            </View>
-          </View>
-        )}
-
-        {continuePrompt && (
-          <View style={s.overlay}>
-            <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
-              <Svg width={58} height={58} viewBox="0 0 58 58">
-                <Circle cx={29} cy={29} r={ringR} stroke={C.paper} strokeWidth={5} fill="none" />
-                <Circle
-                  cx={29}
-                  cy={29}
-                  r={ringR}
-                  stroke={C.coral}
-                  strokeWidth={5}
-                  fill="none"
-                  strokeDasharray={`${ringCirc} ${ringCirc}`}
-                  strokeDashoffset={ringOffset}
-                  strokeLinecap="round"
-                  transform="rotate(-90 29 29)"
+            {/* Second HUD row: Treats pill + Dark Navy Progress Bar with pet badge & flag */}
+            <View style={s.hudSecondRow} pointerEvents="none">
+              <View style={s.treatsPill} accessibilityLabel={t('game.treatsA11y', { n: run.treats })}>
+                <Image
+                  source={pet.species === 'cat' ? SPRITES.iconFish : SPRITES.iconBone}
+                  style={s.treatIconImg}
+                  resizeMode="contain"
                 />
-                <SvgText x={29} y={35} fontSize={18} fontFamily={F.bold} fill={C.ink} textAnchor="middle">
-                  {Math.ceil(continueTimer)}
-                </SvgText>
-              </Svg>
+                <Text style={s.treatsText}>{run.treats}</Text>
+              </View>
+
+              <View style={s.progressBarWrap}>
+                <View style={s.progressHeadBadge}>
+                  <ColourHeadTileSvg species={pet.species} colourObj={petCol} size={18} />
+                </View>
+                <View
+                  style={[s.progressTrack, meterFlash && { borderColor: C.coral }]}
+                  accessibilityLabel={
+                    run.stage.chase
+                      ? t('game.chase.gapA11y', { pct })
+                      : t('game.progressA11y', { pct })
+                  }
+                >
+                  <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: lowGap ? C.coral : C.lime }]} />
+                  <Text style={s.flagText}>🏁</Text>
+                </View>
+              </View>
             </View>
-            <Text style={s.overlayTitle}>
-              {stage.chase
-                ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
-                : t('game.end.endlessDone')}
-            </Text>
-            <Text style={s.overlaySub}>
-              {stage.chase ? t('game.continueRun.chaseSub') : t('game.continueRun.endlessSub')}
-            </Text>
-            <View style={s.overlayButtons}>
-              {(premium || isRewardedReady('continue')) ? (
-                <StickerButton
-                  label={premium ? t('game.continueRun.freeBtn') : t('game.continueRun.adBtn')}
-                  emoji={premium ? '👑' : '🎬'}
-                  color={C.butter}
-                  disabled={continueBusy}
-                  onPress={handleContinue}
-                />
-              ) : null}
-              {onPayContinueTreats && treatBalance >= continueTreatCost ? (
-                <StickerButton
-                  label={t('game.continueRun.treatBtn', { n: continueTreatCost })}
-                  emoji={pet.species === 'cat' ? '🐟' : '🦴'}
-                  color={C.mint}
-                  disabled={continueBusy}
-                  onPress={handleContinueTreats}
-                />
-              ) : null}
-              <StickerButton
-                label={t('game.continueRun.endBtn')}
-                color={C.paper}
-                disabled={continueBusy}
-                onPress={() => handleDeclineContinue('declined')}
+
+            {(run.multiplier > 1 || goalProg) ? (
+              <View style={s.goalRow} pointerEvents="none">
+                {run.multiplier > 1 ? (
+                  <Text style={s.multText} accessibilityLabel={t('game.multiplierA11y', { n: run.multiplier })}>
+                    {t('game.multiplier', { n: run.multiplier })}
+                  </Text>
+                ) : null}
+                {goalProg ? (
+                  <View style={[s.goalChip, goalProg.done && s.goalChipDone]}>
+                    <Text style={s.goalChipText} numberOfLines={1}>
+                      {goalProg.done ? '✓ ' : ''}
+                      {t(`game.goal.${runGoal.type}`, { n: goalProg.target })} ({goalProg.current}/{goalProg.target})
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+
+          {/* Left vertical meter */}
+          <View style={s.vertMeterWrap} pointerEvents="none">
+            <View style={s.vertMeterTop}>
+              <ColourHeadTileSvg species={pet.species} colourObj={petCol} size={16} />
+            </View>
+            <View style={s.vertMeterTrack}>
+              <View
+                style={[
+                  s.vertMeterFill,
+                  { height: `${pct}%`, backgroundColor: lowGap ? C.coral : C.lime }
+                ]}
               />
             </View>
           </View>
-        )}
 
-        {paused && !continuePrompt && (
-          <View style={s.overlay}>
-            <Text style={s.overlayTitle}>{started ? t('game.paused') : t(stage.nameKey)}</Text>
-            {!started && (
-              <Text style={s.overlaySub}>
-                {t('game.howTo')}{' '}
-                {stage.chase
-                  ? t('game.chase.howTo', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
-                  : stage.endless
-                  ? t('game.endless.howTo')
-                  : t('game.howToHearts')}
-              </Text>
-            )}
-            <View style={s.overlayButtons}>
-              <StickerButton label={started ? t('game.resume') : t('game.go')} emoji="▶️" onPress={begin} />
-              <StickerButton label={t('game.quit')} color={C.paper} onPress={onQuit} />
+          {activePowers.length > 0 && (
+            <View style={s.powers} pointerEvents="none">
+              {activePowers.map((k) => (
+                <Svg key={k} width={26} height={26} viewBox="0 0 28 28">
+                  <PowerIcon type={k} />
+                </Svg>
+              ))}
             </View>
-          </View>
-        )}
+          )}
+
+          {/* Painted Circular Arcade Controls sitting exclusively inside the dark soil cutaway */}
+          {showJumpDuckButtons ? (
+            <View style={s.controlsOverlay} pointerEvents="box-none">
+              <View style={s.ctrlLeftGroup}>
+                <Pressable
+                  style={[s.spriteCtrlBtn, duckPressed && s.circleBtnPressed]}
+                  onPressIn={() => {
+                    setDuckPressed(true);
+                    input.current.duck = true;
+                  }}
+                  onPressOut={() => {
+                    setDuckPressed(false);
+                    input.current.duck = false;
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('game.duck')}
+                >
+                  <Image source={SPRITES.btnLeft} style={s.btnSprite} resizeMode="contain" />
+                </Pressable>
+                <Pressable
+                  style={[s.spriteCtrlBtn, { opacity: jumpPressed ? 1 : 0.68 }, jumpPressed && s.circleBtnPressed]}
+                  onPressIn={() => {
+                    setJumpPressed(true);
+                    input.current.jump = true;
+                  }}
+                  onPressOut={() => setJumpPressed(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('game.jump')}
+                >
+                  <Image source={SPRITES.btnLeft} style={[s.btnSprite, { transform: [{ scaleX: -1 }] }]} resizeMode="contain" />
+                </Pressable>
+              </View>
+
+              <Pressable
+                style={[s.spriteCtrlBtn, { opacity: jumpPressed ? 1 : 0.72 }, jumpPressed && s.circleBtnPressed]}
+                onPressIn={() => {
+                  setJumpPressed(true);
+                  input.current.jump = true;
+                }}
+                onPressOut={() => setJumpPressed(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t('game.jump')}
+              >
+                <Image source={SPRITES.btnUp} style={s.btnSprite} resizeMode="contain" />
+              </Pressable>
+            </View>
+          ) : null}
+
+          {!paused && countdown !== null && !reduceMotion && countdown > 0 && (
+            <View style={s.countdownOverlay} pointerEvents="none">
+              <View style={s.countdownBubble}>
+                <Text style={s.countdownText}>{countdown}</Text>
+              </View>
+            </View>
+          )}
+
+          {continuePrompt && (
+            <View style={s.overlay}>
+              <View style={{ alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                <Svg width={58} height={58} viewBox="0 0 58 58">
+                  <Circle cx={29} cy={29} r={ringR} stroke={C.paper} strokeWidth={5} fill="none" />
+                  <Circle
+                    cx={29}
+                    cy={29}
+                    r={ringR}
+                    stroke={C.coral}
+                    strokeWidth={5}
+                    fill="none"
+                    strokeDasharray={`${ringCirc} ${ringCirc}`}
+                    strokeDashoffset={ringOffset}
+                    strokeLinecap="round"
+                    transform="rotate(-90 29 29)"
+                  />
+                  <SvgText x={29} y={35} fontSize={18} fontFamily={F.bold} fill={C.ink} textAnchor="middle">
+                    {Math.ceil(continueTimer)}
+                  </SvgText>
+                </Svg>
+              </View>
+              <Text style={s.overlayTitle}>
+                {stage.chase
+                  ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
+                  : t('game.end.endlessDone')}
+              </Text>
+              <Text style={s.overlaySub}>
+                {stage.chase ? t('game.continueRun.chaseSub') : t('game.continueRun.endlessSub')}
+              </Text>
+              <View style={s.overlayButtons}>
+                {(premium || isRewardedReady('continue')) ? (
+                  <StickerButton
+                    label={premium ? t('game.continueRun.freeBtn') : t('game.continueRun.adBtn')}
+                    emoji={premium ? '👑' : '🎬'}
+                    color={C.butter}
+                    disabled={continueBusy}
+                    onPress={handleContinue}
+                  />
+                ) : null}
+                {onPayContinueTreats && treatBalance >= continueTreatCost ? (
+                  <StickerButton
+                    label={t('game.continueRun.treatBtn', { n: continueTreatCost })}
+                    emoji={pet.species === 'cat' ? '🐟' : '🦴'}
+                    color={C.mint}
+                    disabled={continueBusy}
+                    onPress={handleContinueTreats}
+                  />
+                ) : null}
+                <StickerButton
+                  label={t('game.continueRun.endBtn')}
+                  color={C.paper}
+                  disabled={continueBusy}
+                  onPress={() => handleDeclineContinue('declined')}
+                />
+              </View>
+            </View>
+          )}
+
+          {paused && !continuePrompt && (
+            <View style={s.overlay}>
+              <Text style={s.overlayTitle}>{started ? t('game.paused') : t(stage.nameKey)}</Text>
+              {!started && (
+                <Text style={s.overlaySub}>
+                  {t('game.howTo')}{' '}
+                  {stage.chase
+                    ? t('game.chase.howTo', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
+                    : stage.endless
+                    ? t('game.endless.howTo')
+                    : t('game.howToHearts')}
+                </Text>
+              )}
+              <View style={s.overlayButtons}>
+                <StickerButton label={started ? t('game.resume') : t('game.go')} emoji="▶️" onPress={begin} />
+                <StickerButton label={t('game.quit')} color={C.paper} onPress={onQuit} />
+              </View>
+            </View>
+          )}
+        </View>
       </View>
     </View>
   );
 }
 
-// The pet's name above its head, with its face photo when there is one.
+// The pet's name above its head when a face photo is active.
 const NameTag = React.memo(function NameTag({ name, faceUri }) {
   const label = String(name || '').slice(0, 14);
   const w = Math.max(40, label.length * 7 + (faceUri ? 30 : 16));
@@ -694,10 +714,30 @@ const NameTag = React.memo(function NameTag({ name, faceUri }) {
 });
 
 const s = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: C.bg, padding: 6 },
+  wrap: {
+    flex: 1,
+    backgroundColor: C.bg,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cardOuter: {
+    width: '100%',
+    aspectRatio: 0.92,
+    paddingRight: 4,
+    paddingBottom: 4
+  },
+  cardShadow: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    right: 0,
+    bottom: 0,
+    borderRadius: R.viewport,
+    backgroundColor: C.shadow
+  },
   stage: {
     flex: 1,
-    minHeight: 320,
     borderRadius: R.viewport,
     borderWidth: INK_WIDTH,
     borderColor: C.ink,
@@ -716,12 +756,12 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: 6
+    gap: 5
   },
   avatarPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
+    gap: 6,
     backgroundColor: C.hudPill,
     borderRadius: R.pill,
     paddingLeft: 3,
@@ -729,9 +769,9 @@ const s = StyleSheet.create({
     paddingVertical: 3
   },
   avatarRing: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     borderWidth: 2,
     borderColor: C.butter,
     backgroundColor: '#FDE8D0',
@@ -739,35 +779,35 @@ const s = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden'
   },
-  avatarImg: { width: 30, height: 30, borderRadius: 15 },
-  hudMiniLabel: { fontFamily: F.semibold, fontSize: 10, color: '#E2EFF8', maxWidth: 82 },
+  avatarImg: { width: 28, height: 28, borderRadius: 14 },
+  hudMiniLabel: { fontFamily: F.semibold, fontSize: 10, color: '#E2EFF8', maxWidth: 74 },
   hudBigNum: { fontFamily: F.bold, fontSize: 13, color: C.paper, fontVariant: ['tabular-nums'] },
   scorePill: {
     backgroundColor: C.hudPill,
     borderRadius: R.hudPill,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     alignItems: 'center',
     justifyContent: 'center'
   },
   scoreLine: { fontFamily: F.bold, fontSize: 12, color: C.paper, fontVariant: ['tabular-nums'] },
   bestLine: { fontFamily: F.medium, fontSize: 11, color: '#D7EBF7', fontVariant: ['tabular-nums'] },
-  heartsText: { fontSize: 14, letterSpacing: -1 },
-  hudRightCluster: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  heartsText: { fontSize: 13, letterSpacing: -1 },
+  hudRightCluster: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   gapPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: C.hudPill,
     borderRadius: R.pill,
-    paddingLeft: 10,
-    paddingRight: 4,
-    paddingVertical: 4
+    paddingLeft: 8,
+    paddingRight: 3,
+    paddingVertical: 3
   },
-  gapLabel: { fontFamily: F.bold, fontSize: 12, color: C.paper },
+  gapLabel: { fontFamily: F.bold, fontSize: 11, color: C.paper },
   gapPlus: {
-    width: 20,
-    height: 20,
+    width: 19,
+    height: 19,
     borderRadius: 10,
     backgroundColor: C.lime,
     borderWidth: 1.5,
@@ -775,10 +815,10 @@ const s = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center'
   },
-  gapPlusText: { fontFamily: F.bold, fontSize: 13, color: C.paper, lineHeight: 15 },
+  gapPlusText: { fontFamily: F.bold, fontSize: 12, color: C.paper, lineHeight: 14 },
   pauseBtn: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: R.pauseBtn,
     borderWidth: 2,
     borderColor: C.ink,
@@ -796,22 +836,43 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.45)'
   },
-  pauseIcon: { fontSize: 15, color: C.paper },
+  pauseIcon: { fontSize: 14, color: C.paper },
   hudSecondRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8
   },
   treatsPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: C.hudPill,
     borderRadius: R.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 3
+    paddingHorizontal: 9,
+    paddingVertical: 2
   },
-  treatsText: { fontFamily: F.bold, fontSize: 13, color: C.paper, fontVariant: ['tabular-nums'] },
+  treatIconImg: { width: 16, height: 14 },
+  treatsText: { fontFamily: F.bold, fontSize: 12, color: C.paper, fontVariant: ['tabular-nums'] },
+  progressBarWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  progressHeadBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFF8ED',
+    borderWidth: 1.5,
+    borderColor: C.ink,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -6,
+    zIndex: 2
+  },
   progressTrack: {
     flex: 1,
-    height: 14,
+    height: 13,
     borderRadius: R.progress,
     borderWidth: 2,
     borderColor: C.ink,
@@ -826,29 +887,29 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8
+    gap: 6
   },
-  multText: { fontFamily: F.bold, fontSize: 16, color: C.amber },
+  multText: { fontFamily: F.bold, fontSize: 15, color: C.amber },
   goalChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+    paddingHorizontal: 9,
+    paddingVertical: 2,
     borderRadius: R.pill,
     backgroundColor: C.hudPill
   },
   goalChipDone: { backgroundColor: C.limeDark },
-  goalChipText: { fontFamily: F.semibold, fontSize: 12, color: C.paper },
+  goalChipText: { fontFamily: F.semibold, fontSize: 11, color: C.paper },
   vertMeterWrap: {
     position: 'absolute',
     left: 10,
-    top: 86,
+    top: 84,
     alignItems: 'center',
     gap: 2,
     zIndex: 4
   },
   vertMeterTop: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: C.hudTrack,
     borderWidth: 1.5,
     borderColor: C.ink,
@@ -856,8 +917,8 @@ const s = StyleSheet.create({
     justifyContent: 'center'
   },
   vertMeterTrack: {
-    width: 10,
-    height: 78,
+    width: 9,
+    height: 68,
     borderRadius: 5,
     borderWidth: 1.5,
     borderColor: C.ink,
@@ -866,7 +927,7 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end'
   },
   vertMeterFill: { width: '100%', backgroundColor: C.lime },
-  powers: { position: 'absolute', top: 86, right: 10, flexDirection: 'row', gap: 4, zIndex: 4 },
+  powers: { position: 'absolute', top: 84, right: 10, flexDirection: 'row', gap: 4, zIndex: 4 },
   controlsOverlay: {
     position: 'absolute',
     left: 16,
@@ -878,27 +939,9 @@ const s = StyleSheet.create({
     zIndex: 6
   },
   ctrlLeftGroup: { flexDirection: 'row', gap: SP.ctrlGap },
-  circleBtn: {
-    width: 54,
-    height: 54,
-    borderRadius: R.pill,
-    borderWidth: INK_WIDTH,
-    borderColor: C.ink,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden'
-  },
-  circleBtnBlue: { backgroundColor: C.arcadeBlue },
+  spriteCtrlBtn: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
+  btnSprite: { width: 50, height: 50 },
   circleBtnPressed: { transform: [{ scale: 0.94 }] },
-  circleGloss: {
-    position: 'absolute',
-    top: 3,
-    left: 10,
-    right: 10,
-    height: 7,
-    borderRadius: 6,
-    backgroundColor: 'rgba(255,255,255,0.42)'
-  },
   countdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9, elevation: 9, alignItems: 'center', justifyContent: 'center' },
   countdownBubble: { width: 84, height: 84, borderRadius: 42, borderWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.butter, alignItems: 'center', justifyContent: 'center' },
   countdownText: { fontFamily: F.bold, fontSize: 44, color: C.ink },
