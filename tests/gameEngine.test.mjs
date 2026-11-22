@@ -28,6 +28,7 @@ import {
   CHASE_HIT_DROP,
   JUMP_V,
   DOUBLE_JUMP_V,
+  MAX_JUMP_HEIGHT,
   resultOf,
   visible,
   PLAYER_H,
@@ -38,6 +39,7 @@ import {
 } from '../src/game/engine.js';
 import {
   STAGES,
+  OBSTACLES,
   stagesFor,
   dailyStage,
   endlessStage,
@@ -601,4 +603,34 @@ test('instructions overlay shows only for the first 2 runs of each mode', () => 
   assert.equal(shouldShowHowTo(runs, chase), true);
   runs = recordModeRun(recordModeRun(runs, chase), chase);
   assert.equal(shouldShowHowTo(runs, chase), false);
+});
+
+test('left/right controls accelerate player position, double-jump caps at MAX_JUMP_HEIGHT, and endless/chase use bench & trash obstacles', () => {
+  const endless = endlessStage('cat');
+  const chase = chaseStage('cat');
+  assert.deepEqual(Object.keys(endless.obstacles).sort(), ['bench', 'trash']);
+  assert.deepEqual(Object.keys(chase.obstacles).sort(), ['bench', 'trash']);
+  assert.equal(OBSTACLES.bench.lane, 'low');
+  assert.equal(OBSTACLES.trash.lane, 'low');
+
+  const base = newRun(endless, { seed: 7 });
+  assert.ok(base.entities.some((e) => e.kind === 'obstacle' && (e.type === 'bench' || e.type === 'trash')));
+
+  let rRight = base;
+  let rLeft = base;
+  for (let i = 0; i < 15; i++) {
+    rRight = step({ ...rRight, entities: [] }, DT, { right: true });
+    rLeft = step({ ...rLeft, entities: [] }, DT, { left: true });
+  }
+  assert.ok(rRight.player.xOffset > 0);
+  assert.ok(rLeft.player.xOffset < 0);
+  assert.ok(rRight.dist > rLeft.dist);
+
+  let rAir = step({ ...base, entities: [] }, DT, { jump: true });
+  let peak = rAir.player.height;
+  for (let i = 0; i < 12; i++) {
+    rAir = step({ ...rAir, entities: [] }, DT, { jump: i === 6 || i === 9 });
+    peak = Math.max(peak, rAir.player.height);
+  }
+  assert.ok(peak <= MAX_JUMP_HEIGHT);
 });

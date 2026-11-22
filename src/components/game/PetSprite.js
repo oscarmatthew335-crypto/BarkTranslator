@@ -42,13 +42,13 @@ function PetSprite({
 
   const duck = pose === 'duck';
   const isJump = pose === 'jump';
-  const a = (Number(phase) || 0) * 1.35;
+  const a = (Number(phase) || 0) * 1.85;
   const strideSin = Math.sin(a);
-  const strideCos = Math.cos(a);
-  const bobY = isJump ? 0 : pose === 'hurt' ? 2 : Math.abs(strideSin) * -3.5;
-  const pitch = isJump ? -8 : pose === 'hurt' ? 6 : strideSin * 5;
-  const legStretchX = isJump ? 1.04 : 1 + strideCos * 0.04;
-  const legStretchY = isJump ? 1.0 : 1 - strideSin * 0.04;
+  const bounce = Math.abs(Math.sin(a * 0.5));
+  const bobY = isJump ? 0 : pose === 'hurt' ? 2 : -bounce * 6.5;
+  const pitch = isJump ? -13 : pose === 'hurt' ? 6 : Math.cos(a * 0.5) * 7.5 - 2.5;
+  const legStretchX = isJump ? 1.09 : 1 + strideSin * 0.095;
+  const legStretchY = isJump ? 0.93 : 1 - strideSin * 0.085;
 
   const hatItem = getItem(shownEquipped.hat);
   const glassesItem = getItem(shownEquipped.glasses);
@@ -56,7 +56,7 @@ function PetSprite({
   const collarItem = getItem(shownEquipped.collar);
 
   const transformParts = [];
-  if (duck) transformParts.push('translate(0 16) scale(1.06 0.64)');
+  if (duck) transformParts.push('translate(0 16) scale(1.12 0.64)');
   else {
     if (bobY) transformParts.push(`translate(0 ${bobY.toFixed(2)})`);
     transformParts.push(`rotate(${pitch.toFixed(1)} 28 28)`);
@@ -66,7 +66,7 @@ function PetSprite({
   return (
     <G>
       {/* Contact shadow under feet on ground when running */}
-      {!isJump ? <Ellipse cx={28} cy={44} rx={18} ry={3} fill="rgba(36,29,59,0.22)" /> : null}
+      {!isJump ? <Ellipse cx={28} cy={44} rx={(18 * (1 - bounce * 0.14)).toFixed(1)} ry={3} fill="rgba(36,29,59,0.22)" /> : null}
 
       {/* Painted sprint dust puff behind hind paws */}
       {pose === 'run' && strideSin > 0.25 ? (

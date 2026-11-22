@@ -17,7 +17,8 @@ export const PLAYER_H = 40;
 export const DUCK_H = 22;
 export const GRAVITY = 1900;
 export const JUMP_V = 700;
-export const DOUBLE_JUMP_V = 540; // smaller second jump while in the air
+export const DOUBLE_JUMP_V = 440; // snappier second jump while in the air
+export const MAX_JUMP_HEIGHT = 124; // prevents floating high into the top HUD
 export const JUMP_BUFFER = 0.12; // a tap just before landing still jumps
 export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
 export const HIT_INVULN_S = 1.2;
@@ -75,7 +76,7 @@ export function overlaps(a, b) {
 // is { x, y: bottom, w, h }. A little smaller than the drawing, to be kind.
 export function playerBox(player, dist) {
   const h = player.ducking && player.height <= 0 ? DUCK_H : PLAYER_H;
-  return { x: dist + 6, y: player.height + 2, w: PLAYER_W - 12, h: h - 6 };
+  return { x: dist + (player.xOffset || 0) + 6, y: player.height + 2, w: PLAYER_W - 12, h: h - 6 };
 }
 
 export function entityBox(e) {
@@ -350,7 +351,7 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     generatedTo: isChunked ? 420 : level.length,
     chunkIndex: 0,
     nextEntityId: isChunked ? 0 : level.entities.length,
-    player: { height: 0, vy: 0, ducking: false, duckTimer: 0, jumpBuffer: 0, doubleJumped: false },
+    player: { height: 0, vy: 0, xOffset: 0, vx: 0, ducking: false, duckTimer: 0, jumpBuffer: 0, doubleJumped: false },
     treats: 0,
     collected: 0,
     combo: 0,
@@ -407,7 +408,7 @@ export function currentSpeed(run) {
 }
 
 // input: { jump: true on the frame the player tapped, duck: true while held,
-// swipeDuck: true on the frame of a swipe down }
+// swipeDuck: true on the frame of a swipe down, left: true while held, right: true while held }
 export function step(run, dt, input = {}) {
   if (run.done) return run;
   dt = Math.min(Math.max(dt, 0), 1 / 20);
@@ -427,6 +428,17 @@ export function step(run, dt, input = {}) {
   slow = Math.max(0, slow - dt);
   nearMissTimer = Math.max(0, nearMissTimer - dt);
 
+  // horizontal Left / Right movement with crisp acceleration
+  if (input.right && !input.left) {
+    player.vx = Math.min(165, (player.vx || 0) + 950 * dt);
+  } else if (input.left && !input.right) {
+    player.vx = Math.max(-150, (player.vx || 0) - 950 * dt);
+  } else {
+    player.vx = (player.vx || 0) * Math.max(0, 1 - 12 * dt);
+    if (Math.abs(player.vx) < 2) player.vx = 0;
+  }
+  player.xOffset = Math.max(-34, Math.min(82, (player.xOffset || 0) + (player.vx || 0) * dt));
+
   // pet movement
   if (input.swipeDuck) player.duckTimer = SWIPE_DUCK_S;
   else player.duckTimer = Math.max(0, player.duckTimer - dt);
@@ -434,7 +446,7 @@ export function step(run, dt, input = {}) {
 
   // Check if the pet is just about to land on this frame, so a pre-landing tap
   // buffers a full ground jump instead of consuming the air double-jump.
-  const nextVy = player.vy - GRAVITY * dt * (wantDuck ? 2 : 1);
+  const nextVy = player.vy - GRAVITY * dt * (wantDuck ? 2.2 : player.doubleJumped && player.vy < 0 ? 1.35 : 1.0);
   const landsThisStep = player.height > 0 && player.height + nextVy * dt <= 0;
 
   if (input.jump) player.jumpBuffer = JUMP_BUFFER;
@@ -455,9 +467,11 @@ export function step(run, dt, input = {}) {
     events.push('doubleJump');
   }
   if (player.height > 0 || player.vy > 0) {
-    // Ducking in the air drops the pet faster.
-    player.vy -= GRAVITY * dt * (wantDuck ? 2 : 1);
-    player.height = Math.max(0, player.height + player.vy * dt);
+    // Ducking or double-jump descent applies snappier gravity so jumps feel crisp, not floaty.
+    const fallMult = wantDuck ? 2.2 : player.doubleJumped && player.vy < 0 ? 1.35 : 1.0;
+    player.vy -= GRAVITY * dt * fallMult;
+    player.height = Math.min(MAX_JUMP_HEIGHT, Math.max(0, player.height + player.vy * dt));
+    if (player.height >= MAX_JUMP_HEIGHT && player.vy > 0) player.vy = 0;
     if (player.height === 0) {
       player.vy = 0;
       player.doubleJumped = false;
@@ -465,7 +479,8 @@ export function step(run, dt, input = {}) {
   }
   player.ducking = wantDuck && player.height <= 0;
 
-  const speed = currentSpeed({ ...run, power, slow });
+  const moveScale = input.right && !input.left ? 1.24 : input.left && !input.right ? 0.84 : 1;
+  const speed = currentSpeed({ ...run, power, slow }) * moveScale;
   const dist = run.dist + speed * dt;
   const t = run.t + dt;
 

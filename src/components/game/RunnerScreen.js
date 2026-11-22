@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Pressable, Image, StyleSheet, AppState, PanResponder, useWindowDimensions, BackHandler } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet, AppState, PanResponder, BackHandler } from 'react-native';
 import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line, Path } from 'react-native-svg';
 import { C, F, INK_WIDTH, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
@@ -81,7 +81,7 @@ export default function RunnerScreen({
   const { t } = useI18n();
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
-  const input = useRef({ jump: false, duck: false, swipeDuck: false });
+  const input = useRef({ jump: false, duck: false, swipeDuck: false, left: false, right: false });
   const pausedRef = useRef(true);
   const particlesRef = useRef([]);
   const [paused, setPaused] = useState(Boolean(showHowTo));
@@ -90,11 +90,11 @@ export default function RunnerScreen({
   const [continuePrompt, setContinuePrompt] = useState(false);
   const [continueBusy, setContinueBusy] = useState(false);
   const [continueTimer, setContinueTimer] = useState(CONTINUE_RING_SECONDS);
-  const [duckPressed, setDuckPressed] = useState(false);
+  const [leftPressed, setLeftPressed] = useState(false);
+  const [rightPressed, setRightPressed] = useState(false);
   const [jumpPressed, setJumpPressed] = useState(false);
   const [, setTick] = useState(0);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const { height: winHeight } = useWindowDimensions();
   const finishRef = useRef(onFinish);
   finishRef.current = onFinish;
   const fpsRef = useRef(onFps);
@@ -104,9 +104,17 @@ export default function RunnerScreen({
   const trackRef = useRef(onTrack);
   trackRef.current = onTrack;
 
+  const resetInputs = () => {
+    input.current = { jump: false, duck: false, swipeDuck: false, left: false, right: false };
+    setLeftPressed(false);
+    setRightPressed(false);
+    setJumpPressed(false);
+  };
+
   const setPause = (p) => {
     pausedRef.current = p;
     setPaused(p);
+    if (p) resetInputs();
   };
 
   const continueRef = useRef(false);
@@ -134,7 +142,7 @@ export default function RunnerScreen({
     if (countdown === null || paused) return;
     if (reduceMotion) {
       const tm = setTimeout(() => {
-        input.current = { jump: false, duck: false, swipeDuck: false };
+        resetInputs();
         setCountdown(null);
         setStarted(true);
         pausedRef.current = false;
@@ -142,7 +150,7 @@ export default function RunnerScreen({
       return () => clearTimeout(tm);
     }
     if (countdown <= 0) {
-      input.current = { jump: false, duck: false, swipeDuck: false };
+      resetInputs();
       setCountdown(null);
       setStarted(true);
       pausedRef.current = false;
@@ -169,13 +177,14 @@ export default function RunnerScreen({
           let pool = particlesRef.current
             .map((p) => ({ ...p, age: p.age + dt, x: p.x + p.vx * dt, y: p.y + p.vy * dt }))
             .filter((p) => p.age < p.life);
+          const px = PLAYER_X + CAM_SHIFT_X + (next.player.xOffset || 0);
           const py = GROUND - next.player.height - 4;
           for (const ev of next.events) {
-            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 18, py);
-            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 20, GROUND - 3);
-            else if (ev === 'collect') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 34, py - 20);
-            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 10, py - 18);
-            else if (ev === 'smash') pool = spawnParticles(pool, ev, PLAYER_X + CAM_SHIFT_X + 40, py - 16);
+            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, px + 18, py);
+            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, px + 20, GROUND - 3);
+            else if (ev === 'collect') pool = spawnParticles(pool, ev, px + 34, py - 20);
+            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, px + 10, py - 18);
+            else if (ev === 'smash') pool = spawnParticles(pool, ev, px + 40, py - 16);
           }
           particlesRef.current = pool;
         } else if (particlesRef.current.length) {
@@ -214,7 +223,7 @@ export default function RunnerScreen({
   }, []);
 
   const begin = () => {
-    input.current = { jump: false, duck: false, swipeDuck: false };
+    resetInputs();
     setStarted(true);
     if (countdown !== null) {
       setPaused(false);
@@ -228,7 +237,7 @@ export default function RunnerScreen({
     count('continuesTaken');
     trackRef.current?.('continue_taken', { stage_id: stage.id, method });
     runRef.current = continueRun(runRef.current);
-    input.current = { jump: false, duck: false, swipeDuck: false };
+    resetInputs();
     setContinuePrompt(false);
     setPaused(false);
     pausedRef.current = true;
@@ -317,19 +326,25 @@ export default function RunnerScreen({
     : run.stage.daily
     ? Math.min(1, run.t / run.stage.seconds)
     : Math.min(1, run.dist / run.length);
-  const playerX = PLAYER_X + CAM_SHIFT_X; // 88 inside zoomed 276-wide view
-  const chaserX = run.stage.chase ? Math.round(4 + (1 - progress) * (playerX - 42)) : 0;
+  const basePlayerX = PLAYER_X + CAM_SHIFT_X; // 88 inside zoomed 276-wide view
+  const playerX = basePlayerX + (run.player.xOffset || 0);
+  const chaserX = run.stage.chase ? Math.round(4 + (1 - progress) * (basePlayerX - 42)) : 0;
   const showChaser = Boolean(run.stage.chase);
   const showProgressTrack = Boolean(run.stage.chase || !run.stage.endless);
   const lowGap = Boolean(run.stage.chase && progress < 0.3);
   const meterFlash = lowGap && !reduceMotion && Math.floor(run.t * 8) % 2 === 1;
   const chaserBounce = lowGap && !reduceMotion ? Math.abs(Math.sin(run.t * 14)) * 4 : 0;
   const { width, height } = size;
-  const cardMaxH = Math.min(480, Math.max(360, Math.round(winHeight * 0.7)));
+  const CAM_W = 276;
+  const aspect = width > 0 && height > 0 ? Math.max(1.03, Math.min(2.4, height / width)) : 1.75;
+  const totalViewH = Math.round(CAM_W * aspect);
+  const bottomSoilH = 74;
+  const viewMaxY = GROUND + bottomSoilH;
+  const viewMinY = viewMaxY - totalViewH;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
   const shownBest = Math.max(bestScore || 0, run.score || 0);
-  const maxStageSpeed = run.stage.endless ? 380 : run.stage.speedEnd || run.stage.speed || 260;
+  const maxStageSpeed = run.stage.endless ? 410 : run.stage.speedEnd || run.stage.speed || 260;
   const panting = currentSpeed(run) > maxStageSpeed * 0.75;
   const happy = nearMissFresh || (run.treatStreak || 0) >= 3;
   const dashWarning = things.some((e) => (e.type === 'catDash' || e.type === 'dogDash') && e.sx > VIEW_W - 60);
@@ -342,20 +357,18 @@ export default function RunnerScreen({
 
   return (
     <View style={s.wrap}>
-      <View style={[s.cardOuter, { maxHeight: cardMaxH }]}>
-        <View style={s.cardShadow} />
+      <View
+        style={s.stage}
+        onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+      >
         <View
-          style={s.stage}
-          onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+          style={s.touchCanvas}
+          {...(!paused && !continuePrompt ? pan.panHandlers : {})}
+          accessible={!paused && countdown === null}
+          accessibilityLabel={t('game.playAreaA11y')}
         >
-          <View
-            style={s.touchCanvas}
-            {...(!paused && !continuePrompt ? pan.panHandlers : {})}
-            accessible={!paused && countdown === null}
-            accessibilityLabel={t('game.playAreaA11y')}
-          >
-            {width > 0 && (
-              <Svg width={width} height={height} viewBox="0 -22 276 284" preserveAspectRatio="xMidYMid slice">
+          {width > 0 && (
+            <Svg width={width} height={height} viewBox={`0 ${viewMinY} ${CAM_W} ${totalViewH}`} preserveAspectRatio="xMidYMax slice">
                 <Defs>
                   <ClipPath id="face">
                     <Circle cx={0} cy={0} r={9} />
@@ -571,45 +584,44 @@ export default function RunnerScreen({
             </View>
           )}
 
-          {/* Painted Circular Arcade Controls wired strictly to original Duck/Slide & Jump inputs */}
+          {/* Painted Circular Arcade Controls wired to Left / Right / Jump inputs */}
           {showJumpDuckButtons ? (
             <View style={s.controlsOverlay} pointerEvents="box-none">
               <View style={s.ctrlLeftGroup}>
                 <Pressable
-                  style={[s.spriteCtrlBtn, duckPressed && s.circleBtnPressed]}
+                  style={[s.spriteCtrlBtn, leftPressed && s.circleBtnPressed]}
                   onPressIn={() => {
-                    setDuckPressed(true);
-                    input.current.duck = true;
+                    setLeftPressed(true);
+                    input.current.left = true;
                   }}
                   onPressOut={() => {
-                    setDuckPressed(false);
-                    input.current.duck = false;
+                    setLeftPressed(false);
+                    input.current.left = false;
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={t('game.duck')}
+                  accessibilityLabel="Move left"
                 >
                   <Image source={SPRITES.btnLeft} style={s.btnSprite} resizeMode="contain" />
                 </Pressable>
                 <Pressable
-                  style={[s.spriteCtrlBtn, { opacity: duckPressed ? 1 : 0.72 }, duckPressed && s.circleBtnPressed]}
+                  style={[s.spriteCtrlBtn, rightPressed && s.circleBtnPressed]}
                   onPressIn={() => {
-                    setDuckPressed(true);
-                    input.current.duck = true;
-                    input.current.swipeDuck = true;
+                    setRightPressed(true);
+                    input.current.right = true;
                   }}
                   onPressOut={() => {
-                    setDuckPressed(false);
-                    input.current.duck = false;
+                    setRightPressed(false);
+                    input.current.right = false;
                   }}
                   accessibilityRole="button"
-                  accessibilityLabel={t('game.duck')}
+                  accessibilityLabel="Move right"
                 >
                   <Image source={SPRITES.btnLeft} style={[s.btnSprite, { transform: [{ scaleX: -1 }] }]} resizeMode="contain" />
                 </Pressable>
               </View>
 
               <Pressable
-                style={[s.spriteCtrlBtn, { opacity: jumpPressed ? 1 : 0.85 }, jumpPressed && s.circleBtnPressed]}
+                style={[s.spriteCtrlBtn, jumpPressed && s.circleBtnPressed]}
                 onPressIn={() => {
                   setJumpPressed(true);
                   input.current.jump = true;
@@ -709,7 +721,6 @@ export default function RunnerScreen({
               </View>
             </View>
           )}
-        </View>
       </View>
     </View>
   );
@@ -739,32 +750,12 @@ const NameTag = React.memo(function NameTag({ name, faceUri }) {
 const s = StyleSheet.create({
   wrap: {
     flex: 1,
-    backgroundColor: C.bg,
-    padding: 12,
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  cardOuter: {
-    width: '100%',
-    aspectRatio: 0.92,
-    paddingRight: 4,
-    paddingBottom: 4
-  },
-  cardShadow: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    right: 0,
-    bottom: 0,
-    borderRadius: R.viewport,
-    backgroundColor: C.shadow
+    backgroundColor: '#9AD9F2'
   },
   stage: {
     flex: 1,
-    borderRadius: R.viewport,
-    borderWidth: INK_WIDTH,
-    borderColor: C.ink,
-    backgroundColor: C.paper,
+    width: '100%',
+    backgroundColor: '#9AD9F2',
     overflow: 'hidden'
   },
   touchCanvas: {
@@ -777,7 +768,7 @@ const s = StyleSheet.create({
   },
   hudOverlay: {
     position: 'absolute',
-    top: 8,
+    top: 10,
     left: SP.hudPadX,
     right: SP.hudPadX,
     zIndex: 6,
@@ -938,7 +929,7 @@ const s = StyleSheet.create({
   vertMeterWrap: {
     position: 'absolute',
     left: 10,
-    top: 84,
+    top: 96,
     alignItems: 'center',
     gap: 2,
     zIndex: 4
@@ -964,20 +955,20 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end'
   },
   vertMeterFill: { width: '100%', backgroundColor: C.lime },
-  powers: { position: 'absolute', top: 84, right: 10, flexDirection: 'row', gap: 4, zIndex: 4 },
+  powers: { position: 'absolute', top: 96, right: 10, flexDirection: 'row', gap: 4, zIndex: 4 },
   controlsOverlay: {
     position: 'absolute',
     left: 16,
     right: 16,
-    bottom: 12,
+    bottom: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 6
   },
   ctrlLeftGroup: { flexDirection: 'row', gap: SP.ctrlGap },
-  spriteCtrlBtn: { width: 50, height: 50, alignItems: 'center', justifyContent: 'center' },
-  btnSprite: { width: 50, height: 50 },
+  spriteCtrlBtn: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center' },
+  btnSprite: { width: 52, height: 52 },
   circleBtnPressed: { transform: [{ scale: 0.94 }] },
   countdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9, elevation: 9, alignItems: 'center', justifyContent: 'center' },
   countdownBubble: { width: 84, height: 84, borderRadius: 42, borderWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.butter, alignItems: 'center', justifyContent: 'center' },

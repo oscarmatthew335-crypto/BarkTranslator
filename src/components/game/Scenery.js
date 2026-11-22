@@ -85,15 +85,16 @@ const PROP_GAP = 240;
 
 function Prop({ type, index = 0 }) {
   if (type === 'tree' || type === 'bench') {
-    return index % 2 === 0 ? (
+    return (
       <G>
-        <SvgImage href={SPRITES.bench} x={-52} y={-48} width={104} height={64} preserveAspectRatio="xMidYMax meet" />
-        <SvgImage href={SPRITES.trashCan} x={68} y={-36} width={38} height={42} preserveAspectRatio="xMidYMax meet" />
-      </G>
-    ) : (
-      <G>
-        <SvgImage href={SPRITES.treesCluster} x={-54} y={-92} width={108} height={106} preserveAspectRatio="xMidYMax meet" />
-        <SvgImage href={SPRITES.bench} x={56} y={-48} width={104} height={64} preserveAspectRatio="xMidYMax meet" />
+        <SvgImage
+          href={SPRITES.treesCluster}
+          x={index % 2 === 0 ? -54 : -42}
+          y={index % 2 === 0 ? -92 : -84}
+          width={index % 2 === 0 ? 108 : 96}
+          height={index % 2 === 0 ? 106 : 98}
+          preserveAspectRatio="xMidYMax meet"
+        />
       </G>
     );
   }
@@ -153,8 +154,14 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
   if (th.painted) {
     return (
       <G>
-        {/* Sky & soil extension fills for any screen aspect */}
-        <Rect x={-40} y={-1200} width={VIEW_W + 80} height={1220} fill={th.skyTop} />
+        <Defs>
+          <LinearGradient id="paintedSkyGrad" x1="0" y1="0" x2="0" y2="1">
+            <Stop offset="0%" stopColor="#9AD9F2" />
+            <Stop offset="100%" stopColor="#E0F1F4" />
+          </LinearGradient>
+        </Defs>
+        {/* Seamless sky & soil extension fills for full-screen portrait viewport */}
+        <Rect x={-40} y={-800} width={VIEW_W + 80} height={782} fill="url(#paintedSkyGrad)" />
         <Rect x={-40} y={GROUND + 20} width={VIEW_W + 80} height={240} fill="#5C3A21" />
         {/* Painted base park illustration aligned so footpath sits right at GROUND = 186 */}
         <SvgImage

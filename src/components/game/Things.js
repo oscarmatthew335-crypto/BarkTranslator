@@ -15,58 +15,33 @@ function Thing({ kind, type, w, h }) {
   return Art ? <Art w={w} h={h} /> : <Rect width={w} height={h} rx={6} fill={C.tomato} stroke={INK} strokeWidth={SW} />;
 }
 
+function benchArt({ w, h }) {
+  return (
+    <G>
+      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.52} ry={3.5} fill="rgba(36,29,59,0.22)" />
+      <SvgImage href={SPRITES.bench} x={-4} y={-6} width={w + 8} height={h + 10} preserveAspectRatio="none" />
+    </G>
+  );
+}
+
+function trashArt({ w, h }) {
+  return (
+    <G>
+      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.5} ry={3.5} fill="rgba(36,29,59,0.22)" />
+      <SvgImage href={SPRITES.trashCan} x={-3} y={-4} width={w + 6} height={h + 8} preserveAspectRatio="none" />
+    </G>
+  );
+}
+
 const OBSTACLE_ART = {
-  puddle: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2} cy={h / 2 + 2} rx={w / 2} ry={h / 2 + 1} fill={C.arcadeBlue} stroke={INK} strokeWidth={SW} />
-      <Ellipse cx={w / 2 - 8} cy={h / 2} rx={8} ry={2.4} fill="#BDEBFF" />
-    </G>
-  ),
-  vacuum: ({ w, h }) => (
-    <G>
-      <Path d={`M${w - 8} ${h - 14} L${w - 2} 0`} stroke={INK} strokeWidth={3} strokeLinecap="round" />
-      <Rect x={2} y={h - 24} width={w - 10} height={18} rx={9} fill={C.coral} stroke={INK} strokeWidth={SW} />
-      <Circle cx={10} cy={h - 4} r={4} fill={INK} />
-      <Circle cx={w - 16} cy={h - 4} r={4} fill={INK} />
-      <Rect x={8} y={h - 20} width={12} height={5} rx={2.5} fill={C.butter} />
-    </G>
-  ),
-  sprinkler: ({ w, h }) => (
-    <G>
-      <Path d={`M2 ${h} Q ${w / 2} -6 ${w - 2} ${h}`} stroke={C.arcadeBlue} strokeWidth={5} fill="none" strokeLinecap="round" />
-      <Path d={`M8 ${h} Q ${w / 2} 4 ${w - 8} ${h}`} stroke="#BDEBFF" strokeWidth={3} fill="none" strokeLinecap="round" />
-      <Circle cx={6} cy={h - 4} r={3} fill={C.arcadeBlue} />
-      <Circle cx={w - 6} cy={h - 2} r={3} fill={C.arcadeBlue} />
-      <Rect x={w / 2 - 4} y={h + 22} width={8} height={8} rx={2} fill={C.lime} stroke={INK} strokeWidth={1.5} />
-      <Line x1={w / 2} y1={h + 22} x2={w / 2} y2={h + 4} stroke={C.arcadeBlue} strokeWidth={2} strokeDasharray="3 3" />
-    </G>
-  ),
-  postman: ({ w, h }) => (
-    <G>
-      <Path d={`M${w} ${h / 2} L${w + 18} ${h / 2 - 4}`} stroke="#1E5AA8" strokeWidth={7} strokeLinecap="round" />
-      <Circle cx={w + 26} cy={h / 2 - 10} r={9} fill="#F2C9A0" stroke={INK} strokeWidth={SW} />
-      <Rect x={w + 17} y={h / 2 - 22} width={18} height={6} rx={2} fill="#1E5AA8" stroke={INK} strokeWidth={1.5} />
-      <Rect x={2} y={2} width={w - 4} height={h - 4} rx={4} fill="#C99A62" stroke={INK} strokeWidth={SW} />
-      <Line x1={w / 2} y1={2} x2={w / 2} y2={h - 2} stroke="#8C6239" strokeWidth={3} />
-    </G>
-  ),
-  cucumber: ({ w, h }) => (
-    <G>
-      <Rect x={1} y={1} width={w - 2} height={h - 2} rx={h / 2} fill="#4CAF50" stroke={INK} strokeWidth={SW} />
-      <Circle cx={12} cy={h / 2 - 2} r={1.6} fill="#A5D6A7" />
-      <Circle cx={22} cy={h / 2 + 2} r={1.6} fill="#A5D6A7" />
-      <Circle cx={32} cy={h / 2 - 1} r={1.6} fill="#A5D6A7" />
-    </G>
-  ),
-  spray: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2 - 4} cy={h / 2} rx={w / 2 - 6} ry={h / 2 - 3} fill="#BDEBFF" stroke={C.arcadeBlue} strokeWidth={3} />
-      <Circle cx={8} cy={6} r={3} fill={C.arcadeBlue} />
-      <Circle cx={4} cy={h - 6} r={2.5} fill={C.arcadeBlue} />
-      <Rect x={w - 8} y={h / 2 - 5} width={14} height={10} rx={2} fill={C.pink} stroke={INK} strokeWidth={1.8} />
-      <Rect x={w + 2} y={h / 2 - 1} width={10} height={20} rx={3} fill={C.pink} stroke={INK} strokeWidth={1.8} />
-    </G>
-  ),
+  bench: benchArt,
+  trash: trashArt,
+  puddle: benchArt,
+  vacuum: benchArt,
+  sprinkler: trashArt,
+  postman: benchArt,
+  cucumber: trashArt,
+  spray: trashArt,
   dog: ({ w, h }) => (
     <G transform={`translate(${w} 0) scale(-1 1)`}>
       <SvgImage href={SPRITES.dogChaser} x={0} y={-2} width={w + 8} height={h + 4} preserveAspectRatio="xMidYMid meet" />
@@ -132,15 +107,16 @@ function PowerBox({ type }) {
 export function Chaser({ chaser, phase = 0 }) {
   const id = chaser?.id || 'bath';
   if (id === 'dog') {
-    const a = (Number(phase) || 0) * 1.45;
-    const bob = Math.sin(a * 2) * 2.2;
-    const pitch = Math.sin(a) * 5;
-    const stretchX = 1 + Math.cos(a) * 0.04;
-    const stretchY = 1 - Math.sin(a) * 0.04;
+    const a = (Number(phase) || 0) * 1.9;
+    const bounce = Math.abs(Math.sin(a * 0.5));
+    const bob = -bounce * 5.5;
+    const pitch = Math.cos(a * 0.5) * 7;
+    const stretchX = 1 + Math.sin(a) * 0.085;
+    const stretchY = 1 - Math.sin(a) * 0.075;
 
     return (
       <G>
-        <Ellipse cx={24} cy={39} rx={19} ry={3.5} fill="rgba(36,29,59,0.24)" />
+        <Ellipse cx={24} cy={39} rx={(19 * (1 - bounce * 0.14)).toFixed(1)} ry={3.5} fill="rgba(36,29,59,0.24)" />
         {Math.sin(a) > 0.2 ? (
           <SvgImage href={SPRITES.dustPuff} x={-22} y={24} width={28} height={14} preserveAspectRatio="xMidYMid meet" />
         ) : null}
