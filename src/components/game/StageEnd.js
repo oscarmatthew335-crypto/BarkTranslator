@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Image, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { C, F } from '../../theme';
+import { C, F, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton } from '../ui';
 import { Stars } from './StageMap';
@@ -60,8 +60,8 @@ export default function StageEnd({
 
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
-      <Sticker radius={26} color={C.butter} innerStyle={s.card}>
-        {faceUri ? <Image source={{ uri: faceUri }} style={s.face} accessibilityIgnoresInvertColors /> : <PetPreview species={pet.species} wardrobe={wardrobe} size={100} />}
+      <Sticker radius={R.viewport} color={C.butter} innerStyle={s.card}>
+        {faceUri ? <Image source={{ uri: faceUri }} style={s.face} accessibilityIgnoresInvertColors /> : <PetPreview species={pet.species} wardrobe={wardrobe} size={108} pose="front" />}
         <Text style={s.title} maxFontSizeMultiplier={1.5}>
           {result.chase
             ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })
@@ -204,31 +204,31 @@ export default function StageEnd({
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  content: { padding: 18, paddingBottom: 36 },
+  content: { paddingHorizontal: SP.screenX, paddingTop: 16, paddingBottom: 36 },
   card: { padding: 18, alignItems: 'center', gap: 4 },
   face: { width: 88, height: 88, borderRadius: 44, borderWidth: 3, borderColor: C.ink, marginBottom: 4 },
   title: { fontFamily: F.bold, fontSize: 24, color: C.ink, textAlign: 'center' },
-  big: { fontFamily: F.bold, fontSize: 34, color: C.ink },
-  nearMissBig: { fontFamily: F.bold, fontSize: 20, color: C.tomato, textAlign: 'center', marginTop: 2 },
+  big: { fontFamily: F.bold, fontSize: 34, color: C.ink, fontVariant: ['tabular-nums'] },
+  nearMissBig: { fontFamily: F.bold, fontSize: 20, color: C.coral, textAlign: 'center', marginTop: 2 },
   line: { fontFamily: F.medium, fontSize: 16, color: C.ink, textAlign: 'center' },
   bold: { fontFamily: F.bold },
   milestonePill: {
     marginTop: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: R.pill,
     borderWidth: 2,
     borderColor: C.ink,
     backgroundColor: C.paper
   },
   milestoneText: { fontFamily: F.bold, fontSize: 15, color: C.ink },
-  quoteBox: { marginTop: 6, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper },
+  quoteBox: { marginTop: 6, marginBottom: 4, paddingHorizontal: 14, paddingVertical: 8, borderRadius: R.hudPill, borderWidth: 2, borderColor: C.ink, backgroundColor: C.paper },
   quoteText: { fontFamily: F.semibold, fontSize: 15, color: C.ink, textAlign: 'center', lineHeight: 20 },
   buttons: { gap: 10, marginTop: 16 },
   unlockBox: { padding: 12, gap: 6 },
   unlockText: { fontFamily: F.semibold, fontSize: 14, color: C.ink },
-  unlockTrack: { height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.bg, overflow: 'hidden' },
-  unlockFill: { height: '100%', backgroundColor: C.mint },
+  unlockTrack: { height: 10, borderRadius: 5, borderWidth: 1.5, borderColor: C.ink, backgroundColor: C.hudTrack, overflow: 'hidden' },
+  unlockFill: { height: '100%', backgroundColor: C.lime },
   offer: { padding: 14 },
   offerTitle: { fontFamily: F.bold, fontSize: 17, color: C.ink },
   offerSub: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft, marginTop: 4, lineHeight: 19 },

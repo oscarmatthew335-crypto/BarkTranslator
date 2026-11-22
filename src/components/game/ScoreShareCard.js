@@ -1,6 +1,6 @@
 import React, { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { C, F, INK_WIDTH } from '../../theme';
+import { C, F, INK_WIDTH, R } from '../../theme';
 import { APP_NAME } from '../../species';
 import { useI18n } from '../../i18n';
 import { SCORE_SHARE_URL, formatShareHeadline, formatShareChallenge } from '../../game/shareScore';
@@ -40,7 +40,7 @@ const ScoreShareCard = forwardRef(function ScoreShareCard(
             {faceUri ? (
               <Image source={{ uri: faceUri }} style={s.facePhoto} />
             ) : (
-              <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={150} />
+              <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={150} pose="front" />
             )}
           </View>
           <Text style={s.headline} numberOfLines={2}>
@@ -77,6 +77,7 @@ const s = StyleSheet.create({
     width: W,
     height: H,
     backgroundColor: C.bg,
+    borderRadius: R.viewport,
     borderWidth: INK_WIDTH,
     borderColor: C.ink,
     overflow: 'hidden'
@@ -99,7 +100,7 @@ const s = StyleSheet.create({
   },
   petWrap: {
     backgroundColor: C.paper,
-    borderRadius: 999,
+    borderRadius: R.pill,
     borderWidth: INK_WIDTH,
     borderColor: C.ink,
     padding: 10,
@@ -128,7 +129,7 @@ const s = StyleSheet.create({
   },
   scorePill: {
     backgroundColor: C.butter,
-    borderRadius: 999,
+    borderRadius: R.pill,
     borderWidth: INK_WIDTH,
     borderColor: C.ink,
     paddingHorizontal: 22,
@@ -137,7 +138,8 @@ const s = StyleSheet.create({
   scoreText: {
     fontFamily: F.bold,
     fontSize: 28,
-    color: C.ink
+    color: C.ink,
+    fontVariant: ['tabular-nums']
   },
   footer: {
     position: 'absolute',
@@ -145,7 +147,7 @@ const s = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: 62,
-    backgroundColor: C.butter,
+    backgroundColor: C.bg,
     borderTopWidth: INK_WIDTH,
     borderTopColor: C.ink,
     flexDirection: 'row',
@@ -154,13 +156,15 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     gap: 8
   },
-  brand: { fontFamily: F.bold, fontSize: 18, color: C.ink },
+  brand: { fontFamily: F.bold, fontSize: 19, color: C.ink },
   link: { fontFamily: F.regular, fontSize: 9, color: C.inkSoft },
   store: {
-    backgroundColor: C.ink,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6
+    backgroundColor: C.butter,
+    borderRadius: R.pill,
+    borderWidth: INK_WIDTH,
+    borderColor: C.ink,
+    paddingHorizontal: 14,
+    paddingVertical: 7
   },
-  storeText: { fontFamily: F.semibold, fontSize: 12, color: C.paper }
+  storeText: { fontFamily: F.bold, fontSize: 13, color: C.ink }
 });

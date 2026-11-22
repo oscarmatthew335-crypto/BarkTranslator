@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Alert, Share } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import Svg from 'react-native-svg';
-import { C, F } from '../../theme';
+import { C, F, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
@@ -877,8 +877,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     <>
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
-      <Sticker radius={24} innerStyle={s.hero}>
-        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} />
+      <Sticker radius={R.viewport} innerStyle={s.hero}>
+        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} pose="front" />
         <View style={{ flex: 1, gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={s.heroLine} accessibilityLabel={t('game.treatsA11y', { n: game.bank })}>
@@ -1090,9 +1090,9 @@ function PhotoCard({ pet, situation, onPress }) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: C.bg },
-  content: { padding: 18, paddingBottom: 36 },
-  hero: { padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  heroLine: { fontFamily: F.bold, fontSize: 20, color: C.ink },
+  content: { paddingHorizontal: SP.screenX, paddingTop: 16, paddingBottom: 36 },
+  hero: { padding: SP.cardPad, flexDirection: 'row', alignItems: 'center', gap: 14 },
+  heroLine: { fontFamily: F.bold, fontSize: 20, color: C.ink, fontVariant: ['tabular-nums'] },
   heroSmall: { fontFamily: F.medium, fontSize: 13, color: C.ink, lineHeight: 18 },
   footnote: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 12, lineHeight: 17 },
   ready: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
@@ -1100,7 +1100,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 12 },
   notice: { padding: 12 },
   noticeText: { fontFamily: F.semibold, fontSize: 15, color: C.ink },
-  photoCard: { padding: 14 },
+  photoCard: { padding: SP.cardPad },
   photoTitle: { fontFamily: F.bold, fontSize: 17, color: C.ink, lineHeight: 23 },
   photoSub: { fontFamily: F.regular, fontSize: 13, color: C.inkSoft, marginTop: 2 },
   section: { fontFamily: F.bold, fontSize: 20, color: C.ink, marginTop: 18, marginBottom: 10 }

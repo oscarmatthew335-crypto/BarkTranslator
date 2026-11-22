@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
-import { C, F, INK_WIDTH } from '../../theme';
+import { C, F, INK_WIDTH, R, S } from '../../theme';
 import { useI18n } from '../../i18n';
 import { stagesFor, endlessStage, chaseStage, chaserFor, earnedMilestones } from '../../game/stages';
 import { isUnlocked } from '../../game/progress';
@@ -38,7 +38,7 @@ export function ModeCards({ species, bestScores = {}, livesStatus = null, onPlay
         accessibilityRole="button"
         accessibilityLabel={`${t('game.playButton')} · ${t('game.endless.title')}`}
       >
-        <Sticker radius={24} color={C.butter} innerStyle={s.bigPlay}>
+        <Sticker radius={R.viewport} color={C.butter} innerStyle={s.bigPlay}>
           <Text style={s.bigPlayEmoji}>▶️</Text>
           <View style={{ flex: 1 }}>
             <View style={s.modeTitleRow}>
@@ -61,7 +61,7 @@ export function ModeCards({ species, bestScores = {}, livesStatus = null, onPlay
 
       <Pressable
         onPress={() => onPlay(chase)}
-        style={[s.modeNode, { backgroundColor: C.pink }]}
+        style={[s.modeNode, { backgroundColor: C.pink }, S.card]}
         accessibilityRole="button"
         accessibilityLabel={t('game.chase.title')}
       >
@@ -104,7 +104,7 @@ export default function StageMap({ species, progress, onPlay, onLocked }) {
           <View key={stage.id} style={[s.row, { justifyContent: left ? 'flex-start' : 'flex-end' }]}>
             <Pressable
               onPress={() => (open ? onPlay(stage) : onLocked?.(stage, list[i - 1]))}
-              style={[s.node, { backgroundColor: open ? THEMES[stage.theme].ground : '#DDD6F0', opacity: open ? 1 : 0.75 }]}
+              style={[s.node, { backgroundColor: open ? THEMES[stage.theme].ground : C.tabInactive, opacity: open ? 1 : 0.78 }, open ? S.small : null]}
               accessibilityRole="button"
               accessibilityState={{ disabled: !open }}
               accessibilityLabel={
