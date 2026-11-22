@@ -19,6 +19,7 @@ function PetSprite({
   pose = 'run',
   panting = false,
   happy = false,
+  bank = 0,
 }) {
   const col = getColour(colour);
   const char = typeof character === 'string' ? getCharacter(character) : character;
@@ -56,10 +57,10 @@ function PetSprite({
   const collarItem = getItem(shownEquipped.collar);
 
   const transformParts = [];
-  if (duck) transformParts.push('translate(0 16) scale(1.12 0.64)');
+  if (duck) transformParts.push(`rotate(${(bank * 0.6).toFixed(1)} 28 34) translate(0 16) scale(1.12 0.64)`);
   else {
     if (bobY) transformParts.push(`translate(0 ${bobY.toFixed(2)})`);
-    transformParts.push(`rotate(${pitch.toFixed(1)} 28 28)`);
+    transformParts.push(`rotate(${(pitch + bank).toFixed(1)} 28 28)`);
     transformParts.push(`translate(28 44) scale(${legStretchX.toFixed(3)} ${legStretchY.toFixed(3)}) translate(-28 -44)`);
   }
 
@@ -68,12 +69,12 @@ function PetSprite({
       {/* Contact shadow under feet on ground when running */}
       {!isJump ? <Ellipse cx={28} cy={44} rx={(18 * (1 - bounce * 0.14)).toFixed(1)} ry={3} fill="rgba(36,29,59,0.22)" /> : null}
 
-      {/* Painted sprint dust puff behind hind paws */}
+      {/* Painted sprint dust puff trailing under hind paws */}
       {pose === 'run' && strideSin > 0.25 ? (
         <SvgImage
           href={SPRITES.dustPuff}
-          x={-26}
-          y={28}
+          x={10}
+          y={31}
           width={32}
           height={15}
           preserveAspectRatio="xMidYMid meet"

@@ -1,13 +1,38 @@
 import React, { memo } from 'react';
 import { G, Rect, Circle, Ellipse, Path, Polygon, Line, Defs, LinearGradient, Stop, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
-import { VIEW_W, VIEW_H, GROUND } from '../../game/engine';
 import { parallaxOffsets } from '../../game/parallax';
 import { SPRITES } from './sprites';
 
 export { parallaxOffsets };
 
+export const CAM_W = 276;
+export const CENTER_X = 138;
+export const HORIZON_Y = 62;
+export const PLAYER_GROUND_Y = 208;
+export const VISIBLE_DEPTH = 480;
+export const LANE_WIDTH_NEAR = 68;
+export const LANE_WIDTH_FAR = 11;
+
 const INK = C.ink;
+
+// Projects a world offset dx = (worldX - run.dist), trackLane (-1, 0, 1), and height y above ground
+// into behind-the-back 3D screen coordinates { x, y, groundY, scale, u, p }.
+export function projectBehind(dx, trackLane = 0, heightY = 0) {
+  const u = dx / VISIBLE_DEPTH; // 0 at player, 1 at horizon
+  const clamped = Math.max(-0.35, Math.min(1.05, u));
+  const p = clamped >= 0 ? Math.pow(1 - Math.min(1, clamped), 1.45) : 1 - clamped * 1.15;
+  const groundY = HORIZON_Y + (PLAYER_GROUND_Y - HORIZON_Y) * p;
+  const scale = 0.18 + 0.82 * p;
+  const laneSpread = LANE_WIDTH_FAR + (LANE_WIDTH_NEAR - LANE_WIDTH_FAR) * p;
+  const x = CENTER_X + trackLane * laneSpread;
+  const y = groundY - heightY * 0.66 * scale;
+  return { x, y, groundY, scale, u, p };
+}
+
+function edgeX(lane, p) {
+  return CENTER_X + lane * (LANE_WIDTH_FAR + (LANE_WIDTH_NEAR - LANE_WIDTH_FAR) * p);
+}
 
 // Colours and background props per place (theme ids in src/game/stages.js).
 export const THEMES = {
@@ -144,12 +169,13 @@ function wrapX(base, offset, span, pad) {
   return ((((base - offset) % span) + span) % span) - pad;
 }
 
-// Painted park panorama base layered with scrolling hills and tree clusters.
+const TRACK_BOTTOM_Y = 275;
+const TRACK_BOTTOM_P = (TRACK_BOTTOM_Y - HORIZON_Y) / (PLAYER_GROUND_Y - HORIZON_Y);
+
+// Painted behind-the-back park sky + distant horizon hills and trees above HORIZON_Y.
 export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion = false }) {
   const th = THEMES[theme] || THEMES.garden;
   const off = parallaxOffsets(dist, reduceMotion);
-  const farSpan = 420;
-  const hillsSpan = 480;
 
   if (th.painted) {
     return (
@@ -157,53 +183,32 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
         <Defs>
           <LinearGradient id="paintedSkyGrad" x1="0" y1="0" x2="0" y2="1">
             <Stop offset="0%" stopColor="#9AD9F2" />
-            <Stop offset="100%" stopColor="#E0F1F4" />
+            <Stop offset="100%" stopColor="#E1F3F7" />
           </LinearGradient>
         </Defs>
-        {/* Seamless sky & soil extension fills for full-screen portrait viewport */}
-        <Rect x={-40} y={-800} width={VIEW_W + 80} height={782} fill="url(#paintedSkyGrad)" />
-        <Rect x={-40} y={GROUND + 20} width={VIEW_W + 80} height={240} fill="#5C3A21" />
-        {/* Painted base park illustration aligned so footpath sits right at GROUND = 186 */}
+        {/* Seamless sky extension above HORIZON_Y */}
+        <Rect x={-40} y={-800} width={CAM_W + 80} height={820} fill="url(#paintedSkyGrad)" />
+        {/* Upper sky, sun, clouds and horizon treeline aligned to HORIZON_Y */}
         <SvgImage
           href={SPRITES.parkBg}
           x={-4}
-          y={-22}
-          width={284}
-          height={286}
+          y={HORIZON_Y - 120}
+          width={CAM_W + 8}
+          height={205}
           preserveAspectRatio="none"
         />
-        {/* Gentle parallax distant hills & tree clusters gliding along the meadow horizon */}
         <G opacity={0.45}>
-          {[0, 220].map((bx) => {
-            const hx = wrapX(bx, off.far, hillsSpan, 140);
-            return (
-              <SvgImage
-                key={`h-${bx}`}
-                href={SPRITES.hillsParallax}
-                x={hx}
-                y={GROUND - 94}
-                width={200}
-                height={90}
-                preserveAspectRatio="none"
-              />
-            );
-          })}
-        </G>
-        <G opacity={0.82}>
-          {[35, 250].map((bx) => {
-            const tx = wrapX(bx, off.far * 1.3, farSpan, 110);
-            return (
-              <SvgImage
-                key={`t-${bx}`}
-                href={SPRITES.treesCluster}
-                x={tx}
-                y={GROUND - 110}
-                width={106}
-                height={102}
-                preserveAspectRatio="xMidYMax meet"
-              />
-            );
-          })}
+          {[0, 140].map((bx) => (
+            <SvgImage
+              key={`h-${bx}`}
+              href={SPRITES.hillsParallax}
+              x={bx - 16}
+              y={HORIZON_Y - 38}
+              width={180}
+              height={46}
+              preserveAspectRatio="none"
+            />
+          ))}
         </G>
       </G>
     );
@@ -218,88 +223,172 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
           <Stop offset="100%" stopColor={th.skyLow || th.sky} />
         </LinearGradient>
       </Defs>
-      <Rect x={-40} y={-1200} width={VIEW_W + 80} height={1140} fill={th.skyTop || th.sky} />
-      <Rect x={-40} y={-80} width={VIEW_W + 80} height={GROUND + 85} fill="url(#skyGrad)" />
-      {[0, 220].map((bx) => {
-        const hx = wrapX(bx, off.far, hillsSpan, 140);
-        return (
-          <SvgImage
-            key={`th-${bx}`}
-            href={SPRITES.hillsParallax}
-            x={hx}
-            y={GROUND - 88}
-            width={220}
-            height={90}
-            preserveAspectRatio="none"
-          />
-        );
-      })}
-    </G>
-  );
-});
-
-// Scrolling foreground painted props along the footpath + soil cutaway for controls.
-export function Midground({ theme, dist, reduceMotion = false }) {
-  const th = THEMES[theme] || THEMES.garden;
-  const p = parallaxOffsets(dist, reduceMotion);
-  const off = -(p.props % PROP_GAP);
-  const shiftCount = Math.floor(p.props / PROP_GAP);
-  const detailOff = -(p.ground % 180);
-
-  return (
-    <G>
-      {!th.painted ? (
-        <>
-          <Rect x={-40} y={GROUND - 14} width={VIEW_W + 80} height={9} fill={th.ground} />
-          <Rect x={-40} y={GROUND - 7} width={VIEW_W + 80} height={14} fill={th.path || '#F3DFAC'} />
-          <Rect x={-40} y={GROUND + 7} width={VIEW_W + 80} height={VIEW_H + 140} fill="#5C3A21" />
-        </>
-      ) : null}
-
-      {/* Scrolling painted benches, trash cans & tree props */}
-      <G transform={`translate(${off} ${GROUND - 12})`}>
-        <PropRow prop={th.prop} shiftCount={shiftCount} />
-      </G>
-
-      {/* Subtle scrolling path details (pebbles & wildflowers) */}
-      <G transform={`translate(${detailOff} 0)`} opacity={0.85}>
-        {[40, 220, 400].map((dx) => (
-          <SvgImage
-            key={dx}
-            href={SPRITES.pathDetails}
-            x={dx}
-            y={GROUND - 18}
-            width={48}
-            height={36}
-            preserveAspectRatio="xMidYMid meet"
-          />
-        ))}
-      </G>
-    </G>
-  );
-}
-
-const PropRow = memo(function PropRow({ prop, shiftCount = 0 }) {
-  const xs = [];
-  for (let i = 0; i * PROP_GAP < VIEW_W + PROP_GAP * 2; i++) xs.push(i);
-  return (
-    <G>
-      {xs.map((i) => (
-        <G key={i} transform={`translate(${120 + i * PROP_GAP} 0)`}>
-          <Prop type={prop} index={i + shiftCount} />
-        </G>
+      <Rect x={-40} y={-800} width={CAM_W + 80} height={740} fill={th.skyTop || th.sky} />
+      <Rect x={-40} y={-80} width={CAM_W + 80} height={HORIZON_Y + 90} fill="url(#skyGrad)" />
+      {[0, 140].map((bx) => (
+        <SvgImage
+          key={`th-${bx}`}
+          href={SPRITES.hillsParallax}
+          x={bx - 16 + ((off.far * 0.05) % 12)}
+          y={HORIZON_Y - 40}
+          width={180}
+          height={48}
+          preserveAspectRatio="none"
+        />
       ))}
     </G>
   );
 });
 
-// The goal at the end of a stage: a flag with a bowl of treats.
+// 3-lane behind-the-back perspective park track, scrolling lane dashes and side trees.
+export function Midground({ theme, dist, reduceMotion = false }) {
+  const th = THEMES[theme] || THEMES.garden;
+  const scroll = reduceMotion ? dist * 0.45 : dist;
+
+  // Perspective polygons from HORIZON_Y (p=0) down to TRACK_BOTTOM_Y (p=TRACK_BOTTOM_P)
+  const shoulderPoly = `${edgeX(-1.68, 0)},${HORIZON_Y} ${edgeX(1.68, 0)},${HORIZON_Y} ${edgeX(1.68, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-1.68, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
+  const roadPoly = `${edgeX(-1.54, 0)},${HORIZON_Y} ${edgeX(1.54, 0)},${HORIZON_Y} ${edgeX(1.54, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-1.54, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
+  const centerLanePoly = `${edgeX(-0.5, 0)},${HORIZON_Y} ${edgeX(0.5, 0)},${HORIZON_Y} ${edgeX(0.5, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-0.5, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
+
+  // Scrolling dashes and side scenery projected back-to-front
+  const stepDx = 60;
+  const phase = ((scroll % stepDx) + stepDx) % stepDx;
+  const marks = [];
+  for (let i = 0; i < 10; i++) {
+    const dx = VISIBLE_DEPTH - phase - i * stepDx;
+    if (dx > -75 && dx < VISIBLE_DEPTH) marks.push(dx);
+  }
+
+  const treeStep = 130;
+  const treeOffset = ((scroll % treeStep) + treeStep) % treeStep;
+  const treeSlots = [];
+  for (let i = 0; i < 5; i++) {
+    const dx = VISIBLE_DEPTH - 20 - treeOffset - i * treeStep;
+    if (dx > -70 && dx < VISIBLE_DEPTH - 10) treeSlots.push(dx);
+  }
+
+  return (
+    <G>
+      {/* Lush green park grass & verge banks */}
+      <Rect x={-40} y={HORIZON_Y} width={CAM_W + 80} height={TRACK_BOTTOM_Y - HORIZON_Y + 40} fill={th.ground} />
+      <Line x1={-40} y1={HORIZON_Y} x2={CAM_W + 40} y2={HORIZON_Y} stroke={th.edge} strokeWidth={2.5} />
+
+      {/* Outer road curb / dirt verge */}
+      <Polygon points={shoulderPoly} fill={th.edge} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
+
+      {/* Main 3-lane park track */}
+      <Polygon points={roadPoly} fill={th.path || '#F3DFAC'} />
+
+      {/* Lighter center lane surface so the 3 lanes read cleanly at a glance */}
+      <Polygon points={centerLanePoly} fill="rgba(255,255,255,0.22)" />
+
+      {/* Subtle scrolling cross-track ground bands to reinforce forward speed */}
+      {marks.map((dx, i) => {
+        const dxFar = Math.min(VISIBLE_DEPTH, dx + 22);
+        const a = projectBehind(dx, 0, 0);
+        const b = projectBehind(dxFar, 0, 0);
+        const l0 = edgeX(-1.52, a.p);
+        const r0 = edgeX(1.52, a.p);
+        const l1 = edgeX(-1.52, b.p);
+        const r1 = edgeX(1.52, b.p);
+        const dl0 = edgeX(-0.5, a.p);
+        const dr0 = edgeX(0.5, a.p);
+        const dl1 = edgeX(-0.5, b.p);
+        const dr1 = edgeX(0.5, b.p);
+        const hw = Math.max(1.2, 2.2 * a.scale);
+        return (
+          <G key={`m-${i}`}>
+            <Polygon points={`${l1},${b.groundY} ${r1},${b.groundY} ${r0},${a.groundY} ${l0},${a.groundY}`} fill="rgba(182,146,84,0.14)" />
+            {/* Left and right lane divider dashes */}
+            <Polygon
+              points={`${dl1 - hw * 0.6},${b.groundY} ${dl1 + hw * 0.6},${b.groundY} ${dl0 + hw},${a.groundY} ${dl0 - hw},${a.groundY}`}
+              fill="rgba(255,252,240,0.82)"
+            />
+            <Polygon
+              points={`${dr1 - hw * 0.6},${b.groundY} ${dr1 + hw * 0.6},${b.groundY} ${dr0 + hw},${a.groundY} ${dr0 - hw},${a.groundY}`}
+              fill="rgba(255,252,240,0.82)"
+            />
+          </G>
+        );
+      })}
+
+      {/* Outer track ink rails */}
+      <Line x1={edgeX(-1.54, 0)} y1={HORIZON_Y} x2={edgeX(-1.54, TRACK_BOTTOM_P)} y2={TRACK_BOTTOM_Y} stroke={INK} strokeWidth={2.2} />
+      <Line x1={edgeX(1.54, 0)} y1={HORIZON_Y} x2={edgeX(1.54, TRACK_BOTTOM_P)} y2={TRACK_BOTTOM_Y} stroke={INK} strokeWidth={2.2} />
+
+      {/* Scrolling perspective trees and flower tufts lining both sides of the track */}
+      {treeSlots.map((dx, i) => {
+        const left = projectBehind(dx, -2.02, 0);
+        const right = projectBehind(dx, 2.02, 0);
+        const tw = 96 * left.scale;
+        const thPx = 92 * left.scale;
+        const pOff = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), 0, 0);
+        const pw = 36 * pOff.scale;
+        const ph = 28 * pOff.scale;
+        const leftFlora = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), -1.78, 0);
+        const rightFlora = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), 1.78, 0);
+        return (
+          <G key={`sc-${i}`}>
+            <SvgImage
+              href={SPRITES.pathDetails}
+              x={leftFlora.x - pw / 2}
+              y={leftFlora.groundY - ph * 0.8}
+              width={pw}
+              height={ph}
+              preserveAspectRatio="xMidYMax meet"
+            />
+            <SvgImage
+              href={SPRITES.pathDetails}
+              x={rightFlora.x - pw / 2}
+              y={rightFlora.groundY - ph * 0.8}
+              width={pw}
+              height={ph}
+              preserveAspectRatio="xMidYMax meet"
+            />
+            {th.prop === 'tree' || th.prop === 'bench' ? (
+              <>
+                <SvgImage
+                  href={SPRITES.treesCluster}
+                  x={left.x - tw / 2}
+                  y={left.groundY - thPx}
+                  width={tw}
+                  height={thPx}
+                  preserveAspectRatio="xMidYMax meet"
+                />
+                <SvgImage
+                  href={SPRITES.treesCluster}
+                  x={right.x - tw / 2}
+                  y={right.groundY - thPx}
+                  width={tw}
+                  height={thPx}
+                  preserveAspectRatio="xMidYMax meet"
+                />
+              </>
+            ) : (
+              <>
+                <G transform={`translate(${left.x} ${left.groundY}) scale(${left.scale})`}>
+                  <Prop type={th.prop} index={i} />
+                </G>
+                <G transform={`translate(${right.x} ${right.groundY}) scale(${right.scale})`}>
+                  <Prop type={th.prop} index={i + 1} />
+                </G>
+              </>
+            )}
+          </G>
+        );
+      })}
+    </G>
+  );
+}
+
+// The goal at the end of a stage: a flag banner across the finish line.
 export const Goal = memo(function Goal() {
   return (
     <G>
-      <Line x1={0} y1={0} x2={0} y2={-70} stroke={INK} strokeWidth={3} strokeLinecap="round" />
-      <Polygon points="0,-70 36,-60 0,-50" fill={C.butter} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
-      <Path d="M8 0 Q 24 -16 40 0 Z" fill={C.pink} stroke={INK} strokeWidth={2} />
+      <Line x1={-60} y1={0} x2={-60} y2={-64} stroke={INK} strokeWidth={3} strokeLinecap="round" />
+      <Line x1={60} y1={0} x2={60} y2={-64} stroke={INK} strokeWidth={3} strokeLinecap="round" />
+      <Polygon points="-60,-64 60,-64 60,-46 -60,-46" fill={C.butter} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+      <Path d="M-16 0 Q 0 -16 16 0 Z" fill={C.pink} stroke={INK} strokeWidth={2} />
     </G>
   );
 });

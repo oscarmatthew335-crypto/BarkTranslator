@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet, AppState, PanResponder, BackHandler } from 'react-native';
-import Svg, { G, Rect, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line, Path } from 'react-native-svg';
+import Svg, { G, Rect, Ellipse, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line } from 'react-native-svg';
 import { C, F, INK_WIDTH, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, GROUND, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
+import { VIEW_W, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
 import { getColour } from '../../game/wardrobe';
 import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent } from '../../game/sfx';
@@ -11,7 +11,7 @@ import { count } from '../../game/counters';
 import { isRewardedReady, showRewardedAd } from '../../game/ads';
 import PetSprite from './PetSprite';
 import Thing, { PowerIcon, Chaser } from './Things';
-import { Backdrop, Midground, Goal } from './Scenery';
+import { CAM_W, HORIZON_Y, PLAYER_GROUND_Y, VISIBLE_DEPTH, projectBehind, Backdrop, Midground, Goal } from './Scenery';
 import { ColourHeadTileSvg } from './WardrobeIcons';
 import { SPRITES } from './sprites';
 import { StickerButton } from '../ui';
@@ -21,7 +21,6 @@ const COUNTDOWN_STEP_MS = 500;
 const REDUCE_MOTION_START_MS = 400;
 const CONTINUE_RING_SECONDS = 5;
 const MAX_PARTICLES = 12;
-const CAM_SHIFT_X = 24; // shifts PLAYER_X (64) to x = 88 so chaser has room on left
 
 function spawnParticles(pool, kind, x, y) {
   const next = pool.slice();
@@ -81,7 +80,7 @@ export default function RunnerScreen({
   const { t } = useI18n();
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
-  const input = useRef({ jump: false, duck: false, swipeDuck: false, left: false, right: false });
+  const input = useRef({ jump: false, duck: false, swipeDuck: false, left: false, right: false, laneLeft: false, laneRight: false });
   const pausedRef = useRef(true);
   const particlesRef = useRef([]);
   const [paused, setPaused] = useState(Boolean(showHowTo));
@@ -105,7 +104,7 @@ export default function RunnerScreen({
   trackRef.current = onTrack;
 
   const resetInputs = () => {
-    input.current = { jump: false, duck: false, swipeDuck: false, left: false, right: false };
+    input.current = { jump: false, duck: false, swipeDuck: false, left: false, right: false, laneLeft: false, laneRight: false };
     setLeftPressed(false);
     setRightPressed(false);
     setJumpPressed(false);
@@ -172,19 +171,20 @@ export default function RunnerScreen({
         const next = step(runRef.current, dt, input.current);
         input.current.jump = false;
         input.current.swipeDuck = false;
+        input.current.laneLeft = false;
+        input.current.laneRight = false;
         next.events.forEach(gameEvent);
         if (!reduceMotion) {
           let pool = particlesRef.current
             .map((p) => ({ ...p, age: p.age + dt, x: p.x + p.vx * dt, y: p.y + p.vy * dt }))
             .filter((p) => p.age < p.life);
-          const px = PLAYER_X + CAM_SHIFT_X + (next.player.xOffset || 0);
-          const py = GROUND - next.player.height - 4;
+          const pProj = projectBehind(0, next.player.lanePos ?? 0, next.player.height);
           for (const ev of next.events) {
-            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, px + 18, py);
-            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, px + 20, GROUND - 3);
-            else if (ev === 'collect') pool = spawnParticles(pool, ev, px + 34, py - 20);
-            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, px + 10, py - 18);
-            else if (ev === 'smash') pool = spawnParticles(pool, ev, px + 40, py - 16);
+            if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 4);
+            else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, pProj.x, pProj.groundY - 2);
+            else if (ev === 'collect') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 24);
+            else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 20);
+            else if (ev === 'smash') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 18);
           }
           particlesRef.current = pool;
         } else if (particlesRef.current.length) {
@@ -300,9 +300,15 @@ export default function RunnerScreen({
         swiped = false;
       },
       onPanResponderMove: (_, g) => {
-        if (!swiped && g.dy > SWIPE_PX && Math.abs(g.dy) > Math.abs(g.dx)) {
+        if (swiped || pausedRef.current) return;
+        if (Math.abs(g.dx) > SWIPE_PX && Math.abs(g.dx) >= Math.abs(g.dy)) {
           swiped = true;
-          input.current.swipeDuck = true;
+          if (g.dx < 0) input.current.laneLeft = true;
+          else input.current.laneRight = true;
+        } else if (Math.abs(g.dy) > SWIPE_PX) {
+          swiped = true;
+          if (g.dy > 0) input.current.swipeDuck = true;
+          else input.current.jump = true;
         }
       },
       onPanResponderRelease: () => {
@@ -320,26 +326,22 @@ export default function RunnerScreen({
   const blink = run.invuln > 0 && (reduceMotion ? true : Math.floor(run.t * 12) % 2 === 0);
   const pose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
   const isScoreMode = Boolean(run.stage.endless || run.stage.chase);
-  const goalX = run.stage.daily || isScoreMode ? null : run.length - run.dist + PLAYER_X + 40;
+  const goalDx = run.stage.daily || isScoreMode ? null : run.length - run.dist;
   const progress = run.stage.chase
     ? Math.max(0, Math.min(1, (run.chaseGap ?? CHASE_GAP_MAX) / CHASE_GAP_MAX))
     : run.stage.daily
     ? Math.min(1, run.t / run.stage.seconds)
     : Math.min(1, run.dist / run.length);
-  const basePlayerX = PLAYER_X + CAM_SHIFT_X; // 88 inside zoomed 276-wide view
-  const playerX = basePlayerX + (run.player.xOffset || 0);
-  const chaserX = run.stage.chase ? Math.round(4 + (1 - progress) * (basePlayerX - 42)) : 0;
   const showChaser = Boolean(run.stage.chase);
   const showProgressTrack = Boolean(run.stage.chase || !run.stage.endless);
   const lowGap = Boolean(run.stage.chase && progress < 0.3);
   const meterFlash = lowGap && !reduceMotion && Math.floor(run.t * 8) % 2 === 1;
   const chaserBounce = lowGap && !reduceMotion ? Math.abs(Math.sin(run.t * 14)) * 4 : 0;
   const { width, height } = size;
-  const CAM_W = 276;
   const aspect = width > 0 && height > 0 ? Math.max(1.03, Math.min(2.4, height / width)) : 1.75;
   const totalViewH = Math.round(CAM_W * aspect);
-  const bottomSoilH = 74;
-  const viewMaxY = GROUND + bottomSoilH;
+  const bottomTrackMargin = 62;
+  const viewMaxY = PLAYER_GROUND_Y + bottomTrackMargin;
   const viewMinY = viewMaxY - totalViewH;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
   if (run.power.shield) activePowers.unshift('shield');
@@ -347,13 +349,53 @@ export default function RunnerScreen({
   const maxStageSpeed = run.stage.endless ? 410 : run.stage.speedEnd || run.stage.speed || 260;
   const panting = currentSpeed(run) > maxStageSpeed * 0.75;
   const happy = nearMissFresh || (run.treatStreak || 0) >= 3;
-  const dashWarning = things.some((e) => (e.type === 'catDash' || e.type === 'dogDash') && e.sx > VIEW_W - 60);
+  const dashAlertItem = things.find((e) => (e.type === 'catDash' || e.type === 'dogDash') && e.x - run.dist > 110 && e.x - run.dist <= VISIBLE_DEPTH);
   const ringR = 22;
   const ringCirc = 2 * Math.PI * ringR;
   const ringOffset = ringCirc * (1 - Math.max(0, Math.min(1, continueTimer / CONTINUE_RING_SECONDS)));
   const petCol = getColour(wardrobe?.colour);
   const pct = Math.round(progress * 100);
   const animPhase = run.dist / 10;
+
+  // Project visible obstacles, treats and power-ups into behind-the-back 3D perspective sorted back-to-front
+  const projected = things
+    .map((e) => ({ ...e, dx: e.x - run.dist }))
+    .filter((e) => e.dx >= -45 && e.dx <= VISIBLE_DEPTH)
+    .sort((a, b) => b.dx - a.dx);
+  const entitiesAhead = projected.filter((e) => e.dx > 8);
+  const entitiesBehind = projected.filter((e) => e.dx <= 8);
+
+  const playerLanePos = run.player.lanePos ?? 0;
+  const playerProj = projectBehind(0, playerLanePos, run.player.height);
+  const playerBank = ((run.player.targetLane ?? 0) - playerLanePos) * 18;
+  const playerScale = playerProj.scale * 1.18;
+  const playerShadowRx = Math.max(8, 21 - run.player.height * 0.08);
+
+  const chaserDx = -(12 + progress * 48);
+  const chaserLane = Math.max(-1, Math.min(1, playerLanePos * 0.85 + 0.16));
+  const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce) : null;
+
+  const renderProjectedThing = (e) => {
+    const proj = projectBehind(e.dx, e.trackLane ?? 0, e.y);
+    const drawY = proj.y + (e.type === 'bird' && !reduceMotion ? Math.sin(run.t * 8 + e.x * 0.05) * 4 * proj.scale : 0);
+    const sScale = proj.scale * (e.kind === 'obstacle' ? 1.08 : 1.15);
+    return (
+      <G key={e.id}>
+        {e.y > 0 ? (
+          <Ellipse
+            cx={proj.x}
+            cy={proj.groundY}
+            rx={Math.max(4, e.w * 0.34 * proj.scale)}
+            ry={Math.max(1.5, 3 * proj.scale)}
+            fill="rgba(36,29,59,0.2)"
+          />
+        ) : null}
+        <G transform={`translate(${proj.x} ${drawY}) scale(${sScale}) translate(${-e.w / 2} ${-e.h})`}>
+          <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+        </G>
+      </G>
+    );
+  };
 
   return (
     <View style={s.wrap}>
@@ -377,35 +419,31 @@ export default function RunnerScreen({
                 <G transform={shake ? `translate(${shake} 0)` : undefined}>
                   <Backdrop theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
                   <Midground theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
-                  {goalX != null && goalX < VIEW_W + 60 ? (
-                    <G transform={`translate(${goalX + CAM_SHIFT_X} ${GROUND})`}>
-                      <Goal />
-                    </G>
+                  {goalDx != null && goalDx <= VISIBLE_DEPTH && goalDx >= -20 ? (
+                    (() => {
+                      const gp = projectBehind(goalDx, 0, 0);
+                      return (
+                        <G transform={`translate(${gp.x} ${gp.groundY}) scale(${gp.scale})`}>
+                          <Goal />
+                        </G>
+                      );
+                    })()
                   ) : null}
-                  {things.map((e) => {
-                    const sy = e.type === 'bird' && !reduceMotion ? e.sy + Math.sin(run.t * 8 + e.x * 0.05) * 4 : e.sy;
-                    return (
-                      <G key={e.id} transform={`translate(${e.sx + CAM_SHIFT_X} ${sy})`}>
-                        <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
-                      </G>
-                    );
-                  })}
-                  {dashWarning ? (
+                  {entitiesAhead.map(renderProjectedThing)}
+                  {dashAlertItem ? (
                     <SvgImage
                       href={SPRITES.impactAlert}
-                      x={236}
-                      y={GROUND - 42}
-                      width={34}
-                      height={26}
+                      x={projectBehind(dashAlertItem.x - run.dist, dashAlertItem.trackLane ?? 0, 0).x - 16}
+                      y={HORIZON_Y - 26}
+                      width={32}
+                      height={24}
                       preserveAspectRatio="xMidYMid meet"
                     />
                   ) : null}
-                  {showChaser ? (
-                    <G transform={`translate(${chaserX} ${GROUND - chaserBounce}) scale(1.12) translate(0 -39)`}>
-                      <Chaser chaser={stage.chaser} phase={animPhase} />
-                    </G>
+                  {run.player.height > 0 ? (
+                    <Ellipse cx={playerProj.x} cy={playerProj.groundY} rx={playerShadowRx} ry={3.2} fill="rgba(36,29,59,0.22)" opacity={blink ? 0.5 : 1} />
                   ) : null}
-                  <G transform={`translate(${playerX - 6} ${GROUND - run.player.height}) scale(1.18) translate(0 -44)`} opacity={blink ? 0.5 : 1}>
+                  <G transform={`translate(${playerProj.x} ${playerProj.y}) scale(${playerScale}) translate(-28 -44)`} opacity={blink ? 0.5 : 1}>
                     {run.power.shield ? <Circle cx={28} cy={24} r={30} fill="rgba(92,200,255,0.25)" stroke={C.sky} strokeWidth={2} /> : null}
                     <PetSprite
                       species={pet.species}
@@ -416,9 +454,16 @@ export default function RunnerScreen({
                       pose={pose}
                       panting={panting}
                       happy={happy}
+                      bank={playerBank}
                     />
                     {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}
                   </G>
+                  {entitiesBehind.map(renderProjectedThing)}
+                  {showChaser && chaserProj ? (
+                    <G transform={`translate(${chaserProj.x} ${chaserProj.y}) scale(${chaserProj.scale * 1.08}) translate(-24 -39)`}>
+                      <Chaser chaser={stage.chaser} phase={animPhase} />
+                    </G>
+                  ) : null}
                   {particlesRef.current.map((p) => {
                     const alpha = Math.max(0, 1 - p.age / p.life);
                     if (p.kind === 'streak') {
@@ -592,6 +637,7 @@ export default function RunnerScreen({
                   style={[s.spriteCtrlBtn, leftPressed && s.circleBtnPressed]}
                   onPressIn={() => {
                     setLeftPressed(true);
+                    input.current.laneLeft = true;
                     input.current.left = true;
                   }}
                   onPressOut={() => {
@@ -607,6 +653,7 @@ export default function RunnerScreen({
                   style={[s.spriteCtrlBtn, rightPressed && s.circleBtnPressed]}
                   onPressIn={() => {
                     setRightPressed(true);
+                    input.current.laneRight = true;
                     input.current.right = true;
                   }}
                   onPressOut={() => {

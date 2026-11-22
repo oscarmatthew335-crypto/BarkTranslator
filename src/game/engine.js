@@ -15,6 +15,8 @@ export const PLAYER_X = 64;
 export const PLAYER_W = 46;
 export const PLAYER_H = 40;
 export const DUCK_H = 22;
+export const LANES = [-1, 0, 1];
+export const LANE_SWITCH_SPEED = 14;
 export const GRAVITY = 1900;
 export const JUMP_V = 700;
 export const DOUBLE_JUMP_V = 440; // snappier second jump while in the air
@@ -76,7 +78,7 @@ export function overlaps(a, b) {
 // is { x, y: bottom, w, h }. A little smaller than the drawing, to be kind.
 export function playerBox(player, dist) {
   const h = player.ducking && player.height <= 0 ? DUCK_H : PLAYER_H;
-  return { x: dist + (player.xOffset || 0) + 6, y: player.height + 2, w: PLAYER_W - 12, h: h - 6 };
+  return { x: dist + 6, y: player.height + 2, w: PLAYER_W - 12, h: h - 6 };
 }
 
 export function entityBox(e) {
@@ -120,7 +122,7 @@ export function buildLevel(stage, seed) {
     const speed = stage.speed + stage.ramp * progress;
     const type = weighted(rng, stage.obstacles);
     const o = OBSTACLES[type];
-    entities.push({ id: id++, kind: 'obstacle', type, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
+    entities.push({ id: id++, kind: 'obstacle', type, trackLane: 0, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
 
     // Treats: an arc over a low obstacle, or a line on the ground under a high one.
     const treat = pick(rng, treatTypes);
@@ -132,9 +134,9 @@ export function buildLevel(stage, seed) {
         if (o.lane === 'low') {
           const tt = (jd / 2 + k * jd * 0.28) / speed;
           const h = JUMP_V * tt - (GRAVITY / 2) * tt * tt;
-          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: 0, x: centre + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
         } else {
-          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: 0, x: centre + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
         }
       }
     }
@@ -148,7 +150,7 @@ export function buildLevel(stage, seed) {
         const t2 = pick(rng, other);
         const o2 = OBSTACLES[t2];
         const x2 = x + o.w + jumpDistance(speed) * (o.lane === 'low' ? 1 : 0.5) + speed * 0.34;
-        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
+        entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: 0, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
         pair = x2 + o2.w - (x + o.w);
       }
     }
@@ -160,14 +162,14 @@ export function buildLevel(stage, seed) {
     // A row of treats between obstacles on the ground, sometimes.
     if (rng() < 0.55) {
       for (let k = 0; k < 3; k++) {
-        entities.push({ id: id++, kind: 'treat', type: treat, x: mid - 40 + k * 28, y: 2, w: TREAT_W, h: TREAT_W });
+        entities.push({ id: id++, kind: 'treat', type: treat, trackLane: 0, x: mid - 40 + k * 28, y: 2, w: TREAT_W, h: TREAT_W });
       }
     }
     const pct = Math.floor(progress * 100);
     for (const p of powerAt) {
       if (pct >= p) {
         powerAt.delete(p);
-        entities.push({ id: id++, kind: 'power', type: pick(rng, stage.powerUps), x: mid + 50, y: 46, w: POWER_W, h: POWER_W });
+        entities.push({ id: id++, kind: 'power', type: pick(rng, stage.powerUps), trackLane: 0, x: mid + 50, y: 46, w: POWER_W, h: POWER_W });
         break;
       }
     }
@@ -178,7 +180,7 @@ export function buildLevel(stage, seed) {
   return { entities, length, totalTreats };
 }
 
-// Build one chunk of an endless or chase course. Deterministic per (seed, chunkIndex).
+// Build one chunk of an endless or chase course across 3 lanes. Deterministic per (seed, chunkIndex).
 export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, nextId = 0 } = {}) {
   const rng = makeRng(hashString(`${seed}:chunk:${chunkIndex}`));
   const treatTypes = COLLECTIBLES[stage.species] || COLLECTIBLES.dog;
@@ -196,21 +198,37 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     for (const [k, w] of Object.entries(stage.obstacles || {})) {
       if (isSurpriseObstacleAllowed(stage, k, x)) allowedMix[k] = w;
     }
-    const type = weighted(rng, Object.keys(allowedMix).length ? allowedMix : stage.obstacles);
+    const pool = Object.keys(allowedMix).length ? allowedMix : stage.obstacles;
+    const type = weighted(rng, pool);
     const o = OBSTACLES[type];
-    entities.push({ id: id++, kind: 'obstacle', type, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move, bob: Boolean(o.bob), warningS: o.warningS || 0 });
+    const laneIdx = pick(rng, LANES);
+    const blocked = new Set([laneIdx]);
+    entities.push({ id: id++, kind: 'obstacle', type, trackLane: laneIdx, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move, bob: Boolean(o.bob), warningS: o.warningS || 0 });
+
+    // 40% chance to spawn a second obstacle side-by-side in another lane, always leaving at least one lane open.
+    if (rng() < 0.4) {
+      const otherLanes = LANES.filter((l) => l !== laneIdx);
+      const secondLane = pick(rng, otherLanes);
+      const type2 = weighted(rng, pool);
+      const o2 = OBSTACLES[type2];
+      blocked.add(secondLane);
+      entities.push({ id: id++, kind: 'obstacle', type: type2, trackLane: secondLane, x, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: o2.move, bob: Boolean(o2.bob), warningS: o2.warningS || 0 });
+    }
+    const openLanes = LANES.filter((l) => !blocked.has(l));
 
     const treat = pick(rng, treatTypes);
     if (rng() < 0.8) {
       const jd = jumpDistance(speed);
       const centre = x + o.w / 2;
+      const guideOpen = openLanes.length && rng() < 0.5;
+      const treatLane = guideOpen ? pick(rng, openLanes) : laneIdx;
       for (let k = -1; k <= 1; k++) {
-        if (o.lane === 'low') {
+        if (!guideOpen && o.lane === 'low') {
           const tt = (jd / 2 + k * jd * 0.28) / speed;
           const h = JUMP_V * tt - (GRAVITY / 2) * tt * tt;
-          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: treatLane, x: centre + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
         } else {
-          entities.push({ id: id++, kind: 'treat', type: treat, x: centre + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: treatLane, x: centre + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
         }
       }
     }
@@ -220,14 +238,15 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     if (stage.doubleJumpCombo && rng() < stage.doubleJumpCombo && (chunkIndex > 0 || x > 650)) {
       const lowKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'low' && !OBSTACLES[k].move);
       const highKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'high' && !OBSTACLES[k].move);
-      const pool = o.lane === 'high' && lowKeys.length ? lowKeys : highKeys.length ? highKeys : lowKeys;
-      if (pool.length) {
-        const t2 = pick(rng, pool);
+      const pairPool = o.lane === 'high' && lowKeys.length ? lowKeys : highKeys.length ? highKeys : lowKeys;
+      if (pairPool.length) {
+        const t2 = pick(rng, pairPool);
         const o2 = OBSTACLES[t2];
         const x2 = x + o.w + Math.round(jumpDistance(speed) * 0.62);
-        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0, doubleJumpPair: true });
+        const pairLane = pick(rng, LANES);
+        entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: pairLane, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0, doubleJumpPair: true });
         // High treats along the double-jump arc
-        entities.push({ id: id++, kind: 'treat', type: treat, x: x2 + o2.w / 2 - TREAT_W / 2, y: 88, w: TREAT_W, h: TREAT_W });
+        entities.push({ id: id++, kind: 'treat', type: treat, trackLane: pairLane, x: x2 + o2.w / 2 - TREAT_W / 2, y: 88, w: TREAT_W, h: TREAT_W });
         pair = x2 + o2.w - (x + o.w);
       }
     } else if (stage.combo && rng() < stage.combo && (chunkIndex > 0 || x > 900)) {
@@ -236,7 +255,7 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
         const t2 = pick(rng, other);
         const o2 = OBSTACLES[t2];
         const x2 = x + o.w + jumpDistance(speed) * (o.lane === 'low' ? 1 : 0.5) + speed * 0.34;
-        entities.push({ id: id++, kind: 'obstacle', type: t2, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
+        entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: pick(rng, LANES), x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
         pair = x2 + o2.w - (x + o.w);
       }
     }
@@ -246,13 +265,14 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     const mid = x + o.w + gap / 2;
 
     if (rng() < 0.55) {
+      const rowLane = pick(rng, LANES);
       for (let k = 0; k < 3; k++) {
-        entities.push({ id: id++, kind: 'treat', type: treat, x: mid - 40 + k * 28, y: 2, w: TREAT_W, h: TREAT_W });
+        entities.push({ id: id++, kind: 'treat', type: treat, trackLane: rowLane, x: mid - 40 + k * 28, y: 2, w: TREAT_W, h: TREAT_W });
       }
     }
     if (!powerPlaced && stage.powerUps?.length && x - startX >= CHUNK_LENGTH * 0.45 && rng() < 0.65) {
       powerPlaced = true;
-      entities.push({ id: id++, kind: 'power', type: pick(rng, stage.powerUps), x: mid + 50, y: 46, w: POWER_W, h: POWER_W });
+      entities.push({ id: id++, kind: 'power', type: pick(rng, stage.powerUps), trackLane: pick(rng, LANES), x: mid + 50, y: 46, w: POWER_W, h: POWER_W });
     }
     x += o.w + gap;
   }
@@ -351,7 +371,22 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     generatedTo: isChunked ? 420 : level.length,
     chunkIndex: 0,
     nextEntityId: isChunked ? 0 : level.entities.length,
-    player: { height: 0, vy: 0, xOffset: 0, vx: 0, ducking: false, duckTimer: 0, jumpBuffer: 0, doubleJumped: false },
+    player: {
+      height: 0,
+      vy: 0,
+      xOffset: 0,
+      vx: 0,
+      trackLane: 0,
+      targetLane: 0,
+      lanePos: 0,
+      laneHoldTimer: 0,
+      prevLeft: false,
+      prevRight: false,
+      ducking: false,
+      duckTimer: 0,
+      jumpBuffer: 0,
+      doubleJumped: false
+    },
     treats: 0,
     collected: 0,
     combo: 0,
@@ -407,8 +442,7 @@ export function currentSpeed(run) {
   return v * run.speedScale;
 }
 
-// input: { jump: true on the frame the player tapped, duck: true while held,
-// swipeDuck: true on the frame of a swipe down, left: true while held, right: true while held }
+// input: { jump, duck, swipeDuck, left, right, laneLeft, laneRight }
 export function step(run, dt, input = {}) {
   if (run.done) return run;
   dt = Math.min(Math.max(dt, 0), 1 / 20);
@@ -428,18 +462,39 @@ export function step(run, dt, input = {}) {
   slow = Math.max(0, slow - dt);
   nearMissTimer = Math.max(0, nearMissTimer - dt);
 
-  // horizontal Left / Right movement with crisp acceleration
-  if (input.right && !input.left) {
-    player.vx = Math.min(165, (player.vx || 0) + 950 * dt);
-  } else if (input.left && !input.right) {
-    player.vx = Math.max(-150, (player.vx || 0) - 950 * dt);
-  } else {
-    player.vx = (player.vx || 0) * Math.max(0, 1 - 12 * dt);
-    if (Math.abs(player.vx) < 2) player.vx = 0;
-  }
-  player.xOffset = Math.max(-34, Math.min(82, (player.xOffset || 0) + (player.vx || 0) * dt));
+  // 3-lane Left / Right switching
+  const leftEdge = Boolean(input.laneLeft) || (Boolean(input.left) && !player.prevLeft);
+  const rightEdge = Boolean(input.laneRight) || (Boolean(input.right) && !player.prevRight);
+  player.prevLeft = Boolean(input.left);
+  player.prevRight = Boolean(input.right);
 
-  // pet movement
+  if (leftEdge && !rightEdge) {
+    player.targetLane = Math.max(-1, (player.targetLane ?? 0) - 1);
+    player.laneHoldTimer = 0.22;
+  } else if (rightEdge && !leftEdge) {
+    player.targetLane = Math.min(1, (player.targetLane ?? 0) + 1);
+    player.laneHoldTimer = 0.22;
+  } else if ((input.left || input.right) && !(input.left && input.right)) {
+    player.laneHoldTimer = Math.max(0, (player.laneHoldTimer || 0) - dt);
+    if (player.laneHoldTimer <= 0) {
+      if (input.left) player.targetLane = Math.max(-1, (player.targetLane ?? 0) - 1);
+      if (input.right) player.targetLane = Math.min(1, (player.targetLane ?? 0) + 1);
+      player.laneHoldTimer = 0.22;
+    }
+  } else {
+    player.laneHoldTimer = 0;
+  }
+
+  const targetLane = player.targetLane ?? 0;
+  const curLanePos = player.lanePos ?? 0;
+  const laneDiff = targetLane - curLanePos;
+  const maxStep = LANE_SWITCH_SPEED * dt;
+  player.lanePos = Math.abs(laneDiff) <= maxStep ? targetLane : curLanePos + Math.sign(laneDiff) * maxStep;
+  player.trackLane = Math.round(player.lanePos);
+  player.vx = Math.abs(laneDiff) > 0.01 ? Math.sign(laneDiff) * 160 : 0;
+  player.xOffset = player.lanePos * 34;
+
+  // pet vertical movement
   if (input.swipeDuck) player.duckTimer = SWIPE_DUCK_S;
   else player.duckTimer = Math.max(0, player.duckTimer - dt);
   const wantDuck = Boolean(input.duck) || player.duckTimer > 0;
@@ -479,8 +534,7 @@ export function step(run, dt, input = {}) {
   }
   player.ducking = wantDuck && player.height <= 0;
 
-  const moveScale = input.right && !input.left ? 1.24 : input.left && !input.right ? 0.84 : 1;
-  const speed = currentSpeed({ ...run, power, slow }) * moveScale;
+  const speed = currentSpeed({ ...run, power, slow });
   const dist = run.dist + speed * dt;
   const t = run.t + dt;
 
@@ -494,24 +548,30 @@ export function step(run, dt, input = {}) {
   let frameHits = 0;
   for (let i = cursor; i < entities.length; i++) {
     let e = entities[i];
-    if (e.x > dist + VIEW_W + 60) break;
+    if (e.x > dist + VIEW_W + 140) break;
     if (e.gone) continue;
     if (e.move) {
       e = { ...e, x: e.x - e.move * dt };
       changed.set(i, e);
     }
+    const entityLane = e.trackLane ?? 0;
+    const laneDist = e.trackLane == null ? 0 : Math.abs((player.lanePos ?? 0) - entityLane);
+    const inObstacleLane = laneDist < 0.55;
+    const inPickupLane = laneDist < 0.68 || power.magnet > 0 || power.speed > 0;
+
     if (e.kind === 'treat' && (power.magnet > 0 || power.speed > 0)) {
       const dx = dist + PLAYER_W / 2 - (e.x + e.w / 2);
       const dy = player.height + PLAYER_H / 2 - (e.y + e.h / 2);
       const d = Math.hypot(dx, dy);
       if (d < MAGNET_RANGE && d > 1) {
         const k = Math.min(1, (MAGNET_PULL * dt) / d);
-        e = { ...e, x: e.x + dx * k, y: e.y + dy * k };
+        const pullLane = entityLane + ((player.lanePos ?? 0) - entityLane) * Math.min(1, dt * 8);
+        e = { ...e, x: e.x + dx * k, y: e.y + dy * k, trackLane: pullLane };
         changed.set(i, e);
       }
     }
     if (e.kind === 'obstacle' && !e.hit && !e.nearMissed && e.x + e.w < dist + 2 && e.x + e.w >= dist - 14) {
-      if (player.height > 0 || player.ducking) {
+      if ((inObstacleLane && (player.height > 0 || player.ducking)) || (!inObstacleLane && laneDist < 1.15)) {
         changed.set(i, { ...e, nearMissed: true });
         nearMissTimer = 0.22;
         events.push('nearMiss');
@@ -519,6 +579,7 @@ export function step(run, dt, input = {}) {
     }
     if (!overlaps(pBox, entityBox(e))) continue;
     if (e.kind === 'treat') {
+      if (!inPickupLane) continue;
       const value = power.double > 0 ? 2 : 1;
       treats += value;
       collected += 1;
@@ -530,11 +591,13 @@ export function step(run, dt, input = {}) {
       changed.set(i, { ...e, gone: true });
       events.push('collect');
     } else if (e.kind === 'power') {
+      if (!inPickupLane) continue;
       changed.set(i, { ...e, gone: true });
       if (e.type === 'shield') power.shield = true;
       else power[e.type] = Math.max(power[e.type], POWER_DURATION[e.type]);
       events.push('power');
     } else if (e.kind === 'obstacle' && !e.hit) {
+      if (!inObstacleLane) continue;
       if (e.type === 'puddle' && player.height <= 4) {
         events.push('splash');
       }
@@ -653,6 +716,9 @@ export function continueRun(run) {
   if (!canContinueRun(run)) return run;
   const player = {
     ...run.player,
+    laneHoldTimer: 0,
+    prevLeft: false,
+    prevRight: false,
     ducking: false,
     duckTimer: 0,
     jumpBuffer: 0
@@ -691,8 +757,8 @@ export function visible(run) {
   for (let i = run.cursor; i < run.entities.length; i++) {
     const e = run.entities[i];
     const sx = e.x - run.dist + PLAYER_X;
-    if (sx > VIEW_W + 10) break;
-    if (e.gone || sx + e.w < -10) continue;
+    if (sx > VIEW_W + 140) break;
+    if (e.gone || sx + e.w < -60) continue;
     out.push({ ...e, sx, sy: GROUND - e.y - e.h });
   }
   return out;

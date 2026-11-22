@@ -29,6 +29,7 @@ import {
   JUMP_V,
   DOUBLE_JUMP_V,
   MAX_JUMP_HEIGHT,
+  LANES,
   resultOf,
   visible,
   PLAYER_H,
@@ -605,7 +606,7 @@ test('instructions overlay shows only for the first 2 runs of each mode', () => 
   assert.equal(shouldShowHowTo(runs, chase), false);
 });
 
-test('left/right controls accelerate player position, double-jump caps at MAX_JUMP_HEIGHT, and endless/chase use bench & trash obstacles', () => {
+test('3-lane controls switch lanes left/right, avoid obstacles by dodging or jumping, and double-jump caps at MAX_JUMP_HEIGHT', () => {
   const endless = endlessStage('cat');
   const chase = chaseStage('cat');
   assert.deepEqual(Object.keys(endless.obstacles).sort(), ['bench', 'trash']);
@@ -614,17 +615,35 @@ test('left/right controls accelerate player position, double-jump caps at MAX_JU
   assert.equal(OBSTACLES.trash.lane, 'low');
 
   const base = newRun(endless, { seed: 7 });
-  assert.ok(base.entities.some((e) => e.kind === 'obstacle' && (e.type === 'bench' || e.type === 'trash')));
+  const obsList = base.entities.filter((e) => e.kind === 'obstacle');
+  assert.ok(obsList.some((e) => e.type === 'bench' || e.type === 'trash'));
+  assert.ok(obsList.every((e) => LANES.includes(e.trackLane)));
 
-  let rRight = base;
-  let rLeft = base;
-  for (let i = 0; i < 15; i++) {
-    rRight = step({ ...rRight, entities: [] }, DT, { right: true });
-    rLeft = step({ ...rLeft, entities: [] }, DT, { left: true });
+  // Left and right inputs switch lanes toward -1 and +1
+  let rLeft = step({ ...base, entities: [] }, DT, { laneLeft: true, left: true });
+  let rRight = step({ ...base, entities: [] }, DT, { laneRight: true, right: true });
+  for (let i = 0; i < 6; i++) {
+    rLeft = step({ ...rLeft, entities: [] }, DT, {});
+    rRight = step({ ...rRight, entities: [] }, DT, {});
   }
-  assert.ok(rRight.player.xOffset > 0);
-  assert.ok(rLeft.player.xOffset < 0);
-  assert.ok(rRight.dist > rLeft.dist);
+  assert.equal(rLeft.player.trackLane, -1);
+  assert.ok(rLeft.player.lanePos < 0);
+  assert.equal(rRight.player.trackLane, 1);
+  assert.ok(rRight.player.lanePos > 0);
+
+  // Obstacle in center trackLane 0 hits when staying in lane 0, dodged by switching lane or jumping
+  const centerObs = { id: 9001, kind: 'obstacle', type: 'bench', trackLane: 0, lane: 'low', x: base.dist + 80, y: 0, w: 58, h: 28, move: 0 };
+  let stayRun = { ...base, entities: [centerObs], cursor: 0 };
+  let dodgeRun = step({ ...base, entities: [{ ...centerObs }], cursor: 0 }, DT, { laneRight: true });
+  let jumpRun = step({ ...base, entities: [{ ...centerObs }], cursor: 0 }, DT, { jump: true });
+  for (let i = 0; i < 24; i++) {
+    stayRun = step(stayRun, DT);
+    dodgeRun = step(dodgeRun, DT);
+    jumpRun = step(jumpRun, DT);
+  }
+  assert.equal(stayRun.hits, 1);
+  assert.equal(dodgeRun.hits, 0);
+  assert.equal(jumpRun.hits, 0);
 
   let rAir = step({ ...base, entities: [] }, DT, { jump: true });
   let peak = rAir.player.height;
