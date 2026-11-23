@@ -139,7 +139,7 @@ function PowerBox({ type }) {
 export function Chaser({ chaser, phase = 0, view = 'side' }) {
   const id = chaser?.id || 'bath';
   if (id === 'dog' && view === 'back') {
-    return <BackRunner cat={false} phase={phase} cx={24} floor={39} size={0.92} rate={1.9} tint="#9A6338" />;
+    return <BackRunner cat={false} phase={phase} cx={24} floor={39} size={0.92} rate={1.1} tint="#9A6338" />;
   }
   if (id === 'dog') {
     const a = (Number(phase) || 0) * 1.9;

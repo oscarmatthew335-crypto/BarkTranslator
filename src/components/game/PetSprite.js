@@ -193,19 +193,25 @@ const HAT_ASPECT = {
   'hat-chef': 280 / 320, 'hat-crown': 250 / 320, 'hat-wizard': 291 / 320, 'hat-halo': 166 / 320,
 };
 
-// Four steps per stride: run1, run2, then both mirrored (a back view mirrors
-// cleanly). The bob peaks once per step.
-function backMotion(phase, pose, rising, rate = 1.85) {
+// One painted frame per step: run1 (stretch) and run2 (gather) alternate at
+// a stride rate of about 8 steps a second at normal speed. The bob and the
+// side-to-side sway run continuously so the body moves smoothly between frames.
+function backMotion(phase, pose, rising, rate = 1) {
   const a = (Number(phase) || 0) * rate * 0.5;
-  const q = Math.floor(a / (Math.PI / 2));
-  const step = ((q % 4) + 4) % 4;
-  let key = step % 2 === 0 ? 'run1' : 'run2';
-  let flip = step >= 2;
-  if (pose === 'jump') { key = rising ? 'jumpUp' : 'jumpDown'; flip = false; }
-  else if (pose === 'duck') { key = 'duck'; flip = false; }
-  else if (pose === 'hurt') { key = 'run1'; flip = false; }
+  const step = ((Math.floor(a / (Math.PI / 2)) % 2) + 2) % 2;
+  let key = step === 0 ? 'run1' : 'run2';
+  if (pose === 'jump') key = rising ? 'jumpUp' : 'jumpDown';
+  else if (pose === 'duck') key = 'duck';
+  else if (pose === 'hurt') key = 'run1';
+  const running = pose === 'run';
   const bounce = Math.abs(Math.sin(a * 2));
-  return { key, flip, bounce, bobY: pose === 'run' ? -bounce * 4 : pose === 'hurt' ? 2 : 0 };
+  return {
+    key,
+    bounce,
+    bobY: running ? -bounce * 3 : pose === 'hurt' ? 2 : 0,
+    sway: running ? Math.sin(a) * 2.5 : 0,
+    squash: running ? 1 - (1 - bounce) * 0.03 : 1,
+  };
 }
 
 // A curved collar band across the back of the neck.
@@ -244,14 +250,16 @@ export function BackRunner({
   const fr = set.frames[m.key];
   const h = set.h * size;
   const w = h * set.aspect;
-  const x0 = cx - w / 2;
+  // Every frame is shifted so its head sits over cx: the head stays put and
+  // only the body, legs and tail change between frames.
+  const x0 = cx - fr.hx * w;
   const y0 = floor - h;
   const outer = [];
   if (m.bobY) outer.push(`translate(0 ${m.bobY.toFixed(2)})`);
-  const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0);
+  const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0) + m.sway;
   if (tilt) outer.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
-  const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
-  const headX = x0 + (m.flip ? 1 - fr.hx : fr.hx) * w;
+  if (m.squash !== 1) outer.push(`translate(0 ${floor}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-floor})`);
+  const headX = cx;
   const headW = fr.hw * w;
   const skullY = y0 + fr.top * h;
   const hatCfg = hat ? BACK_HATS[hat] : null;
@@ -264,7 +272,7 @@ export function BackRunner({
         <Ellipse cx={cx} cy={floor} rx={(h * 0.22 * (1 - m.bounce * 0.12)).toFixed(1)} ry={3 * size} fill="rgba(36,29,59,0.22)" />
       ) : null}
       <G transform={outer.join(' ') || undefined}>
-        <G transform={flipT}>
+        <G>
           {gold ? (
             <SvgImage href={fr.gold} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
           ) : (
