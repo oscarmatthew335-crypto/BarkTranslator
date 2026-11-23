@@ -19,4 +19,24 @@ export const SPRITES = {
   iconFish: require('../../../assets/sprites/icon_fish.png'),
   btnLeft: require('../../../assets/sprites/btn_left.png'),
   btnUp: require('../../../assets/sprites/btn_up.png'),
+
+  // Behind-the-back runner art (3-lane view). Each species' frames share one
+  // canvas with the feet on the same bottom line, so frames swap without jitter.
+  catBackRun1: require('../../../assets/sprites/cat_back_run1.png'),
+  catBackRun2: require('../../../assets/sprites/cat_back_run2.png'),
+  catBackJump: require('../../../assets/sprites/cat_back_jump.png'),
+  dogBackRun1: require('../../../assets/sprites/dog_back_run1.png'),
+  dogBackRun2: require('../../../assets/sprites/dog_back_run2.png'),
+  dogBackJump: require('../../../assets/sprites/dog_back_jump.png'),
+  skyBg: require('../../../assets/sprites/sky_bg.jpg'),
+  benchFront: require('../../../assets/sprites/bench_front.png'),
+  trashFront: require('../../../assets/sprites/trash_front.png'),
+  hedge: require('../../../assets/sprites/hedge.png'),
+  stool: require('../../../assets/sprites/stool.png'),
+  coinGold: require('../../../assets/sprites/coin_gold.png'),
+  fishTreat: require('../../../assets/sprites/fish_treat.png'),
+  treeSingle: require('../../../assets/sprites/tree_single.png'),
+  bush: require('../../../assets/sprites/bush.png'),
+  bushFlowers: require('../../../assets/sprites/bush_flowers.png'),
+  lampPost: require('../../../assets/sprites/lamp_post.png'),
 };

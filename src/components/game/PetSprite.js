@@ -20,7 +20,11 @@ function PetSprite({
   panting = false,
   happy = false,
   bank = 0,
+  view = 'side',
 }) {
+  if (view === 'back' && pose !== 'front') {
+    return <BackPet cat={species === 'cat'} phase={phase} pose={pose} happy={happy} bank={bank} />;
+  }
   const col = getColour(colour);
   const char = typeof character === 'string' ? getCharacter(character) : character;
   const body = char ? char.palette.body : col.hex;
@@ -124,6 +128,70 @@ function PetSprite({
           height={26}
           preserveAspectRatio="xMidYMid meet"
         />
+      ) : null}
+    </G>
+  );
+}
+
+// Behind-the-back painted frames for the 3-lane runner. Sizes keep each
+// species' canvas aspect (cat 301x512, dog 383x512) with the feet on the box floor.
+const BACK_ART = {
+  cat: { run: [SPRITES.catBackRun1, SPRITES.catBackRun2], jump: SPRITES.catBackJump, w: 42.3, h: 72 },
+  dog: { run: [SPRITES.dogBackRun1, SPRITES.dogBackRun2], jump: SPRITES.dogBackJump, w: 47.9, h: 64 },
+};
+
+// Pick the frame and motion for a back-view runner. One run frame per step:
+// the frame flips each half-cycle of sin(a/2), and the bob peaks mid-step.
+function backMotion(phase, pose, rate = 1.85) {
+  const a = (Number(phase) || 0) * rate;
+  const step = Math.sin(a * 0.5);
+  const isJump = pose === 'jump';
+  return {
+    frame: isJump ? 'jump' : step >= 0 ? 0 : 1,
+    bounce: Math.abs(step),
+    bobY: isJump ? 0 : pose === 'hurt' ? 2 : -Math.abs(step) * 5,
+  };
+}
+
+// A back-view runner with its feet centred on (cx, floor).
+export function BackRunner({ cat, phase = 0, pose = 'run', bank = 0, cx = 28, floor = 44, size = 1, rate }) {
+  const art = cat ? BACK_ART.cat : BACK_ART.dog;
+  const m = backMotion(phase, pose, rate);
+  const href = m.frame === 'jump' ? art.jump : art.run[m.frame];
+  const w = art.w * size;
+  const h = art.h * size;
+  const parts = [];
+  if (pose === 'duck') {
+    parts.push(`translate(${cx} ${floor}) rotate(${(bank * 0.6).toFixed(1)}) scale(1.1 0.62) translate(${-cx} ${-floor})`);
+  } else {
+    if (m.bobY) parts.push(`translate(0 ${m.bobY.toFixed(2)})`);
+    const tilt = bank + (pose === 'hurt' ? 7 : 0);
+    if (tilt) parts.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
+  }
+  return (
+    <G>
+      {pose !== 'jump' ? (
+        <Ellipse cx={cx} cy={floor} rx={(w * 0.36 * (1 - m.bounce * 0.12)).toFixed(1)} ry={3 * size} fill="rgba(36,29,59,0.22)" />
+      ) : null}
+      <G transform={parts.join(' ') || undefined}>
+        <SvgImage href={href} x={cx - w / 2} y={floor - h} width={w} height={h} preserveAspectRatio="xMidYMax meet" />
+      </G>
+    </G>
+  );
+}
+
+// The player seen from behind. Cosmetics are drawn for the side view only, so
+// they are not layered here until back-view versions exist.
+function BackPet({ cat, phase, pose, happy, bank }) {
+  const m = backMotion(phase, pose);
+  return (
+    <G>
+      {pose === 'run' && m.bounce > 0.7 ? (
+        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.85} />
+      ) : null}
+      <BackRunner cat={cat} phase={phase} pose={pose} bank={bank} />
+      {happy && pose !== 'hurt' ? (
+        <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}
     </G>
   );

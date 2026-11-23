@@ -372,7 +372,9 @@ export default function RunnerScreen({
   const playerShadowRx = Math.max(8, 21 - run.player.height * 0.08);
 
   const chaserDx = -(12 + progress * 48);
-  const chaserLane = Math.max(-1, Math.min(1, playerLanePos * 0.85 + 0.16));
+  // Seen from behind, a chaser in the player's lane would hide the player, so it
+  // runs half a lane to the side (towards the middle when the pet is on an edge).
+  const chaserLane = Math.max(-1.2, Math.min(1.2, playerLanePos + (playerLanePos > 0.3 ? -0.6 : 0.6)));
   const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce) : null;
 
   const renderProjectedThing = (e) => {
@@ -455,13 +457,14 @@ export default function RunnerScreen({
                       panting={panting}
                       happy={happy}
                       bank={playerBank}
+                      view="back"
                     />
                     {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}
                   </G>
                   {entitiesBehind.map(renderProjectedThing)}
                   {showChaser && chaserProj ? (
                     <G transform={`translate(${chaserProj.x} ${chaserProj.y}) scale(${chaserProj.scale * 1.08}) translate(-24 -39)`}>
-                      <Chaser chaser={stage.chaser} phase={animPhase} />
+                      <Chaser chaser={stage.chaser} phase={animPhase} view="back" />
                     </G>
                   ) : null}
                   {particlesRef.current.map((p) => {

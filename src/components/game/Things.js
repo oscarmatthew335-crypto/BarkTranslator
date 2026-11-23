@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { SPRITES } from './sprites';
+import { BackRunner } from './PetSprite';
 
 const INK = C.ink;
 const SW = 2.2;
@@ -15,32 +16,32 @@ function Thing({ kind, type, w, h }) {
   return Art ? <Art w={w} h={h} /> : <Rect width={w} height={h} rx={6} fill={C.tomato} stroke={INK} strokeWidth={SW} />;
 }
 
-function benchArt({ w, h }) {
-  return (
-    <G>
-      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.52} ry={3.5} fill="rgba(36,29,59,0.22)" />
-      <SvgImage href={SPRITES.bench} x={-4} y={-6} width={w + 8} height={h + 10} preserveAspectRatio="none" />
-    </G>
-  );
+// Front-on painted props for the behind-the-back view. Art is fitted inside a
+// box a little larger than the hit box, bottom-centred on the ground line.
+function frontProp(href, padW, padH, shadow = 0.5) {
+  return function FrontProp({ w, h }) {
+    return (
+      <G>
+        <Ellipse cx={w / 2} cy={h - 1} rx={w * shadow} ry={3.5} fill="rgba(36,29,59,0.22)" />
+        <SvgImage href={href} x={-padW / 2} y={-padH} width={w + padW} height={h + padH} preserveAspectRatio="xMidYMax meet" />
+      </G>
+    );
+  };
 }
 
-function trashArt({ w, h }) {
-  return (
-    <G>
-      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.5} ry={3.5} fill="rgba(36,29,59,0.22)" />
-      <SvgImage href={SPRITES.trashCan} x={-3} y={-4} width={w + 6} height={h + 8} preserveAspectRatio="none" />
-    </G>
-  );
-}
+const benchArt = frontProp(SPRITES.benchFront, 8, 14, 0.52);
+const trashArt = frontProp(SPRITES.trashFront, 6, 8);
+const hedgeArt = frontProp(SPRITES.hedge, 8, 14, 0.54);
+const stoolArt = frontProp(SPRITES.stool, 8, 14);
 
 const OBSTACLE_ART = {
   bench: benchArt,
   trash: trashArt,
   puddle: benchArt,
-  vacuum: benchArt,
+  vacuum: stoolArt,
   sprinkler: trashArt,
   postman: benchArt,
-  cucumber: trashArt,
+  cucumber: hedgeArt,
   spray: trashArt,
   dog: ({ w, h }) => (
     <G transform={`translate(${w} 0) scale(-1 1)`}>
@@ -73,13 +74,8 @@ function Treat({ type }) {
   if (type === 'ball')
     return <SvgImage href={SPRITES.iconStar} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
   if (type === 'fish')
-    return <SvgImage href={SPRITES.fish} x={-2} y={0} width={26} height={21} preserveAspectRatio="xMidYMid meet" />;
-  return (
-    <G>
-      <Circle cx={11} cy={11} r={10} fill={C.butter} stroke={INK} strokeWidth={1.5} />
-      <SvgImage href={SPRITES.iconPaw} x={3.5} y={3.5} width={15} height={15} preserveAspectRatio="xMidYMid meet" />
-    </G>
-  );
+    return <SvgImage href={SPRITES.fishTreat} x={-3} y={-1} width={28} height={23} preserveAspectRatio="xMidYMid meet" />;
+  return <SvgImage href={SPRITES.coinGold} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
 }
 
 const POWER_COLOUR = { speed: C.coral, shield: C.arcadeBlue, magnet: C.pink, double: C.butter };
@@ -104,8 +100,11 @@ function PowerBox({ type }) {
 }
 
 // The chaser drawn behind the pet on the left of the screen in Chase mode.
-export function Chaser({ chaser, phase = 0 }) {
+export function Chaser({ chaser, phase = 0, view = 'side' }) {
   const id = chaser?.id || 'bath';
+  if (id === 'dog' && view === 'back') {
+    return <BackRunner cat={false} phase={phase} cx={24} floor={39} size={0.92} rate={1.9} />;
+  }
   if (id === 'dog') {
     const a = (Number(phase) || 0) * 1.9;
     const bounce = Math.abs(Math.sin(a * 0.5));
