@@ -393,7 +393,7 @@ export default function RunnerScreen({
           />
         ) : null}
         <G transform={`translate(${proj.x} ${drawY}) scale(${sScale}) translate(${-e.w / 2} ${-e.h})`}>
-          <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} />
+          <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} lift={e.y} t={run.t} />
         </G>
       </G>
     );
@@ -457,6 +457,7 @@ export default function RunnerScreen({
                       panting={panting}
                       happy={happy}
                       bank={playerBank}
+                      rising={run.player.vy > 0}
                       view="back"
                     />
                     {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}

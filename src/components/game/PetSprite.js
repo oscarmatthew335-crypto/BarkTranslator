@@ -1,5 +1,5 @@
-import React, { memo } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
+import React, { memo, useId } from 'react';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
@@ -21,9 +21,22 @@ function PetSprite({
   happy = false,
   bank = 0,
   view = 'side',
+  rising = true,
 }) {
   if (view === 'back' && pose !== 'front') {
-    return <BackPet cat={species === 'cat'} phase={phase} pose={pose} happy={happy} bank={bank} />;
+    return (
+      <BackPet
+        cat={species === 'cat'}
+        phase={phase}
+        pose={pose}
+        rising={rising}
+        happy={happy}
+        bank={bank}
+        colour={colour}
+        equipped={equipped}
+        character={character}
+      />
+    );
   }
   const col = getColour(colour);
   const char = typeof character === 'string' ? getCharacter(character) : character;
@@ -133,63 +146,185 @@ function PetSprite({
   );
 }
 
-// Behind-the-back painted frames for the 3-lane runner. Sizes keep each
-// species' canvas aspect (cat 301x512, dog 383x512) with the feet on the box floor.
-const BACK_ART = {
-  cat: { run: [SPRITES.catBackRun1, SPRITES.catBackRun2], jump: SPRITES.catBackJump, w: 42.3, h: 72 },
-  dog: { run: [SPRITES.dogBackRun1, SPRITES.dogBackRun2], jump: SPRITES.dogBackJump, w: 47.9, h: 64 },
+// Behind-the-back painted frames for the 3-lane runner. Each set shares one
+// canvas (cat 405x512, dog 426x512) with the feet on its bottom edge. Grey
+// frames are tinted to the pet's fur colour through a fur mask.
+// Anchors are fractions of the canvas: hx = head centre, top = skull top
+// between the ears, hw = head width, ny = where a collar sits.
+const BACK_FRAMES = {
+  cat: {
+    h: 84,
+    aspect: 405 / 512,
+    frames: {
+      run1: { grey: SPRITES.catBackRun1, fur: SPRITES.catBackRun1Fur, gold: SPRITES.catGoldBackRun1, hx: 0.65, top: 0.25, hw: 0.56, ny: 0.55 },
+      run2: { grey: SPRITES.catBackRun2, fur: SPRITES.catBackRun2Fur, gold: SPRITES.catGoldBackRun2, hx: 0.55, top: 0.265, hw: 0.53, ny: 0.56 },
+      jumpUp: { grey: SPRITES.catBackJumpUp, fur: SPRITES.catBackJumpUpFur, gold: SPRITES.catGoldBackJumpUp, hx: 0.54, top: 0.085, hw: 0.56, ny: 0.38 },
+      jumpDown: { grey: SPRITES.catBackJumpDown, fur: SPRITES.catBackJumpDownFur, gold: SPRITES.catGoldBackJumpDown, hx: 0.58, top: 0.23, hw: 0.49, ny: 0.53 },
+      duck: { grey: SPRITES.catBackDuck, fur: SPRITES.catBackDuckFur, gold: SPRITES.catGoldBackDuck, hx: 0.665, top: 0.5, hw: 0.52, ny: 0.71 },
+    },
+  },
+  dog: {
+    h: 66,
+    aspect: 426 / 512,
+    frames: {
+      run1: { grey: SPRITES.dogBackRun1, fur: SPRITES.dogBackRun1Fur, gold: SPRITES.dogGoldBackRun1, hx: 0.61, top: 0.085, hw: 0.51, ny: 0.44 },
+      run2: { grey: SPRITES.dogBackRun2, fur: SPRITES.dogBackRun2Fur, gold: SPRITES.dogGoldBackRun2, hx: 0.42, top: 0.045, hw: 0.52, ny: 0.41 },
+      jumpUp: { grey: SPRITES.dogBackJump, fur: SPRITES.dogBackJumpFur, gold: SPRITES.dogGoldBackJump, hx: 0.61, top: 0.05, hw: 0.51, ny: 0.41 },
+      duck: { grey: SPRITES.dogBackDuck, fur: SPRITES.dogBackDuckFur, gold: SPRITES.dogGoldBackDuck, hx: 0.68, top: 0.31, hw: 0.45, ny: 0.6 },
+    },
+  },
+};
+BACK_FRAMES.dog.frames.jumpDown = BACK_FRAMES.dog.frames.jumpUp;
+
+// Hats seen from behind: width and how far the brim sinks into the head, both
+// as fractions of the head's width. lift raises a floating item (the halo).
+const BACK_HATS = {
+  'hat-party': { href: SPRITES.hatParty, k: 0.5, sink: 0.1 },
+  'hat-beanie': { href: SPRITES.hatBeanie, k: 0.92, sink: 0.3 },
+  'hat-sun': { href: SPRITES.hatSun, k: 1.3, sink: 0.2 },
+  'hat-cap': { href: SPRITES.hatCap, k: 0.95, sink: 0.28 },
+  'hat-chef': { href: SPRITES.hatChef, k: 0.8, sink: 0.18 },
+  'hat-crown': { href: SPRITES.hatCrown, k: 0.72, sink: 0.12 },
+  'hat-wizard': { href: SPRITES.hatWizard, k: 1.0, sink: 0.16 },
+  'hat-halo': { href: SPRITES.hatHalo, k: 0.75, sink: 0, lift: 0.14 },
+};
+const HAT_ASPECT = {
+  'hat-party': 205 / 160, 'hat-beanie': 320 / 306, 'hat-sun': 220 / 320, 'hat-cap': 222 / 320,
+  'hat-chef': 280 / 320, 'hat-crown': 250 / 320, 'hat-wizard': 291 / 320, 'hat-halo': 166 / 320,
 };
 
-// Pick the frame and motion for a back-view runner. One run frame per step:
-// the frame flips each half-cycle of sin(a/2), and the bob peaks mid-step.
-function backMotion(phase, pose, rate = 1.85) {
-  const a = (Number(phase) || 0) * rate;
-  const step = Math.sin(a * 0.5);
-  const isJump = pose === 'jump';
-  return {
-    frame: isJump ? 'jump' : step >= 0 ? 0 : 1,
-    bounce: Math.abs(step),
-    bobY: isJump ? 0 : pose === 'hurt' ? 2 : -Math.abs(step) * 5,
-  };
+// Four steps per stride: run1, run2, then both mirrored (a back view mirrors
+// cleanly). The bob peaks once per step.
+function backMotion(phase, pose, rising, rate = 1.85) {
+  const a = (Number(phase) || 0) * rate * 0.5;
+  const q = Math.floor(a / (Math.PI / 2));
+  const step = ((q % 4) + 4) % 4;
+  let key = step % 2 === 0 ? 'run1' : 'run2';
+  let flip = step >= 2;
+  if (pose === 'jump') { key = rising ? 'jumpUp' : 'jumpDown'; flip = false; }
+  else if (pose === 'duck') { key = 'duck'; flip = false; }
+  else if (pose === 'hurt') { key = 'run1'; flip = false; }
+  const bounce = Math.abs(Math.sin(a * 2));
+  return { key, flip, bounce, bobY: pose === 'run' ? -bounce * 4 : pose === 'hurt' ? 2 : 0 };
 }
 
-// A back-view runner with its feet centred on (cx, floor).
-export function BackRunner({ cat, phase = 0, pose = 'run', bank = 0, cx = 28, floor = 44, size = 1, rate }) {
-  const art = cat ? BACK_ART.cat : BACK_ART.dog;
-  const m = backMotion(phase, pose, rate);
-  const href = m.frame === 'jump' ? art.jump : art.run[m.frame];
-  const w = art.w * size;
-  const h = art.h * size;
-  const parts = [];
-  if (pose === 'duck') {
-    parts.push(`translate(${cx} ${floor}) rotate(${(bank * 0.6).toFixed(1)}) scale(1.1 0.62) translate(${-cx} ${-floor})`);
-  } else {
-    if (m.bobY) parts.push(`translate(0 ${m.bobY.toFixed(2)})`);
-    const tilt = bank + (pose === 'hurt' ? 7 : 0);
-    if (tilt) parts.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
+// A curved collar band across the back of the neck.
+function BackCollar({ item, cx, y, w }) {
+  const t = Math.max(2, w * 0.13);
+  const d = `M ${cx - w / 2} ${y - t * 0.4} Q ${cx} ${y + t * 1.3} ${cx + w / 2} ${y - t * 0.4}`;
+  const bits = [];
+  if (item.bell) bits.push(<Circle key="b" cx={cx + w * 0.44} cy={y + t * 0.2} r={t * 0.75} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.8} />);
+  if (item.gem) {
+    const n = item.rare ? 5 : 3;
+    for (let i = 0; i < n; i++) {
+      const u = (i + 1) / (n + 1);
+      const gx = cx - w / 2 + w * u;
+      const gy = y - t * 0.4 + 2 * (1 - u) * u * t * 1.7 + 0.2;
+      bits.push(<Circle key={i} cx={gx} cy={gy} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
+    }
   }
   return (
     <G>
-      {pose !== 'jump' ? (
-        <Ellipse cx={cx} cy={floor} rx={(w * 0.36 * (1 - m.bounce * 0.12)).toFixed(1)} ry={3 * size} fill="rgba(36,29,59,0.22)" />
+      <Path d={d} stroke="#5A3A24" strokeWidth={t + 1.4} fill="none" strokeLinecap="round" />
+      <Path d={d} stroke={item.colour} strokeWidth={t} fill="none" strokeLinecap="round" />
+      {bits}
+    </G>
+  );
+}
+
+// A back-view runner with its feet centred on (cx, floor). tint: a fur colour
+// hex, or null for the art's own colours. gold: use the Gold character frames.
+export function BackRunner({
+  cat, phase = 0, pose = 'run', rising = true, bank = 0, cx = 28, floor = 44, size = 1, rate,
+  tint = null, gold = false, hat = null, collar = null, shadow = true,
+}) {
+  const maskId = useId().replace(/:/g, '_');
+  const set = cat ? BACK_FRAMES.cat : BACK_FRAMES.dog;
+  const m = backMotion(phase, pose, rising, rate);
+  const fr = set.frames[m.key];
+  const h = set.h * size;
+  const w = h * set.aspect;
+  const x0 = cx - w / 2;
+  const y0 = floor - h;
+  const outer = [];
+  if (m.bobY) outer.push(`translate(0 ${m.bobY.toFixed(2)})`);
+  const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0);
+  if (tilt) outer.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
+  const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
+  const headX = x0 + (m.flip ? 1 - fr.hx : fr.hx) * w;
+  const headW = fr.hw * w;
+  const skullY = y0 + fr.top * h;
+  const hatCfg = hat ? BACK_HATS[hat] : null;
+  const hatW = hatCfg ? headW * hatCfg.k : 0;
+  const hatH = hatCfg ? hatW * HAT_ASPECT[hat] : 0;
+  const hatY = hatCfg ? skullY + headW * hatCfg.sink - hatH - headW * (hatCfg.lift || 0) : 0;
+  return (
+    <G>
+      {shadow && pose !== 'jump' ? (
+        <Ellipse cx={cx} cy={floor} rx={(h * 0.22 * (1 - m.bounce * 0.12)).toFixed(1)} ry={3 * size} fill="rgba(36,29,59,0.22)" />
       ) : null}
-      <G transform={parts.join(' ') || undefined}>
-        <SvgImage href={href} x={cx - w / 2} y={floor - h} width={w} height={h} preserveAspectRatio="xMidYMax meet" />
+      <G transform={outer.join(' ') || undefined}>
+        <G transform={flipT}>
+          {gold ? (
+            <SvgImage href={fr.gold} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+          ) : (
+            <>
+              <SvgImage href={fr.grey} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+              {tint ? (
+                <>
+                  <Defs>
+                    <Mask id={maskId} maskUnits="userSpaceOnUse" x={x0} y={y0} width={w} height={h}>
+                      <SvgImage href={fr.fur} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+                    </Mask>
+                  </Defs>
+                  <Rect x={x0} y={y0} width={w} height={h} fill={tint} opacity={0.6} mask={`url(#${maskId})`} />
+                </>
+              ) : null}
+            </>
+          )}
+        </G>
+        {collar ? <BackCollar item={collar} cx={headX} y={y0 + fr.ny * h} w={headW * 0.62} /> : null}
+        {hatCfg ? (
+          <SvgImage href={hatCfg.href} x={headX - hatW / 2} y={hatY} width={hatW} height={hatH} preserveAspectRatio="none" />
+        ) : null}
       </G>
     </G>
   );
 }
 
-// The player seen from behind. Cosmetics are drawn for the side view only, so
-// they are not layered here until back-view versions exist.
-function BackPet({ cat, phase, pose, happy, bank }) {
-  const m = backMotion(phase, pose);
+const GOLD_SPARKLES = [SPRITES.goldSparkle1, SPRITES.goldSparkle2, SPRITES.goldSparkle3];
+
+// The player seen from behind. Fur colour, hats and collars are drawn; neck
+// items and glasses wait for their back-view art (see the art list).
+function BackPet({ cat, phase, pose, rising, happy, bank, colour, equipped, character }) {
+  const char = typeof character === 'string' ? getCharacter(character) : character;
+  const gold = char?.id === 'char-gold';
+  const shown = char ? effectiveEquipped({ equipped }, char.id) : equipped || {};
+  const col = getColour(colour);
+  const tint = gold ? null : char?.palette?.body || col.hex;
+  const hatItem = shown.hat ? getItem(shown.hat) : null;
+  const collarItem = shown.collar ? getItem(shown.collar) : null;
+  const m = backMotion(phase, pose, rising);
+  const sparkle = GOLD_SPARKLES[Math.floor((Number(phase) || 0) * 0.9) % 3];
   return (
     <G>
-      {pose === 'run' && m.bounce > 0.7 ? (
-        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.85} />
+      {gold && pose !== 'duck' ? (
+        <SvgImage href={sparkle} x={4} y={18} width={48} height={44} preserveAspectRatio="xMidYMid meet" opacity={0.9} />
       ) : null}
-      <BackRunner cat={cat} phase={phase} pose={pose} bank={bank} />
+      {pose === 'run' && m.bounce > 0.75 ? (
+        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.8} />
+      ) : null}
+      <BackRunner
+        cat={cat}
+        phase={phase}
+        pose={pose}
+        rising={rising}
+        bank={bank}
+        tint={tint}
+        gold={gold}
+        hat={hatItem ? hatItem.id : null}
+        collar={collarItem}
+      />
       {happy && pose !== 'hurt' ? (
         <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}
