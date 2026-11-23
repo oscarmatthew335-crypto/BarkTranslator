@@ -285,6 +285,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         showHowTo,
         instantStart: Boolean(fromReplay),
         runGoal,
+        runNumber: totalRunCount,
         key: Date.now()
       });
     },
@@ -357,7 +358,10 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         end_cause: result.endCause || (result.failed ? 'out_of_hearts' : 'finished'),
         continued: Boolean(result.continued),
         treats: result.treats || 0,
-        character: game.wardrobe?.activeCharacter || 'none'
+        character: game.wardrobe?.activeCharacter || 'none',
+        seconds: result.seconds || 0,
+        first_run: (screen.runNumber || 0) === 1,
+        ended_by: result.failed || result.caught ? result.endCause || 'hit' : 'time'
       });
       const nowHour = new Date().getHours();
       const prevHours = Array.isArray(options?.recentRunHours) ? options.recentRunHours : [];
@@ -453,7 +457,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         updateInterstitial(() => nextInter);
       }
     },
-    [updateGame, updateInterstitial, updateDoubleTreats, updateExtraSavers, updateStore, interstitial, doubleTreats, extraSavers, store, premium, pet, history, game, lang, screen.name, screen.runGoal]
+    [updateGame, updateInterstitial, updateDoubleTreats, updateExtraSavers, updateStore, interstitial, doubleTreats, extraSavers, store, premium, pet, history, game, lang, screen.name, screen.runGoal, screen.runNumber]
   );
 
   // A treat-round answer. Recordings go through the same path as the
@@ -693,7 +697,8 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         }
         showHowTo={screen.showHowTo}
         instantStart={Boolean(screen.instantStart)}
-        showJumpDuckButtons={options?.showJumpDuckButtons !== false}
+        showJumpDuckButtons={Boolean(options?.showJumpDuckButtons)}
+        runNumber={screen.runNumber || 0}
         treatBalance={game.bank}
         continueTreatCost={30}
         onPayContinueTreats={(cost) => {
@@ -708,7 +713,16 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         vibrationOn={options.vibration !== false}
         premium={premium}
         onFinish={finish}
-        onQuit={() => setScreen({ name: 'hub' })}
+        onQuit={(r) => {
+          track('run_end', {
+            mode: runModeFor(screen.stage),
+            stage_id: screen.stage.id,
+            seconds: r?.seconds || 0,
+            first_run: (screen.runNumber || 0) === 1,
+            ended_by: 'quit'
+          });
+          setScreen({ name: 'hub' });
+        }}
         onFps={recordFps}
       />
     );

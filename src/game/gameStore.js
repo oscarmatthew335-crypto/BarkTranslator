@@ -48,6 +48,14 @@ export function recordModeRun(modeRuns, modeOrStage) {
   return { ...base, [key]: (base[key] || 0) + 1 };
 }
 
+// Runs played on this phone, over every pet and mode.
+export function totalRuns(state) {
+  return Object.values(state?.pets || {}).reduce(
+    (n, p) => n + Object.values(p?.modeRuns || {}).reduce((m, v) => m + (Number(v) || 0), 0),
+    0
+  );
+}
+
 export function emptyPetGame(pet) {
   return {
     progress: emptyProgress(),
@@ -94,7 +102,7 @@ export const emptyGameState = () => ({
     recentRunHours: [],
     livesEmptyAtClose: false,
     lastReminderDay: null,
-    showJumpDuckButtons: true,
+    showJumpDuckButtons: false, // swipe first; players from before keep their buttons (see loadGame)
     lastCharacterNudgeDay: null
   }
 });
@@ -143,7 +151,12 @@ export async function loadGame() {
         extraSavers: Math.max(0, Math.floor(Number(data.extraSavers) || 0)),
         store: { ...def.store, ...(data.store || {}) },
         premium: Boolean(data.premium),
-        options: { ...def.options, ...(data.options || {}) }
+        options: {
+          ...def.options,
+          ...(data.options || {}),
+          // Swipe-only is the default for new players; anyone who already ran keeps the buttons.
+          showJumpDuckButtons: data.options?.showJumpDuckButtons ?? totalRuns(data) > 0
+        }
       };
     }
   } catch (_) {}

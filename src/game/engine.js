@@ -7,6 +7,7 @@
 
 import { makeRng, pick, hashString } from './random';
 import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED, isSurpriseObstacleAllowed } from './stages';
+import { difficultyFor, patternsFor } from './chunks';
 
 export const VIEW_W = 400;
 export const VIEW_H = 220;
@@ -16,7 +17,9 @@ export const PLAYER_W = 46;
 export const PLAYER_H = 40;
 export const DUCK_H = 22;
 export const LANES = [-1, 0, 1];
-export const LANE_SWITCH_SPEED = 14;
+export const LANE_SWITCH_SPEED = 14; // the old constant-speed move (lanes per second), kept for reference
+export const LANE_EASE_S = 0.14; // a lane change eases out over this long
+export const LANE_LEAN_DEG = 12; // the pet leans this far early in a lane change
 export const GRAVITY = 1900;
 export const JUMP_V = 700;
 export const DOUBLE_JUMP_V = 440; // snappier second jump while in the air
@@ -26,6 +29,12 @@ export const TRICK_CAP = 5; // rewarded tricks per run
 export const MAX_JUMP_HEIGHT = 124; // prevents floating high into the top HUD
 export const JUMP_BUFFER = 0.12; // a tap just before landing still jumps
 export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
+// The first 25 seconds of Endless and Chase (and the first stage of a place)
+// are a warm-up: one obstacle at a time, nothing moving, a treat guide before
+// each one. Measured as distance: 25 s at the starting speed.
+export const WARMUP_S = 25;
+export const FIRST_RUN_SPEED = 0.85; // a player's very first run is slower during the warm-up
+export const PATTERN_CHANCE = 0.6; // after the warm-up, how often a designed pattern is used
 export const HIT_INVULN_S = 1.2;
 export const HIT_SLOW_S = 0.6;
 
@@ -92,6 +101,20 @@ export function entityBox(e) {
 
 // How far the pet travels during one jump at this speed.
 export const jumpDistance = (speed) => ((2 * JUMP_V) / GRAVITY) * speed;
+export const warmupDist = (stage) => WARMUP_S * (stage.speed || 0);
+
+// Ease-out for lane changes: fast at the start, settling into the lane.
+export const laneEase = (u) => 1 - Math.pow(1 - Math.max(0, Math.min(1, u)), 3);
+
+// How far the pet leans (degrees, + = right) during a lane change: peaks a
+// third of the way in and is back to 0 when it arrives.
+export function laneLean(player) {
+  if (!player || player.laneT == null) return 0;
+  const u = Math.min(1, player.laneT / LANE_EASE_S);
+  if (u >= 1) return 0;
+  const dir = Math.sign((player.targetLane ?? 0) - (player.laneFrom ?? 0));
+  return dir * LANE_LEAN_DEG * 6.75 * u * (1 - u) * (1 - u);
+}
 
 function weighted(rng, weights) {
   const entries = Object.entries(weights).filter(([, w]) => w > 0);
@@ -120,16 +143,19 @@ export function buildLevel(stage, seed) {
   const powerCount = stage.daily ? 4 : Math.min(3, stage.powerUps.length ? 1 + Math.floor(stage.index / 2) : 0);
   for (let i = 0; i < powerCount; i++) powerAt.add(Math.floor(((i + 1) / (powerCount + 1)) * 100));
 
+  const warm = stage.index === 0 ? warmupDist(stage) : 0;
+  const stillMix = Object.fromEntries(Object.entries(stage.obstacles).filter(([k]) => !OBSTACLES[k].move));
   while (x < length - 260) {
     const progress = x / length;
     const speed = stage.speed + stage.ramp * progress;
-    const type = weighted(rng, stage.obstacles);
+    const warming = x < warm;
+    const type = weighted(rng, warming && Object.keys(stillMix).length ? stillMix : stage.obstacles);
     const o = OBSTACLES[type];
     entities.push({ id: id++, kind: 'obstacle', type, trackLane: 0, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
 
     // Treats: an arc over a low obstacle, or a line on the ground under a high one.
     const treat = pick(rng, treatTypes);
-    if (rng() < 0.8) {
+    if (rng() < 0.8 || warming) {
       // Along the path of a well-timed jump, so a good jump collects them all.
       const jd = jumpDistance(speed);
       const centre = x + o.w / 2;
@@ -147,7 +173,7 @@ export function buildLevel(stage, seed) {
     // A pair: jump one, then duck the next (or the other way round) soon after. The gap is the jump plus about
     // a third of a second on the ground to react, so it is always possible.
     let pair = 0;
-    if (stage.combo && rng() < stage.combo && x > 900) {
+    if (stage.combo && rng() < stage.combo && x > 900 && !warming) {
       const other = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane !== o.lane && !OBSTACLES[k].move);
       if (other.length) {
         const t2 = pick(rng, other);
@@ -158,7 +184,7 @@ export function buildLevel(stage, seed) {
       }
     }
 
-    const minGap = jumpDistance(speed) * 1.25 + o.w + 40 + pair;
+    const minGap = Math.max(jumpDistance(speed) * (warming ? 1.6 : 1.25) + o.w + 40 + pair, warming ? jumpDistance(speed) * 1.6 + o.w : 0);
     const gap = minGap + (rng() * 260) / stage.density;
     const mid = x + o.w + gap / 2;
 
@@ -183,6 +209,45 @@ export function buildLevel(stage, seed) {
   return { entities, length, totalTreats };
 }
 
+// Lay one hand-made pattern (src/game/chunks.js) at x, with the stage's own
+// still obstacles swapped into its low and high slots. Returns null when no
+// pattern fits (the random rows are the fallback).
+function placePattern(rng, stage, { x, speed, maxSpeed, treat, nextId }) {
+  const still = (lane) => Object.fromEntries(Object.entries(stage.obstacles || {}).filter(([k]) => OBSTACLES[k].lane === lane && !OBSTACLES[k].move));
+  const lows = still('low');
+  const highs = still('high');
+  const fits = patternsFor(difficultyFor(speed, stage.speed, maxSpeed)).filter(
+    (p) => p.items.every((it) => (it.slot === 'low' ? Object.keys(lows).length : it.slot === 'high' ? Object.keys(highs).length : true))
+  );
+  if (!fits.length) return null;
+  const pattern = pick(rng, fits);
+  const jd = jumpDistance(speed);
+  const entities = [];
+  let id = nextId;
+  let endX = x;
+  for (const it of pattern.items) {
+    const ax = x + it.at * jd;
+    if (it.slot === 'low' || it.slot === 'high') {
+      const type = weighted(rng, it.slot === 'low' ? lows : highs);
+      const o = OBSTACLES[type];
+      entities.push({ id: id++, kind: 'obstacle', type, trackLane: it.lane, x: ax, y: o.y, w: o.w, h: o.h, lane: o.lane, move: 0, bob: Boolean(o.bob), warningS: 0, pattern: pattern.id });
+      endX = Math.max(endX, ax + o.w);
+    } else {
+      for (let k = -1; k <= 1; k++) {
+        if (it.slot === 'arc') {
+          const tt = (jd / 2 + k * jd * 0.28) / speed;
+          const h = JUMP_V * tt - (GRAVITY / 2) * tt * tt;
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: it.lane, x: ax + 26 + k * jd * 0.28 - TREAT_W / 2, y: h + 6, w: TREAT_W, h: TREAT_W });
+        } else {
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: it.lane, x: ax + 26 + k * 26 - TREAT_W / 2, y: 2, w: TREAT_W, h: TREAT_W });
+        }
+      }
+      endX = Math.max(endX, ax + 60);
+    }
+  }
+  return { entities, nextId: id, endX, pattern: pattern.id };
+}
+
 // Build one chunk of an endless or chase course across 3 lanes. Deterministic per (seed, chunkIndex).
 export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, nextId = 0 } = {}) {
   const rng = makeRng(hashString(`${seed}:chunk:${chunkIndex}`));
@@ -192,16 +257,31 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
   let x = startX;
   const endX = startX + CHUNK_LENGTH;
   const maxSpeed = stage.maxSpeed || ENDLESS_MAX_SPEED;
+  const warm = warmupDist(stage);
   let powerPlaced = false;
 
   while (x < endX) {
     const progress = Math.min(1, x / 18000);
     const speed = Math.min(maxSpeed, stage.speed + (stage.ramp || 180) * progress);
+    const warming = x < warm;
     const allowedMix = {};
     for (const [k, w] of Object.entries(stage.obstacles || {})) {
+      if (warming && OBSTACLES[k].move) continue;
       if (isSurpriseObstacleAllowed(stage, k, x)) allowedMix[k] = w;
     }
     const pool = Object.keys(allowedMix).length ? allowedMix : stage.obstacles;
+
+    // After the warm-up, often a hand-made pattern instead of a random row.
+    if (!warming && rng() < PATTERN_CHANCE) {
+      const placed = placePattern(rng, stage, { x, speed, maxSpeed, treat: pick(rng, treatTypes), nextId: id });
+      if (placed) {
+        entities.push(...placed.entities);
+        id = placed.nextId;
+        x = placed.endX + jumpDistance(speed) * 1.25 + 60 + (rng() * 200) / (stage.density || 1.5);
+        continue;
+      }
+    }
+
     const type = weighted(rng, pool);
     const o = OBSTACLES[type];
     const laneIdx = pick(rng, LANES);
@@ -209,7 +289,7 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     entities.push({ id: id++, kind: 'obstacle', type, trackLane: laneIdx, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move, bob: Boolean(o.bob), warningS: o.warningS || 0 });
 
     // 40% chance to spawn a second obstacle side-by-side in another lane, always leaving at least one lane open.
-    if (rng() < 0.4) {
+    if (!warming && rng() < 0.4) {
       const otherLanes = LANES.filter((l) => l !== laneIdx);
       const secondLane = pick(rng, otherLanes);
       const type2 = weighted(rng, pool);
@@ -220,7 +300,7 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     const openLanes = LANES.filter((l) => !blocked.has(l));
 
     const treat = pick(rng, treatTypes);
-    if (rng() < 0.8) {
+    if (rng() < 0.8 || warming) {
       const jd = jumpDistance(speed);
       const centre = x + o.w / 2;
       const guideOpen = openLanes.length && rng() < 0.5;
@@ -238,7 +318,9 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
 
     let pair = 0;
     // Obstacle combos in endless and chase: either a close high+low double-jump pair, or a jump-then-duck pair.
-    if (stage.doubleJumpCombo && rng() < stage.doubleJumpCombo && (chunkIndex > 0 || x > 650)) {
+    if (warming) {
+      // one obstacle at a time
+    } else if (stage.doubleJumpCombo && rng() < stage.doubleJumpCombo && (chunkIndex > 0 || x > 650)) {
       const lowKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'low' && !OBSTACLES[k].move);
       const highKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'high' && !OBSTACLES[k].move);
       const pairPool = o.lane === 'high' && lowKeys.length ? lowKeys : highKeys.length ? highKeys : lowKeys;
@@ -263,7 +345,7 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
       }
     }
 
-    const minGap = jumpDistance(speed) * 1.25 + o.w + 40 + pair;
+    const minGap = jumpDistance(speed) * (warming ? 1.6 : 1.25) + o.w + 40 + pair;
     const gap = minGap + (rng() * 260) / (stage.density || 1.5);
     const mid = x + o.w + gap / 2;
 
@@ -339,7 +421,7 @@ export function stepChaseGap(gap, dt, { hits = 0, treats = 0, cleanStreak = fals
 
 // --- running ---------------------------------------------------------------
 
-export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = false } = {}) {
+export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = false, firstRun = false } = {}) {
   const isChunked = Boolean(stage.endless || stage.chase);
   const level = isChunked ? { entities: [], length: Infinity, totalTreats: 0 } : buildLevel(stage, seed);
   let run = {
@@ -363,6 +445,8 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
       hearts: stage.hearts || 3
     },
     seed,
+    firstRun: Boolean(firstRun),
+    warmupDist: isChunked || stage.index === 0 ? warmupDist(stage) : 0,
     t: 0,
     dist: 0,
     speed: stage.speed,
@@ -382,7 +466,12 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
       trackLane: 0,
       targetLane: 0,
       lanePos: 0,
+      laneFrom: 0,
+      laneT: null,
       laneHoldTimer: 0,
+      justJumpedT: null,
+      justLandedT: null,
+      fastFall: false,
       prevLeft: false,
       prevRight: false,
       ducking: false,
@@ -443,6 +532,7 @@ export function currentSpeed(run) {
     const progress = run.stage.daily ? Math.min(1, run.t / run.stage.seconds) : Math.min(1, run.dist / run.length);
     v = run.stage.speed + run.stage.ramp * progress;
   }
+  if (run.firstRun && run.dist < (run.warmupDist || 0)) v *= FIRST_RUN_SPEED;
   if (run.power.speed > 0) v *= SPEED_BOOST;
   if (run.slow > 0) v *= 0.6;
   return v * run.speedScale;
@@ -474,17 +564,26 @@ export function step(run, dt, input = {}) {
   player.prevLeft = Boolean(input.left);
   player.prevRight = Boolean(input.right);
 
+  // A new target starts a fresh ease from wherever the pet is now, so a second
+  // swipe mid-move carries on smoothly (no snap back).
+  const retarget = (lane) => {
+    const next = Math.max(-1, Math.min(1, lane));
+    if (next === (player.targetLane ?? 0)) return;
+    player.targetLane = next;
+    player.laneFrom = player.lanePos ?? 0;
+    player.laneT = 0;
+  };
   if (leftEdge && !rightEdge) {
-    player.targetLane = Math.max(-1, (player.targetLane ?? 0) - 1);
+    retarget((player.targetLane ?? 0) - 1);
     player.laneHoldTimer = 0.22;
   } else if (rightEdge && !leftEdge) {
-    player.targetLane = Math.min(1, (player.targetLane ?? 0) + 1);
+    retarget((player.targetLane ?? 0) + 1);
     player.laneHoldTimer = 0.22;
   } else if ((input.left || input.right) && !(input.left && input.right)) {
     player.laneHoldTimer = Math.max(0, (player.laneHoldTimer || 0) - dt);
     if (player.laneHoldTimer <= 0) {
-      if (input.left) player.targetLane = Math.max(-1, (player.targetLane ?? 0) - 1);
-      if (input.right) player.targetLane = Math.min(1, (player.targetLane ?? 0) + 1);
+      if (input.left) retarget((player.targetLane ?? 0) - 1);
+      if (input.right) retarget((player.targetLane ?? 0) + 1);
       player.laneHoldTimer = 0.22;
     }
   } else {
@@ -492,12 +591,17 @@ export function step(run, dt, input = {}) {
   }
 
   const targetLane = player.targetLane ?? 0;
-  const curLanePos = player.lanePos ?? 0;
-  const laneDiff = targetLane - curLanePos;
-  const maxStep = LANE_SWITCH_SPEED * dt;
-  player.lanePos = Math.abs(laneDiff) <= maxStep ? targetLane : curLanePos + Math.sign(laneDiff) * maxStep;
+  const prevLanePos = player.lanePos ?? 0;
+  if (player.laneT != null) {
+    player.laneT += dt;
+    const from = player.laneFrom ?? prevLanePos;
+    player.lanePos = player.laneT >= LANE_EASE_S ? targetLane : from + (targetLane - from) * laneEase(player.laneT / LANE_EASE_S);
+    if (player.lanePos === targetLane) player.laneT = player.laneT >= LANE_EASE_S + 0.2 ? null : player.laneT;
+  } else {
+    player.lanePos = targetLane;
+  }
   player.trackLane = Math.round(player.lanePos);
-  player.vx = Math.abs(laneDiff) > 0.01 ? Math.sign(laneDiff) * 160 : 0;
+  player.vx = dt > 0 ? (player.lanePos - prevLanePos) / dt : 0;
   player.xOffset = player.lanePos * 34;
 
   // pet vertical movement
@@ -513,7 +617,12 @@ export function step(run, dt, input = {}) {
   if (input.jump) player.jumpBuffer = JUMP_BUFFER;
   else player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
 
+  if (player.justJumpedT != null) player.justJumpedT += dt;
+  if (player.justLandedT != null) player.justLandedT += dt;
+  player.fastFall = wantDuck && player.height > 0 && player.vy < 0;
+
   if (player.height <= 0 && player.jumpBuffer > 0) {
+    player.justJumpedT = 0;
     player.vy = JUMP_V;
     player.jumpBuffer = 0;
     player.duckTimer = 0;
@@ -540,6 +649,8 @@ export function step(run, dt, input = {}) {
     if (player.height === 0) {
       player.vy = 0;
       player.doubleJumped = false;
+      player.justLandedT = 0;
+      events.push('land');
       if (player.spinT != null) {
         if (player.trickClean && tricks < TRICK_CAP) {
           tricks += 1;

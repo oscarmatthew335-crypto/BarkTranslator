@@ -21,21 +21,34 @@ export const BACK_FRAMES = {
     spinFront: { pw: 301, ph: 421, hx: 0.595, top: 0.083, hw: 0.7, ny: 0.49, grey: require('../../../assets/sprites/cat_back_spin_front.png'), fur: require('../../../assets/sprites/cat_back_spin_front_fur.png'), fx: 0.585, fy: 0.3, fw: 0.5 },
   },
   dog: {
-    run1: { pw: 426, ph: 512, hx: 0.61, top: 0.085, hw: 0.51, ny: 0.44, grey: require('../../../assets/sprites/dog_back_run1.png'), fur: require('../../../assets/sprites/dog_back_run1_fur.png'), gold: require('../../../assets/sprites/doggold_back_run1.png') },
-    run2: { pw: 426, ph: 512, hx: 0.42, top: 0.045, hw: 0.52, ny: 0.41, grey: require('../../../assets/sprites/dog_back_run2.png'), fur: require('../../../assets/sprites/dog_back_run2_fur.png'), gold: require('../../../assets/sprites/doggold_back_run2.png') },
-    jump: { pw: 426, ph: 512, hx: 0.61, top: 0.05, hw: 0.51, ny: 0.41, grey: require('../../../assets/sprites/dog_back_jump.png'), fur: require('../../../assets/sprites/dog_back_jump_fur.png'), gold: require('../../../assets/sprites/doggold_back_jump.png') },
+    run1: { pw: 426, ph: 512, hx: 0.61, top: 0.085, hw: 0.51, ny: 0.44, grey: require('../../../assets/sprites/dog_back_run1.png'), fur: require('../../../assets/sprites/dog_back_run1_fur.png'), gold: require('../../../assets/sprites/doggold_back_run1.png'), cyber: require('../../../assets/sprites/dogcyber_back_run1.png'), zebra: require('../../../assets/sprites/dogzebra_back_run1.png'), spot: require('../../../assets/sprites/dogspot_back_run1.png') },
+    run2: { pw: 426, ph: 512, hx: 0.42, top: 0.045, hw: 0.52, ny: 0.41, grey: require('../../../assets/sprites/dog_back_run2.png'), fur: require('../../../assets/sprites/dog_back_run2_fur.png'), gold: require('../../../assets/sprites/doggold_back_run2.png'), cyber: require('../../../assets/sprites/dogcyber_back_run2.png'), zebra: require('../../../assets/sprites/dogzebra_back_run2.png'), spot: require('../../../assets/sprites/dogspot_back_run2.png') },
+    jump: { pw: 426, ph: 512, hx: 0.61, top: 0.05, hw: 0.51, ny: 0.41, grey: require('../../../assets/sprites/dog_back_jump.png'), fur: require('../../../assets/sprites/dog_back_jump_fur.png'), gold: require('../../../assets/sprites/doggold_back_jump.png'), cyber: require('../../../assets/sprites/dogcyber_back_jump.png'), zebra: require('../../../assets/sprites/dogzebra_back_jump.png'), spot: require('../../../assets/sprites/dogspot_back_jump.png') },
     duck: { pw: 426, ph: 512, hx: 0.68, top: 0.31, hw: 0.45, ny: 0.6, grey: require('../../../assets/sprites/dog_back_duck.png'), fur: require('../../../assets/sprites/dog_back_duck_fur.png'), gold: require('../../../assets/sprites/doggold_back_duck.png') },
-    sit: { pw: 426, ph: 512, hx: 0.505, top: 0.21, hw: 0.5, ny: 0.56, grey: require('../../../assets/sprites/dog_back_sit.png'), fur: require('../../../assets/sprites/dog_back_sit_fur.png'), gold: require('../../../assets/sprites/doggold_back_sit.png') },
+    stand: { pw: 426, ph: 512, hx: 0.505, top: 0.21, hw: 0.5, ny: 0.56, grey: require('../../../assets/sprites/dog_back_sit.png'), fur: require('../../../assets/sprites/dog_back_sit_fur.png'), gold: require('../../../assets/sprites/doggold_back_sit.png'), cyber: require('../../../assets/sprites/dogcyber_back_sit.png'), zebra: require('../../../assets/sprites/dogzebra_back_sit.png'), spot: require('../../../assets/sprites/dogspot_back_sit.png') },
     hurt: { pw: 356, ph: 556, hx: 0.52, top: 0.17, hw: 0.56, ny: 0.47, grey: require('../../../assets/sprites/dog_back_hurt.png'), fur: require('../../../assets/sprites/dog_back_hurt_fur.png') },
     look: { pw: 380, ph: 506, hx: 0.64, top: 0.06, hw: 0.62, ny: 0.45, grey: require('../../../assets/sprites/dog_back_look.png'), fur: require('../../../assets/sprites/dog_back_look_fur.png'), fx: 0.75, fy: 0.25, fw: 0.46 },
     sit2: { pw: 316, ph: 495, hx: 0.49, top: 0.03, hw: 0.66, ny: 0.46, grey: require('../../../assets/sprites/dog_back_sit2.png'), fur: require('../../../assets/sprites/dog_back_sit2_fur.png') },
     spinSide: { pw: 449, ph: 485, hx: 0.67, top: 0.08, hw: 0.56, ny: 0.56, grey: require('../../../assets/sprites/dog_back_spin_side.png'), fur: require('../../../assets/sprites/dog_back_spin_side_fur.png') },
     spinFront: { pw: 352, ph: 490, hx: 0.61, top: 0.04, hw: 0.71, ny: 0.47, grey: require('../../../assets/sprites/dog_back_spin_front.png'), fur: require('../../../assets/sprites/dog_back_spin_front_fur.png'), fx: 0.61, fy: 0.32, fw: 0.62 },
+    run3: { pw: 426, ph: 512, hx: 0.56, top: 0.15, hw: 0.48, ny: 0.42, grey: require('../../../assets/sprites/dogspot_back_run3.png'), spot: require('../../../assets/sprites/dogspot_back_run3.png') },
+    run4: { pw: 426, ph: 512, hx: 0.55, top: 0.15, hw: 0.47, ny: 0.43, grey: require('../../../assets/sprites/dogspot_back_run4.png'), spot: require('../../../assets/sprites/dogspot_back_run4.png') },
+    duckSpot: { pw: 426, ph: 512, hx: 0.66, top: 0.33, hw: 0.43, ny: 0.55, grey: require('../../../assets/sprites/dogspot_back_duck.png'), spot: require('../../../assets/sprites/dogspot_back_duck.png') },
   },
 };
 BACK_FRAMES.dog.jumpUp = BACK_FRAMES.dog.jump;
 BACK_FRAMES.dog.jumpDown = BACK_FRAMES.dog.jump;
 BACK_FRAMES.dog.sit = BACK_FRAMES.dog.sit2;
+// A variant set without its own frame for a pose uses this frame instead, if it has one.
+BACK_FRAMES.dog.sit2.alt = 'stand';
+BACK_FRAMES.dog.duck.alt = 'duckSpot';
+
+// The brown chaser dog (Chase mode), its own painted set from behind. Frames
+// share the dog canvas; hx is the head centre so the head stays put.
+export const CHASER_FRAMES = [1, 2, 3, 4, 5].map((n, i) => ({
+  pw: 426, ph: 512, hx: [0.62, 0.63, 0.63, 0.58, 0.6][i],
+  href: [require('../../../assets/sprites/chaser_back_f1.png'), require('../../../assets/sprites/chaser_back_f2.png'), require('../../../assets/sprites/chaser_back_f3.png'), require('../../../assets/sprites/chaser_back_f4.png'), require('../../../assets/sprites/chaser_back_f5.png')][i],
+}));
 
 // Hats seen from behind: width k and brim sink, as fractions of head width.
 export const BACK_HATS = {

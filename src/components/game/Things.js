@@ -2,7 +2,7 @@ import React, { memo } from 'react';
 import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { SPRITES } from './sprites';
-import { BackRunner } from './PetSprite';
+import { CHASER_FRAMES, UNIT } from './backArt';
 
 const INK = C.ink;
 const SW = 2.2;
@@ -64,42 +64,53 @@ function parcelArt({ w, h }) {
   );
 }
 
-// A dog running at the camera: two frames swapped by time.
-function dogFrontArt({ w, h, t = 0 }) {
-  const href = Math.floor(t * 7) % 2 ? SPRITES.obDogFront2 : SPRITES.obDogFront1;
+// Animals running at the camera: two frames swapped by time (faster for a dash).
+function runnerFront(a, b, rate) {
+  return function RunnerFront({ w, h, t = 0 }) {
+    const href = Math.floor(t * rate) % 2 ? b : a;
+    return (
+      <G>
+        <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.42} ry={3.5} fill="rgba(36,29,59,0.22)" />
+        <SvgImage href={href} x={-5} y={-20} width={w + 10} height={h + 20} preserveAspectRatio="xMidYMax meet" />
+      </G>
+    );
+  };
+}
+
+// The robot vacuum rolls at the camera, brushes spinning.
+function vacuumArt({ w, h, t = 0 }) {
+  const href = Math.floor(t * 10) % 2 ? SPRITES.obVacuum2 : SPRITES.obVacuum1;
+  const aw = w + 16;
+  const ah = aw * 0.6;
   return (
     <G>
-      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.42} ry={3.5} fill="rgba(36,29,59,0.22)" />
-      <SvgImage href={href} x={-4} y={-14} width={w + 8} height={h + 14} preserveAspectRatio="xMidYMax meet" />
+      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.5} ry={3.5} fill="rgba(36,29,59,0.22)" />
+      <SvgImage href={href} x={-8} y={h - ah} width={aw} height={ah} preserveAspectRatio="xMidYMax meet" />
     </G>
   );
+}
+
+// A pigeon flying at the camera at head height, wings up and down.
+function birdArt({ w, h, t = 0 }) {
+  const href = Math.floor(t * 6) % 2 ? SPRITES.obBird2 : SPRITES.obBird1;
+  const aw = w + 26;
+  const ah = aw * 0.756;
+  return <SvgImage href={href} x={-13} y={h / 2 - ah / 2} width={aw} height={ah} preserveAspectRatio="xMidYMid meet" />;
 }
 
 const OBSTACLE_ART = {
   bench: benchArt,
   trash: trashArt,
   puddle: puddleArt,
-  vacuum: stoolArt,
+  vacuum: vacuumArt,
   sprinkler: sprinklerArt,
   postman: parcelArt,
   cucumber: cucumberArt,
   spray: sprayArt,
-  dog: dogFrontArt,
-  catDash: ({ w, h }) => (
-    <G transform={`translate(${w} 0) scale(-1 1)`}>
-      <SvgImage href={SPRITES.catHero} x={-4} y={-8} width={w + 8} height={h + 12} preserveAspectRatio="xMidYMid meet" />
-    </G>
-  ),
-  dogDash: dogFrontArt,
-
-  bird: ({ w, h }) => (
-    <G>
-      <Ellipse cx={w / 2 + 2} cy={h / 2 + 2} rx={w / 2 - 4} ry={h / 2 - 4} fill={C.arcadeBlue} stroke={INK} strokeWidth={SW} />
-      <Path d={`M${w / 2 - 4} ${h / 2 - 2} Q ${w / 2 + 2} -4 ${w / 2 + 10} ${h / 2 - 2}`} fill={C.paper} stroke={INK} strokeWidth={1.8} />
-      <Polygon points={`2,${h / 2 + 1} 8,${h / 2 - 2} 8,${h / 2 + 4}`} fill={C.butter} stroke={INK} strokeWidth={1.6} strokeLinejoin="round" />
-      <Circle cx={11} cy={h / 2 - 1} r={1.6} fill={INK} />
-    </G>
-  )
+  dog: runnerFront(SPRITES.obDogRun1, SPRITES.obDogRun2, 6),
+  catDash: runnerFront(SPRITES.obCatFront1, SPRITES.obCatFront2, 11),
+  dogDash: runnerFront(SPRITES.obDogRun1, SPRITES.obDogRun2, 11),
+  bird: birdArt
 };
 
 function Treat({ type }) {
@@ -114,19 +125,14 @@ function Treat({ type }) {
   return <SvgImage href={SPRITES.coinGold} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
 }
 
-const POWER_COLOUR = { speed: C.coral, shield: C.arcadeBlue, magnet: C.pink, double: C.butter };
+const POWER_ART = { speed: SPRITES.pwSpeed, shield: SPRITES.pwShield, magnet: SPRITES.pwMagnet, double: SPRITES.pwDouble };
 
+// A glowing bubble with the power-up inside, in a 28 x 28 box (scaled by size).
 export function PowerIcon({ type, size = 28 }) {
   const s = size / 28;
   return (
     <G transform={`scale(${s})`}>
-      <Circle cx={14} cy={14} r={12.5} fill={POWER_COLOUR[type] || C.lime} stroke={INK} strokeWidth={2.2} />
-      {type === 'speed' && <Polygon points="15,4 8,16 13,16 11,24 20,11 15,11" fill={C.paper} stroke={INK} strokeWidth={1.4} strokeLinejoin="round" />}
-      {type === 'shield' && <Path d="M14 5 L21 8 Q 21 18 14 23 Q 7 18 7 8 Z" fill={C.paper} stroke={INK} strokeWidth={1.6} />}
-      {type === 'magnet' && (
-        <Path d="M8 7 L8 14 A 6 6 0 0 0 20 14 L20 7 L16 7 L16 14 A 2 2 0 0 1 12 14 L12 7 Z" fill={C.paper} stroke={INK} strokeWidth={1.4} />
-      )}
-      {type === 'double' && <Path d="M9 10 Q 9 6 13 6 Q 17 6 17 10 Q 17 13 9 20 L18 20" stroke={INK} strokeWidth={2.6} fill="none" strokeLinecap="round" strokeLinejoin="round" />}
+      <SvgImage href={POWER_ART[type] || POWER_ART.shield} x={-1} y={-1} width={30} height={30} preserveAspectRatio="xMidYMid meet" />
     </G>
   );
 }
@@ -139,7 +145,31 @@ function PowerBox({ type }) {
 export function Chaser({ chaser, phase = 0, view = 'side' }) {
   const id = chaser?.id || 'bath';
   if (id === 'dog' && view === 'back') {
-    return <BackRunner cat={false} phase={phase} cx={24} floor={39} size={0.92} rate={1.1} tint="#9A6338" />;
+    // Step, bound, step, bound: the painted brown puppy, head held steady.
+    const a = (Number(phase) || 0) * 0.55;
+    const i = ((Math.floor(a / (Math.PI / 2)) % 4) + 4) % 4;
+    const fr = CHASER_FRAMES[[0, 1, 2, 4][i]];
+    const w = fr.pw * UNIT.dog * 0.78;
+    const h = fr.ph * UNIT.dog * 0.78;
+    const bob = i % 2 ? -3 : 0;
+    return (
+      <G>
+        <Ellipse cx={24} cy={39} rx={i % 2 ? 13 : 16} ry={3.2} fill="rgba(36,29,59,0.22)" />
+        <SvgImage href={fr.href} x={24 - fr.hx * w} y={39 - h + bob} width={w} height={h} preserveAspectRatio="none" />
+      </G>
+    );
+  }
+  if (id !== 'dog' && view === 'back') {
+    // The bathtub rolls after the dog, wobbling from side to side.
+    const wob = Math.floor((Number(phase) || 0) * 0.6) % 2;
+    return (
+      <G>
+        <Ellipse cx={24} cy={39} rx={20} ry={3.2} fill="rgba(36,29,59,0.22)" />
+        <G transform={`rotate(${wob ? 3 : -3} 24 39)`}>
+          <SvgImage href={wob ? SPRITES.chaserBath2 : SPRITES.chaserBath1} x={2} y={-4} width={44} height={43} preserveAspectRatio="xMidYMax meet" />
+        </G>
+      </G>
+    );
   }
   if (id === 'dog') {
     const a = (Number(phase) || 0) * 1.9;

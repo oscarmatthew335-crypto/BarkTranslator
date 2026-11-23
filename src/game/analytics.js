@@ -27,7 +27,8 @@ export const ALLOWED_EVENTS = new Set([
   'character_tried',
   'character_unlocked',
   'character_equipped',
-  'character_unequipped'
+  'character_unequipped',
+  'controls_mode'
 ]);
 
 const FORBIDDEN_PARAM_KEYS = new Set([

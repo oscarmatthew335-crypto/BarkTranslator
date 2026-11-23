@@ -24,6 +24,7 @@ function PetSprite({
   view = 'side',
   rising = true,
   spin = null,
+  feel = null,
 }) {
   if (view === 'back' && pose !== 'front') {
     return (
@@ -33,6 +34,7 @@ function PetSprite({
         pose={pose}
         rising={rising}
         spin={spin}
+        feel={feel}
         happy={happy}
         bank={bank}
         colour={colour}
@@ -160,7 +162,8 @@ export const SPIN_S = 0.45; // seconds for the double-jump spin
 // Which painted frame to show, plus the smooth bob and sway between frames.
 function backMotion(phase, pose, rising, spin, rate = 1) {
   const a = (Number(phase) || 0) * rate * 0.5;
-  const step = ((Math.floor(a / (Math.PI / 2)) % 2) + 2) % 2;
+  const step4 = ((Math.floor(a / (Math.PI / 2)) % 4) + 4) % 4;
+  const step = step4 % 2;
   let key = step === 0 ? 'run1' : 'run2';
   let flip = false;
   if (pose === 'jump') {
@@ -181,6 +184,7 @@ function backMotion(phase, pose, rising, spin, rate = 1) {
   const bounce = Math.abs(Math.sin(a * 2));
   return {
     key,
+    step4,
     flip,
     bounce,
     bobY: running ? -bounce * 3 : pose === 'hurt' ? 2 : 0,
@@ -188,6 +192,29 @@ function backMotion(phase, pose, rising, spin, rate = 1) {
     squash: running ? 1 - (1 - bounce) * 0.03 : 1,
   };
 }
+
+// Squash and stretch around take-off and landing (feel: { jumpT, landT,
+// fastFall } in seconds since; null when motion is reduced). Returns [sx, sy].
+export function squashStretch(feel, pose, rising) {
+  if (!feel) return null;
+  const { jumpT, landT, fastFall } = feel;
+  if (landT != null && landT < 0.08) {
+    const k = 1 - landT / 0.08;
+    return [1 + 0.1 * k, 1 - 0.14 * k];
+  }
+  if (jumpT != null && jumpT < 0.06) {
+    const k = 1 - jumpT / 0.06;
+    return [1 + 0.08 * k, 1 - 0.12 * k];
+  }
+  if (pose === 'jump' && rising && jumpT != null && jumpT < 0.3) {
+    const k = 1 - (jumpT - 0.06) / 0.24;
+    return [1 - 0.06 * k, 1 + 0.08 * k];
+  }
+  if (pose === 'jump' && fastFall) return [0.95, 1.06];
+  return null;
+}
+
+const DUST = [SPRITES.fxDust1, SPRITES.fxDust2, SPRITES.fxDust3];
 
 const neckPose = (key) => (key === 'duck' ? 'duck' : key === 'jumpUp' || key === 'jumpDown' || key.startsWith('spin') ? 'jump' : 'run');
 const showsFace = (fr) => fr.fx != null;
@@ -225,12 +252,16 @@ const Img = ({ art, cx, top, w, opacity }) =>
 // glasses, royal, astro, ninja, cyberEar } (ids / items to draw).
 export function BackRunner({
   cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, rate,
-  tint = null, variant = null, wear = {}, shadow = true,
+  tint = null, variant = null, wear = {}, shadow = true, feel = null,
 }) {
   const maskId = useId().replace(/:/g, '_');
   const sp = cat ? 'cat' : 'dog';
   const m = backMotion(phase, pose, rising, spin, rate);
-  const fr = BACK_FRAMES[sp][m.key] || BACK_FRAMES[sp].run1;
+  const set = BACK_FRAMES[sp];
+  let fr = set[m.key] || set.run1;
+  // A set with four run frames (spotty dog) steps through all of them.
+  if (variant && (m.key === 'run1' || m.key === 'run2') && set.run3?.[variant]) fr = set[['run1', 'run3', 'run2', 'run4'][m.step4]] || fr;
+  if (variant && !fr[variant] && fr.alt && set[fr.alt]?.[variant]) fr = set[fr.alt];
   const u = UNIT[sp] * size;
   const w = fr.pw * u;
   const h = fr.ph * u;
@@ -245,6 +276,8 @@ export function BackRunner({
   const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0) + m.sway;
   if (tilt) outer.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
   if (m.squash !== 1) outer.push(`translate(0 ${floor}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-floor})`);
+  const sq = squashStretch(feel, pose, rising);
+  if (sq) outer.push(`translate(${cx} ${floor}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-floor})`);
   const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
 
   const headW = fr.hw * w;
@@ -331,16 +364,16 @@ export function BackRunner({
 const GOLD_SPARKLES = [SPRITES.goldSparkle1, SPRITES.goldSparkle2, SPRITES.goldSparkle3];
 
 // The player seen from behind, dressed from the wardrobe and character.
-function BackPet({ cat, phase, pose, rising, spin, happy, bank, colour, equipped, character }) {
+function BackPet({ cat, phase, pose, rising, spin, feel, happy, bank, colour, equipped, character }) {
   const char = typeof character === 'string' ? getCharacter(character) : character;
   const cid = char?.id || null;
   const shown = char ? effectiveEquipped({ equipped }, cid) : equipped || {};
   const col = getColour(colour);
   let variant = null;
   if (cid === 'char-gold') variant = 'gold';
-  else if (cat && cid === 'char-cyber') variant = 'cyber';
-  else if (cat && cid === 'char-zebra') variant = 'zebra';
-  else if (cat && !cid && col.id === 'spotty') variant = 'spot';
+  else if (cid === 'char-cyber') variant = 'cyber';
+  else if (cid === 'char-zebra') variant = 'zebra';
+  else if (!cid && col.id === 'spotty') variant = 'spot';
   const tint = variant ? null : char?.palette?.body || col.hex;
   const collarItem = shown.collar ? getItem(shown.collar) : null;
   const wear = {
@@ -363,7 +396,19 @@ function BackPet({ cat, phase, pose, rising, spin, happy, bank, colour, equipped
       {pose === 'run' && m.bounce > 0.75 ? (
         <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.8} />
       ) : null}
-      <BackRunner cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} wear={wear} />
+      {feel?.landT != null && feel.landT < 0.3 ? (
+        // A wide dust puff at the feet on landing: grows, then fades.
+        <SvgImage
+          href={DUST[Math.min(2, Math.floor(feel.landT / 0.1))]}
+          x={28 - 32 - feel.landT * 30}
+          y={30 - feel.landT * 10}
+          width={64 + feel.landT * 60}
+          height={26 + feel.landT * 20}
+          preserveAspectRatio="none"
+          opacity={Math.max(0, 0.9 - feel.landT * 2.6)}
+        />
+      ) : null}
+      <BackRunner cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} wear={wear} feel={feel} />
       {(happy || pose === 'look') && pose !== 'hurt' ? (
         <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}
