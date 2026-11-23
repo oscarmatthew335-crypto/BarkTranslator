@@ -36,7 +36,9 @@ import {
   DUCK_H,
   POWER_DURATION,
   SPEED_BOOST,
-  REDUCED_MOTION_SPEED
+  REDUCED_MOTION_SPEED,
+  TRICK_TREATS,
+  TRICK_CAP
 } from '../src/game/engine.js';
 import {
   STAGES,
@@ -652,4 +654,37 @@ test('3-lane controls switch lanes left/right, avoid obstacles by dodging or jum
     peak = Math.max(peak, rAir.player.height);
   }
   assert.ok(peak <= MAX_JUMP_HEIGHT);
+});
+
+test('spin trick: a clean double jump pays TRICK_TREATS on landing, capped per run', () => {
+  const DT2 = 1 / 60;
+  const doTrick = (r) => {
+    r = step({ ...r, entities: [] }, DT2, { jump: true });
+    for (let i = 0; i < 8; i++) r = step({ ...r, entities: [] }, DT2);
+    r = step({ ...r, entities: [] }, DT2, { jump: true });
+    assert.equal(r.player.spinT, 0);
+    let sawTrick = false;
+    while (r.player.height > 0) {
+      r = step({ ...r, entities: [] }, DT2);
+      if (r.events.includes('trick')) sawTrick = true;
+    }
+    return { r, sawTrick };
+  };
+  let r = newRun(garden, { seed: 2 });
+  const before = r.treats;
+  let out = doTrick(r);
+  assert.ok(out.sawTrick);
+  assert.equal(out.r.tricks, 1);
+  assert.equal(out.r.treats, before + TRICK_TREATS);
+  assert.equal(out.r.player.spinT, null);
+  r = out.r;
+  for (let i = 1; i < TRICK_CAP + 2; i++) r = doTrick(r).r;
+  assert.equal(r.tricks, TRICK_CAP);
+  assert.equal(r.treats, before + TRICK_TREATS * TRICK_CAP);
+
+  // A single jump is not a trick.
+  let s1 = newRun(garden, { seed: 3 });
+  s1 = step({ ...s1, entities: [] }, DT2, { jump: true });
+  while (s1.player.height > 0) s1 = step({ ...s1, entities: [] }, DT2);
+  assert.equal(s1.tricks, 0);
 });

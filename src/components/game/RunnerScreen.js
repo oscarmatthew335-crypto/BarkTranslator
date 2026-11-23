@@ -9,7 +9,7 @@ import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent } from '../../game/sfx';
 import { count } from '../../game/counters';
 import { isRewardedReady, showRewardedAd } from '../../game/ads';
-import PetSprite from './PetSprite';
+import PetSprite, { SPIN_S } from './PetSprite';
 import Thing, { PowerIcon, Chaser } from './Things';
 import { CAM_W, HORIZON_Y, PLAYER_GROUND_Y, VISIBLE_DEPTH, projectBehind, Backdrop, Midground, Goal } from './Scenery';
 import { ColourHeadTileSvg } from './WardrobeIcons';
@@ -83,6 +83,7 @@ export default function RunnerScreen({
   const input = useRef({ jump: false, duck: false, swipeDuck: false, left: false, right: false, laneLeft: false, laneRight: false });
   const pausedRef = useRef(true);
   const particlesRef = useRef([]);
+  const lookUntilRef = useRef(0);
   const [paused, setPaused] = useState(Boolean(showHowTo));
   const [started, setStarted] = useState(!showHowTo);
   const [countdown, setCountdown] = useState(() => (showHowTo ? null : reduceMotion ? 0 : instantStart ? 1 : 3));
@@ -174,6 +175,8 @@ export default function RunnerScreen({
         input.current.laneLeft = false;
         input.current.laneRight = false;
         next.events.forEach(gameEvent);
+        // The pet glances back at the camera after a close call or a landed trick.
+        if (next.events.includes('nearMiss') || next.events.includes('trick')) lookUntilRef.current = next.t + 0.7;
         if (!reduceMotion) {
           let pool = particlesRef.current
             .map((p) => ({ ...p, age: p.age + dt, x: p.x + p.vx * dt, y: p.y + p.vy * dt }))
@@ -183,6 +186,10 @@ export default function RunnerScreen({
             if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 4);
             else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, pProj.x, pProj.groundY - 2);
             else if (ev === 'collect') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 24);
+            else if (ev === 'trick') {
+              pool = spawnParticles(pool, 'collect', pProj.x - 8, pProj.y - 26);
+              pool = spawnParticles(pool, 'collect', pProj.x + 8, pProj.y - 30);
+            }
             else if (ev === 'nearMiss') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 20);
             else if (ev === 'smash') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 18);
           }
@@ -324,7 +331,10 @@ export default function RunnerScreen({
   const shake = !reduceMotion && (hurtFresh || nearMissFresh) ? Math.sin(run.t * 90) * (hurtFresh ? 3 : 2) : 0;
   const goalProg = runGoal ? runGoalProgress(runGoal, run) : null;
   const blink = run.invuln > 0 && (reduceMotion ? true : Math.floor(run.t * 12) % 2 === 0);
-  const pose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
+  const basePose = run.player.height > 0 ? 'jump' : run.player.ducking ? 'duck' : hurtFresh ? 'hurt' : 'run';
+  // Sits facing the road during the countdown; glances back after a close call or trick.
+  const pose = countdown !== null ? 'sit' : basePose === 'run' && run.t < lookUntilRef.current ? 'look' : basePose;
+  const spinP = run.player.spinT != null && run.player.height > 0 ? Math.min(1, run.player.spinT / SPIN_S) : null;
   const isScoreMode = Boolean(run.stage.endless || run.stage.chase);
   const goalDx = run.stage.daily || isScoreMode ? null : run.length - run.dist;
   const progress = run.stage.chase
@@ -460,6 +470,7 @@ export default function RunnerScreen({
                       happy={happy}
                       bank={playerBank}
                       rising={run.player.vy > 0}
+                      spin={reduceMotion ? null : spinP}
                       view="back"
                     />
                     {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}
