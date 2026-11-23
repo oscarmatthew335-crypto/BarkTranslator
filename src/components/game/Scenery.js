@@ -169,7 +169,7 @@ function wrapX(base, offset, span, pad) {
   return ((((base - offset) % span) + span) % span) - pad;
 }
 
-const TRACK_BOTTOM_Y = 275;
+const TRACK_BOTTOM_Y = 345;
 
 // sky_bg.jpg is 1080 x 1920; its grass starts 74% of the way down.
 const SKY_H = 614;

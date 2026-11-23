@@ -340,7 +340,9 @@ export default function RunnerScreen({
   const { width, height } = size;
   const aspect = width > 0 && height > 0 ? Math.max(1.03, Math.min(2.4, height / width)) : 1.75;
   const totalViewH = Math.round(CAM_W * aspect);
-  const bottomTrackMargin = 62;
+  // Road shown below the pet's feet. Room for the chaser to run behind it in
+  // the same lane, and it puts the pet further up the screen (less empty sky).
+  const bottomTrackMargin = 118;
   const viewMaxY = PLAYER_GROUND_Y + bottomTrackMargin;
   const viewMinY = viewMaxY - totalViewH;
   const activePowers = Object.keys(POWER_DURATION).filter((k) => run.power[k] > 0);
@@ -371,10 +373,10 @@ export default function RunnerScreen({
   const playerScale = playerProj.scale * 1.18;
   const playerShadowRx = Math.max(8, 21 - run.player.height * 0.08);
 
-  const chaserDx = -(12 + progress * 48);
-  // Seen from behind, a chaser in the player's lane would hide the player, so it
-  // runs half a lane to the side (towards the middle when the pet is on an edge).
-  const chaserLane = Math.max(-1.2, Math.min(1.2, playerLanePos + (playerLanePos > 0.3 ? -0.6 : 0.6)));
+  // The chaser runs in the pet's lane, behind it and nearer the camera: closer
+  // (higher on screen) as the gap shrinks, never on top of the pet.
+  const chaserDx = -(0.26 + 0.09 * progress) * VISIBLE_DEPTH;
+  const chaserLane = playerLanePos;
   const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce) : null;
 
   const renderProjectedThing = (e) => {
