@@ -1,9 +1,10 @@
-import React, { memo } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
+import React, { memo, useId } from 'react';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
 import { SPRITES } from './sprites';
+import { BACK_FRAMES, BACK_HATS, BACK_NECK, BACK_GLASSES, BACK_CHAR, UNIT } from './backArt';
 
 const INK = C.ink;
 
@@ -20,7 +21,26 @@ function PetSprite({
   panting = false,
   happy = false,
   bank = 0,
+  view = 'side',
+  rising = true,
+  spin = null,
 }) {
+  if (view === 'back' && pose !== 'front') {
+    return (
+      <BackPet
+        cat={species === 'cat'}
+        phase={phase}
+        pose={pose}
+        rising={rising}
+        spin={spin}
+        happy={happy}
+        bank={bank}
+        colour={colour}
+        equipped={equipped}
+        character={character}
+      />
+    );
+  }
   const col = getColour(colour);
   const char = typeof character === 'string' ? getCharacter(character) : character;
   const body = char ? char.palette.body : col.hex;
@@ -124,6 +144,228 @@ function PetSprite({
           height={26}
           preserveAspectRatio="xMidYMid meet"
         />
+      ) : null}
+    </G>
+  );
+}
+
+// ---------------------------------------------------------------- back view
+// The 3-lane runner shows the pet from behind (art and anchors in backArt.js).
+
+// Fur variants with their own painted frames; frames without one fall back to
+// the grey frame tinted with this colour.
+const VARIANT_TINT = { gold: '#FFC83D', cyber: '#1F1B2E', zebra: '#FBF8F2', spot: '#FBF8F2' };
+export const SPIN_S = 0.45; // seconds for the double-jump spin
+
+// Which painted frame to show, plus the smooth bob and sway between frames.
+function backMotion(phase, pose, rising, spin, rate = 1) {
+  const a = (Number(phase) || 0) * rate * 0.5;
+  const step = ((Math.floor(a / (Math.PI / 2)) % 2) + 2) % 2;
+  let key = step === 0 ? 'run1' : 'run2';
+  let flip = false;
+  if (pose === 'jump') {
+    key = rising ? 'jumpUp' : 'jumpDown';
+    if (spin != null) {
+      // back -> side -> front -> other side -> back
+      if (spin < 0.15) key = 'jumpUp';
+      else if (spin < 0.38) key = 'spinSide';
+      else if (spin < 0.62) key = 'spinFront';
+      else if (spin < 0.85) { key = 'spinSide'; flip = true; }
+      else key = 'jumpDown';
+    }
+  } else if (pose === 'duck') key = 'duck';
+  else if (pose === 'hurt') key = 'hurt';
+  else if (pose === 'look') key = 'look';
+  else if (pose === 'sit') key = 'sit';
+  const running = pose === 'run' || pose === 'look';
+  const bounce = Math.abs(Math.sin(a * 2));
+  return {
+    key,
+    flip,
+    bounce,
+    bobY: running ? -bounce * 3 : pose === 'hurt' ? 2 : 0,
+    sway: running ? Math.sin(a) * 2.5 : 0,
+    squash: running ? 1 - (1 - bounce) * 0.03 : 1,
+  };
+}
+
+const neckPose = (key) => (key === 'duck' ? 'duck' : key === 'jumpUp' || key === 'jumpDown' || key.startsWith('spin') ? 'jump' : 'run');
+const showsFace = (fr) => fr.fx != null;
+
+// A curved collar band across the back of the neck.
+function BackCollar({ item, cx, y, w }) {
+  const t = Math.max(2, w * 0.13);
+  const d = `M ${cx - w / 2} ${y - t * 0.4} Q ${cx} ${y + t * 1.3} ${cx + w / 2} ${y - t * 0.4}`;
+  const bits = [];
+  if (item.bell) bits.push(<Circle key="b" cx={cx + w * 0.44} cy={y + t * 0.2} r={t * 0.75} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.8} />);
+  if (item.gem) {
+    const n = item.rare ? 5 : 3;
+    for (let i = 0; i < n; i++) {
+      const u = (i + 1) / (n + 1);
+      const gx = cx - w / 2 + w * u;
+      const gy = y - t * 0.4 + 2 * (1 - u) * u * t * 1.7 + 0.2;
+      bits.push(<Circle key={i} cx={gx} cy={gy} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
+    }
+  }
+  return (
+    <G>
+      <Path d={d} stroke="#5A3A24" strokeWidth={t + 1.4} fill="none" strokeLinecap="round" />
+      <Path d={d} stroke={item.colour} strokeWidth={t} fill="none" strokeLinecap="round" />
+      {bits}
+    </G>
+  );
+}
+
+const Img = ({ art, cx, top, w, opacity }) =>
+  art ? <SvgImage href={art.href} x={cx - w / 2} y={top} width={w} height={w * art.ar} preserveAspectRatio="none" opacity={opacity} /> : null;
+
+// A back-view pet with its feet centred on (cx, floor).
+// tint: fur colour, or null for the art's own colours. variant: gold | cyber |
+// zebra | spot uses that set's painted frames. wear: { hat, collar, neck,
+// glasses, royal, astro, ninja, cyberEar } (ids / items to draw).
+export function BackRunner({
+  cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, rate,
+  tint = null, variant = null, wear = {}, shadow = true,
+}) {
+  const maskId = useId().replace(/:/g, '_');
+  const sp = cat ? 'cat' : 'dog';
+  const m = backMotion(phase, pose, rising, spin, rate);
+  const fr = BACK_FRAMES[sp][m.key] || BACK_FRAMES[sp].run1;
+  const u = UNIT[sp] * size;
+  const w = fr.pw * u;
+  const h = fr.ph * u;
+  const hx = m.flip ? 1 - fr.hx : fr.hx;
+  // Shift the frame so its head sits over cx: only body, legs and tail change.
+  const x0 = cx - hx * w;
+  const y0 = floor - h;
+  const own = variant ? fr[variant] : null;
+  const fill = own ? null : variant ? VARIANT_TINT[variant] : tint;
+  const outer = [];
+  if (m.bobY) outer.push(`translate(0 ${m.bobY.toFixed(2)})`);
+  const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0) + m.sway;
+  if (tilt) outer.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
+  if (m.squash !== 1) outer.push(`translate(0 ${floor}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-floor})`);
+  const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
+
+  const headW = fr.hw * w;
+  const skullY = y0 + fr.top * h;
+  const neckY = y0 + fr.ny * h;
+  const face = showsFace(fr);
+  const faceX = face ? x0 + fr.fx * w : cx;
+  const faceY = face ? y0 + fr.fy * h : 0;
+  const np = neckPose(m.key);
+  const sideOn = m.key === 'spinSide';
+
+  const neck = wear.royal ? BACK_NECK['char-royal'] : wear.neck ? BACK_NECK[wear.neck] : null;
+  const hatId = wear.royal ? 'hat-crown' : wear.hat;
+  const hat = hatId ? BACK_HATS[hatId] : null;
+  const glasses = wear.glasses ? BACK_GLASSES[wear.glasses] : null;
+
+  const layers = [];
+  if (neck && neck.cape) {
+    const cw = headW * 1.25;
+    layers.push(<Img key="cape" art={neck[np]} cx={cx} top={neckY - headW * 0.18} w={cw} />);
+  }
+  if (wear.collar && !wear.astro) layers.push(<BackCollar key="collar" item={wear.collar} cx={cx} y={neckY} w={headW * 0.62} />);
+  if (neck && !neck.cape && !neck.band) {
+    const bw = headW * 0.95;
+    const art = neck[np];
+    layers.push(<Img key="neck" art={art} cx={cx} top={neckY - bw * art.ar * 0.3} w={bw} />);
+  }
+  if (neck && neck.band) {
+    const art = face ? neck.front : neck.back;
+    const bw = headW * (face ? 0.55 : 0.7);
+    layers.push(<Img key="bow" art={art} cx={face ? faceX : cx} top={neckY - bw * art.ar * 0.5} w={bw} />);
+  }
+  if (wear.astro && !face) layers.push(<Img key="pack" art={BACK_CHAR.pack} cx={cx} top={neckY} w={headW * 0.72} />);
+  if (wear.ninja) {
+    const art = BACK_CHAR.headband[np];
+    const bw = headW * 1.05;
+    layers.push(<Img key="band" art={art} cx={cx} top={skullY + headW * (face ? 0.1 : 0.28) - bw * art.ar * 0.3} w={bw} />);
+    if (face) layers.push(<Img key="mask" art={BACK_CHAR.mask} cx={faceX} top={faceY + headW * 0.12} w={headW * 0.6} />);
+  }
+  if (glasses && !sideOn) {
+    if (face) layers.push(<Img key="gl" art={glasses.front} cx={faceX} top={faceY - fr.fw * w * glasses.front.ar * 0.5} w={fr.fw * w} />);
+    else {
+      const gw = headW * 1.05;
+      layers.push(<Img key="gl" art={glasses.back} cx={cx} top={skullY + headW * 0.42 - gw * glasses.back.ar * 0.5} w={gw} />);
+    }
+  }
+  if (wear.cyberEar) layers.push(<Img key="ear" art={BACK_CHAR.ear} cx={cx + headW * 0.36} top={skullY - headW * 0.02} w={headW * 0.34} />);
+  if (hat) {
+    const hw2 = headW * hat.k;
+    layers.push(<Img key="hat" art={hat} cx={cx} top={skullY + headW * hat.sink - hw2 * hat.ar - headW * hat.lift} w={hw2} />);
+  }
+  if (wear.astro) {
+    // A glass bubble centred on the head, its rim at the neck.
+    const hw3 = headW * 1.22;
+    const hh = hw3 * BACK_CHAR.helmet.ar;
+    layers.push(<Img key="helmet" art={BACK_CHAR.helmet} cx={cx} top={neckY + headW * 0.08 - hh} w={hw3} opacity={0.8} />);
+  }
+
+  return (
+    <G>
+      {shadow && pose !== 'jump' ? (
+        <Ellipse cx={cx} cy={floor} rx={(h * 0.22 * (1 - m.bounce * 0.12)).toFixed(1)} ry={3 * size} fill="rgba(36,29,59,0.22)" />
+      ) : null}
+      <G transform={outer.join(' ') || undefined}>
+        <G transform={flipT}>
+          <SvgImage href={own || fr.grey} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+          {fill ? (
+            <>
+              <Defs>
+                <Mask id={maskId} maskUnits="userSpaceOnUse" x={x0} y={y0} width={w} height={h}>
+                  <SvgImage href={fr.fur} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+                </Mask>
+              </Defs>
+              <Rect x={x0} y={y0} width={w} height={h} fill={fill} opacity={0.6} mask={`url(#${maskId})`} />
+            </>
+          ) : null}
+        </G>
+        {layers}
+      </G>
+    </G>
+  );
+}
+
+const GOLD_SPARKLES = [SPRITES.goldSparkle1, SPRITES.goldSparkle2, SPRITES.goldSparkle3];
+
+// The player seen from behind, dressed from the wardrobe and character.
+function BackPet({ cat, phase, pose, rising, spin, happy, bank, colour, equipped, character }) {
+  const char = typeof character === 'string' ? getCharacter(character) : character;
+  const cid = char?.id || null;
+  const shown = char ? effectiveEquipped({ equipped }, cid) : equipped || {};
+  const col = getColour(colour);
+  let variant = null;
+  if (cid === 'char-gold') variant = 'gold';
+  else if (cat && cid === 'char-cyber') variant = 'cyber';
+  else if (cat && cid === 'char-zebra') variant = 'zebra';
+  else if (cat && !cid && col.id === 'spotty') variant = 'spot';
+  const tint = variant ? null : char?.palette?.body || col.hex;
+  const collarItem = shown.collar ? getItem(shown.collar) : null;
+  const wear = {
+    hat: shown.hat || null,
+    collar: collarItem,
+    neck: shown.neck || null,
+    glasses: shown.glasses || null,
+    royal: cid === 'char-royal',
+    astro: cid === 'char-astro',
+    ninja: cid === 'char-ninja',
+    cyberEar: cid === 'char-cyber' && !cat,
+  };
+  const m = backMotion(phase, pose, rising, spin);
+  const sparkle = GOLD_SPARKLES[Math.floor((Number(phase) || 0) * 0.9) % 3];
+  return (
+    <G>
+      {variant === 'gold' && pose !== 'duck' && pose !== 'sit' ? (
+        <SvgImage href={sparkle} x={4} y={18} width={48} height={44} preserveAspectRatio="xMidYMid meet" opacity={0.9} />
+      ) : null}
+      {pose === 'run' && m.bounce > 0.75 ? (
+        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.8} />
+      ) : null}
+      <BackRunner cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} wear={wear} />
+      {(happy || pose === 'look') && pose !== 'hurt' ? (
+        <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}
     </G>
   );

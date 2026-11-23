@@ -20,6 +20,9 @@ export const LANE_SWITCH_SPEED = 14;
 export const GRAVITY = 1900;
 export const JUMP_V = 700;
 export const DOUBLE_JUMP_V = 440; // snappier second jump while in the air
+// A double jump is a spin trick: land it without a bump for a few treats.
+export const TRICK_TREATS = 3;
+export const TRICK_CAP = 5; // rewarded tricks per run
 export const MAX_JUMP_HEIGHT = 124; // prevents floating high into the top HUD
 export const JUMP_BUFFER = 0.12; // a tap just before landing still jumps
 export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
@@ -385,9 +388,12 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
       ducking: false,
       duckTimer: 0,
       jumpBuffer: 0,
-      doubleJumped: false
+      doubleJumped: false,
+      spinT: null,
+      trickClean: false
     },
     treats: 0,
+    tricks: 0,
     collected: 0,
     combo: 0,
     maxCombo: 0,
@@ -450,7 +456,7 @@ export function step(run, dt, input = {}) {
   const events = [];
   const player = { ...run.player };
   const power = { ...run.power };
-  let { treats, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, jumps = 0, nearMissTimer = 0, invuln, slow, hearts, cleanTime = 0, lastHitObstacle = null } = run;
+  let { treats, tricks = 0, collected, combo = 0, maxCombo = 0, multiplier = 1, treatPoints = 0, hits, jumps = 0, nearMissTimer = 0, invuln, slow, hearts, cleanTime = 0, lastHitObstacle = null } = run;
 
   // timers
   const prevSpeed = power.speed || 0;
@@ -518,8 +524,12 @@ export function step(run, dt, input = {}) {
     player.doubleJumped = true;
     player.jumpBuffer = 0;
     player.duckTimer = 0;
+    player.spinT = 0;
+    player.trickClean = true;
     events.push('jump');
     events.push('doubleJump');
+  } else if (player.spinT != null) {
+    player.spinT += dt;
   }
   if (player.height > 0 || player.vy > 0) {
     // Ducking or double-jump descent applies snappier gravity so jumps feel crisp, not floaty.
@@ -530,6 +540,15 @@ export function step(run, dt, input = {}) {
     if (player.height === 0) {
       player.vy = 0;
       player.doubleJumped = false;
+      if (player.spinT != null) {
+        if (player.trickClean && tricks < TRICK_CAP) {
+          tricks += 1;
+          treats += TRICK_TREATS;
+          events.push('trick');
+        }
+        player.spinT = null;
+        player.trickClean = false;
+      }
     }
   }
   player.ducking = wantDuck && player.height <= 0;
@@ -618,6 +637,7 @@ export function step(run, dt, input = {}) {
       } else {
         hits += 1;
         frameHits += 1;
+        player.trickClean = false;
         lastHitObstacle = e.type;
         combo = 0;
         multiplier = 1;
@@ -677,6 +697,7 @@ export function step(run, dt, input = {}) {
     player,
     power,
     treats,
+    tricks,
     collected,
     combo,
     maxCombo,

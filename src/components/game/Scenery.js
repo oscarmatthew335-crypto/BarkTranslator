@@ -169,7 +169,22 @@ function wrapX(base, offset, span, pad) {
   return ((((base - offset) % span) + span) % span) - pad;
 }
 
-const TRACK_BOTTOM_Y = 275;
+const TRACK_BOTTOM_Y = 345;
+
+// sky_bg.jpg is 1080 x 1920; its grass starts 74% of the way down.
+const SKY_H = 614;
+const SKY_W = SKY_H * (1080 / 1920);
+const SKY_HORIZON = 0.74;
+
+// Roadside props, cycled by a stable slot number so each keeps its look while
+// it scrolls past. Sizes are in near-lane units (scaled by perspective).
+const ROADSIDE = [
+  { key: 'treeSingle', w: 81, h: 100 },
+  { key: 'bushFlowers', w: 46, h: 38 },
+  { key: 'lampPost', w: 27, h: 96 },
+  { key: 'bush', w: 46, h: 40 },
+];
+const roadsideFor = (n) => ROADSIDE[((n % ROADSIDE.length) + ROADSIDE.length) % ROADSIDE.length];
 const TRACK_BOTTOM_P = (TRACK_BOTTOM_Y - HORIZON_Y) / (PLAYER_GROUND_Y - HORIZON_Y);
 
 // Painted behind-the-back park sky + distant horizon hills and trees above HORIZON_Y.
@@ -182,34 +197,23 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
       <G>
         <Defs>
           <LinearGradient id="paintedSkyGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#9AD9F2" />
-            <Stop offset="100%" stopColor="#E1F3F7" />
+            <Stop offset="0%" stopColor="#BFE9E7" />
+            <Stop offset="100%" stopColor="#BFE9E7" />
           </LinearGradient>
         </Defs>
         {/* Seamless sky extension above HORIZON_Y */}
         <Rect x={-40} y={-800} width={CAM_W + 80} height={820} fill="url(#paintedSkyGrad)" />
-        {/* Upper sky, sun, clouds and horizon treeline aligned to HORIZON_Y */}
+        {/* Painted sky, sun, hills and treeline. Its grass line (74% down the
+            picture) sits on HORIZON_Y; it is sized so even the tallest phone
+            view (2.4:1) shows no gap above it, and the sides crop evenly. */}
         <SvgImage
-          href={SPRITES.parkBg}
-          x={-4}
-          y={HORIZON_Y - 120}
-          width={CAM_W + 8}
-          height={205}
+          href={SPRITES.skyBg}
+          x={CENTER_X - SKY_W / 2}
+          y={HORIZON_Y - SKY_H * SKY_HORIZON}
+          width={SKY_W}
+          height={SKY_H}
           preserveAspectRatio="none"
         />
-        <G opacity={0.45}>
-          {[0, 140].map((bx) => (
-            <SvgImage
-              key={`h-${bx}`}
-              href={SPRITES.hillsParallax}
-              x={bx - 16}
-              y={HORIZON_Y - 38}
-              width={180}
-              height={46}
-              preserveAspectRatio="none"
-            />
-          ))}
-        </G>
       </G>
     );
   }
@@ -262,9 +266,10 @@ export function Midground({ theme, dist, reduceMotion = false }) {
   const treeStep = 130;
   const treeOffset = ((scroll % treeStep) + treeStep) % treeStep;
   const treeSlots = [];
+  const slotBase = Math.floor(scroll / treeStep);
   for (let i = 0; i < 5; i++) {
     const dx = VISIBLE_DEPTH - 20 - treeOffset - i * treeStep;
-    if (dx > -70 && dx < VISIBLE_DEPTH - 10) treeSlots.push(dx);
+    if (dx > -70 && dx < VISIBLE_DEPTH - 10) treeSlots.push({ dx, slot: slotBase - i });
   }
 
   return (
@@ -317,7 +322,7 @@ export function Midground({ theme, dist, reduceMotion = false }) {
       <Line x1={edgeX(1.54, 0)} y1={HORIZON_Y} x2={edgeX(1.54, TRACK_BOTTOM_P)} y2={TRACK_BOTTOM_Y} stroke={INK} strokeWidth={2.2} />
 
       {/* Scrolling perspective trees and flower tufts lining both sides of the track */}
-      {treeSlots.map((dx, i) => {
+      {treeSlots.map(({ dx, slot }, i) => {
         const left = projectBehind(dx, -2.02, 0);
         const right = projectBehind(dx, 2.02, 0);
         const tw = 96 * left.scale;
@@ -345,7 +350,24 @@ export function Midground({ theme, dist, reduceMotion = false }) {
               height={ph}
               preserveAspectRatio="xMidYMax meet"
             />
-            {th.prop === 'tree' || th.prop === 'bench' ? (
+            {th.painted ? (
+              <>
+                {[
+                  [left, roadsideFor(slot)],
+                  [right, roadsideFor(slot + 2)],
+                ].map(([pos, prop], side) => (
+                  <SvgImage
+                    key={side}
+                    href={SPRITES[prop.key]}
+                    x={pos.x - (prop.w * pos.scale) / 2}
+                    y={pos.groundY - prop.h * pos.scale}
+                    width={prop.w * pos.scale}
+                    height={prop.h * pos.scale}
+                    preserveAspectRatio="xMidYMax meet"
+                  />
+                ))}
+              </>
+            ) : th.prop === 'tree' || th.prop === 'bench' ? (
               <>
                 <SvgImage
                   href={SPRITES.treesCluster}

@@ -2,33 +2,75 @@ import React, { memo } from 'react';
 import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { SPRITES } from './sprites';
+import { BackRunner } from './PetSprite';
 
 const INK = C.ink;
 const SW = 2.2;
 
 // Obstacles, treats and power-ups, each drawn in its own box with the top-left
 // corner at 0,0 (sizes match src/game/stages.js).
-function Thing({ kind, type, w, h }) {
+function Thing({ kind, type, w, h, lift = 0, t = 0 }) {
   if (kind === 'treat') return <Treat type={type} />;
   if (kind === 'power') return <PowerBox type={type} />;
   const Art = OBSTACLE_ART[type];
-  return Art ? <Art w={w} h={h} /> : <Rect width={w} height={h} rx={6} fill={C.tomato} stroke={INK} strokeWidth={SW} />;
+  return Art ? <Art w={w} h={h} lift={lift} t={t} /> : <Rect width={w} height={h} rx={6} fill={C.tomato} stroke={INK} strokeWidth={SW} />;
 }
 
-function benchArt({ w, h }) {
+// Front-on painted props for the behind-the-back view. Art is fitted inside a
+// box a little larger than the hit box, bottom-centred on the ground line.
+function frontProp(href, padW, padH, shadow = 0.5) {
+  return function FrontProp({ w, h }) {
+    return (
+      <G>
+        <Ellipse cx={w / 2} cy={h - 1} rx={w * shadow} ry={3.5} fill="rgba(36,29,59,0.22)" />
+        <SvgImage href={href} x={-padW / 2} y={-padH} width={w + padW} height={h + padH} preserveAspectRatio="xMidYMax meet" />
+      </G>
+    );
+  };
+}
+
+const benchArt = frontProp(SPRITES.benchFront, 8, 14, 0.52);
+const trashArt = frontProp(SPRITES.trashFront, 6, 8);
+const hedgeArt = frontProp(SPRITES.hedge, 8, 14, 0.54);
+const stoolArt = frontProp(SPRITES.stool, 8, 14);
+const cucumberArt = frontProp(SPRITES.obCucumber, 10, 10, 0.5);
+
+// A puddle lies flat on the road, so it's centred on the ground line.
+function puddleArt({ w, h }) {
+  return <SvgImage href={SPRITES.obPuddle} x={-8} y={h - 15} width={w + 16} height={22} preserveAspectRatio="xMidYMid meet" />;
+}
+
+// High obstacles float `lift` units above the ground; their art reaches down to it.
+function sprinklerArt({ w, h, lift = 30 }) {
+  const ground = h + lift / 1.08;
+  return <SvgImage href={SPRITES.obSprinkler} x={-10} y={-6} width={w + 22} height={ground + 6} preserveAspectRatio="none" />;
+}
+
+function sprayArt({ w, h }) {
+  const ah = (w + 18) * (242 / 512);
+  return <SvgImage href={SPRITES.obSpray} x={-9} y={h / 2 - ah / 2 - 2} width={w + 18} height={ah} preserveAspectRatio="xMidYMid meet" />;
+}
+
+// Stand-in until the postman is redrawn: a parcel floating at head height.
+function parcelArt({ w, h }) {
+  const bw = w * 0.8, bh = h * 0.72, x = (w - bw) / 2, y = (h - bh) / 2;
   return (
     <G>
-      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.52} ry={3.5} fill="rgba(36,29,59,0.22)" />
-      <SvgImage href={SPRITES.bench} x={-4} y={-6} width={w + 8} height={h + 10} preserveAspectRatio="none" />
+      <Path d={`M ${x} ${y + 5} L ${x + 6} ${y} L ${x + bw + 6} ${y} L ${x + bw} ${y + 5} Z`} fill="#D9A86C" stroke="#6B4423" strokeWidth={1.4} strokeLinejoin="round" />
+      <Rect x={x} y={y + 5} width={bw} height={bh - 5} rx={1.5} fill="#C08A52" stroke="#6B4423" strokeWidth={1.4} />
+      <Rect x={x + bw / 2 - 3} y={y + 5} width={6} height={bh - 5} fill="#E9CFA4" opacity={0.9} />
+      <Rect x={x + bw / 2 - 3} y={y} width={6} height={5} fill="#F1DDB8" opacity={0.9} />
     </G>
   );
 }
 
-function trashArt({ w, h }) {
+// A dog running at the camera: two frames swapped by time.
+function dogFrontArt({ w, h, t = 0 }) {
+  const href = Math.floor(t * 7) % 2 ? SPRITES.obDogFront2 : SPRITES.obDogFront1;
   return (
     <G>
-      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.5} ry={3.5} fill="rgba(36,29,59,0.22)" />
-      <SvgImage href={SPRITES.trashCan} x={-3} y={-4} width={w + 6} height={h + 8} preserveAspectRatio="none" />
+      <Ellipse cx={w / 2} cy={h - 1} rx={w * 0.42} ry={3.5} fill="rgba(36,29,59,0.22)" />
+      <SvgImage href={href} x={-4} y={-14} width={w + 8} height={h + 14} preserveAspectRatio="xMidYMax meet" />
     </G>
   );
 }
@@ -36,27 +78,20 @@ function trashArt({ w, h }) {
 const OBSTACLE_ART = {
   bench: benchArt,
   trash: trashArt,
-  puddle: benchArt,
-  vacuum: benchArt,
-  sprinkler: trashArt,
-  postman: benchArt,
-  cucumber: trashArt,
-  spray: trashArt,
-  dog: ({ w, h }) => (
-    <G transform={`translate(${w} 0) scale(-1 1)`}>
-      <SvgImage href={SPRITES.dogChaser} x={0} y={-2} width={w + 8} height={h + 4} preserveAspectRatio="xMidYMid meet" />
-    </G>
-  ),
+  puddle: puddleArt,
+  vacuum: stoolArt,
+  sprinkler: sprinklerArt,
+  postman: parcelArt,
+  cucumber: cucumberArt,
+  spray: sprayArt,
+  dog: dogFrontArt,
   catDash: ({ w, h }) => (
     <G transform={`translate(${w} 0) scale(-1 1)`}>
       <SvgImage href={SPRITES.catHero} x={-4} y={-8} width={w + 8} height={h + 12} preserveAspectRatio="xMidYMid meet" />
     </G>
   ),
-  dogDash: ({ w, h }) => (
-    <G transform={`translate(${w} 0) scale(-1 1)`}>
-      <SvgImage href={SPRITES.dogChaser} x={-4} y={-2} width={w + 10} height={h + 4} preserveAspectRatio="xMidYMid meet" />
-    </G>
-  ),
+  dogDash: dogFrontArt,
+
   bird: ({ w, h }) => (
     <G>
       <Ellipse cx={w / 2 + 2} cy={h / 2 + 2} rx={w / 2 - 4} ry={h / 2 - 4} fill={C.arcadeBlue} stroke={INK} strokeWidth={SW} />
@@ -69,17 +104,14 @@ const OBSTACLE_ART = {
 
 function Treat({ type }) {
   if (type === 'bone')
-    return <SvgImage href={SPRITES.iconBone} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
+    return <SvgImage href={SPRITES.treatBone} x={-1} y={-1} width={24} height={24} preserveAspectRatio="xMidYMid meet" />;
   if (type === 'ball')
-    return <SvgImage href={SPRITES.iconStar} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
+    return <SvgImage href={SPRITES.treatBall} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
+  if (type === 'yarn')
+    return <SvgImage href={SPRITES.treatYarn} x={-1} y={-1} width={24} height={24} preserveAspectRatio="xMidYMid meet" />;
   if (type === 'fish')
-    return <SvgImage href={SPRITES.fish} x={-2} y={0} width={26} height={21} preserveAspectRatio="xMidYMid meet" />;
-  return (
-    <G>
-      <Circle cx={11} cy={11} r={10} fill={C.butter} stroke={INK} strokeWidth={1.5} />
-      <SvgImage href={SPRITES.iconPaw} x={3.5} y={3.5} width={15} height={15} preserveAspectRatio="xMidYMid meet" />
-    </G>
-  );
+    return <SvgImage href={SPRITES.fishTreat} x={-3} y={-1} width={28} height={23} preserveAspectRatio="xMidYMid meet" />;
+  return <SvgImage href={SPRITES.coinGold} x={0} y={0} width={22} height={22} preserveAspectRatio="xMidYMid meet" />;
 }
 
 const POWER_COLOUR = { speed: C.coral, shield: C.arcadeBlue, magnet: C.pink, double: C.butter };
@@ -104,8 +136,11 @@ function PowerBox({ type }) {
 }
 
 // The chaser drawn behind the pet on the left of the screen in Chase mode.
-export function Chaser({ chaser, phase = 0 }) {
+export function Chaser({ chaser, phase = 0, view = 'side' }) {
   const id = chaser?.id || 'bath';
+  if (id === 'dog' && view === 'back') {
+    return <BackRunner cat={false} phase={phase} cx={24} floor={39} size={0.92} rate={1.1} tint="#9A6338" />;
+  }
   if (id === 'dog') {
     const a = (Number(phase) || 0) * 1.9;
     const bounce = Math.abs(Math.sin(a * 0.5));
