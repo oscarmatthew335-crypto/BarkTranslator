@@ -28,6 +28,8 @@ export const TRICK_TREATS = 3;
 export const TRICK_CAP = 5; // rewarded tricks per run
 export const MAX_JUMP_HEIGHT = 124; // prevents floating high into the top HUD
 export const JUMP_BUFFER = 0.12; // a tap just before landing still jumps
+export const GRIND_MIN = 0.35; // landing on a low obstacle above this share of its height grinds over it
+export const GRIND_HOP_V = 380; // the hop off the end of a grind
 export const SWIPE_DUCK_S = 0.6; // a swipe down ducks for this long
 // The first 25 seconds of Endless and Chase (and the first stage of a place)
 // are a warm-up: one obstacle at a time, nothing moving, a treat guide before
@@ -94,7 +96,7 @@ export function playerBox(player, dist) {
 }
 
 export function entityBox(e) {
-  return { x: e.x + 3, y: e.y + 1, w: e.w - 6, h: Math.max(2, e.h - 2) };
+  return { x: e.x + 6, y: e.y + 1, w: e.w - 12, h: Math.max(2, e.h - 2) };
 }
 
 // --- building a stage -----------------------------------------------------
@@ -738,6 +740,15 @@ export function step(run, dt, input = {}) {
           treatPoints += 5 * multiplier;
           events.push('smash', 'nearMiss');
         }
+        continue;
+      }
+      // Skateboard forgiveness: coming down onto something low from a jump
+      // grinds over it with a little hop instead of a bump.
+      if ((OBSTACLES[e.type]?.lane || e.lane) === 'low' && player.height > 0 && player.vy <= 0 && player.height >= e.y + e.h * GRIND_MIN) {
+        changed.set(i, { ...e, hit: true, grinded: true });
+        player.height = Math.max(player.height, e.y + e.h);
+        player.vy = GRIND_HOP_V;
+        events.push('grind');
         continue;
       }
       changed.set(i, { ...e, hit: true });

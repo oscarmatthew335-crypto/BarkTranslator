@@ -268,7 +268,7 @@ export function skateMotion({ cat, phase = 0, clock = null, pose = 'run', rising
   if (pushing) key = 'push';
   const dip = pushing ? Math.sin((u / PUSH_S) * Math.PI) : 0;
   const cruise = pose === 'run' ? Math.sin(t * 2.6) * 0.6 : 0;
-  return { key, board, turn, squash: squash * (1 - dip * 0.03), wobble, lift, bobY: dip * 1.2 + cruise };
+  return { key, board, turn, squash: squash * (1 - dip * 0.03), wobble, lift, bobY: cruise, push: dip };
 }
 
 // How a pet looks on its board: painted set (variant) or grey tinted with its colour.
@@ -304,8 +304,12 @@ export function SkateRider({ cat, phase = 0, clock = null, board: boardId = null
   const feetY = deckY - m.lift + m.bobY;
   const y0 = feetY - h;
 
+  // Push: the pet leans out over the paw side, dust kicks up from the ground
+  // there and the board surges forward (drawn a touch bigger).
+  const pawX = fr.paw ? fr.paw[variant || 'base'] ?? fr.paw.base : null;
+  const pawSide = pawX == null ? 0 : pawX < 0.5 ? -1 : 1;
   const petT = [];
-  const lean = bank * 0.7 + m.wobble;
+  const lean = bank * 0.7 + m.wobble + pawSide * m.push * 7;
   if (lean) petT.push(`rotate(${lean.toFixed(1)} ${cx} ${deckY})`);
   if (m.turn) petT.push(`rotate(${m.turn.toFixed(0)} ${cx} ${(feetY - h * 0.4).toFixed(1)})`);
   if (m.squash !== 1) petT.push(`translate(0 ${feetY}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-feetY})`);
@@ -315,7 +319,7 @@ export function SkateRider({ cat, phase = 0, clock = null, board: boardId = null
   return (
     <G>
       {shadow && pose !== 'jump' ? <Ellipse cx={cx} cy={floor} rx={bw * 0.55} ry={3 * size} fill="rgba(36,29,59,0.22)" /> : null}
-      <SvgImage href={art.frames[m.board]} x={cx - bw / 2} y={boardTop + m.bobY * 0.3} width={bw} height={bh} preserveAspectRatio="none" />
+      <SvgImage href={art.frames[m.board]} x={cx - (bw * (1 + m.push * 0.06)) / 2} y={boardTop + m.bobY * 0.3 - m.push * 2} width={bw * (1 + m.push * 0.06)} height={bh * (1 + m.push * 0.06)} preserveAspectRatio="none" />
       <G transform={petT.join(' ') || undefined}>
         <SvgImage href={own || fr.grey} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
         {fill ? (
@@ -329,6 +333,9 @@ export function SkateRider({ cat, phase = 0, clock = null, board: boardId = null
           </>
         ) : null}
       </G>
+      {pawSide && m.push > 0.2 ? (
+        <SvgImage href={SPRITES.fxDust1} x={cx + pawSide * bw * 0.62 - 12} y={floor - 12} width={24 + m.push * 8} height={12} opacity={Math.min(1, m.push * 1.4)} preserveAspectRatio="none" />
+      ) : null}
     </G>
   );
 }

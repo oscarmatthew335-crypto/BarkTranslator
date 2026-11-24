@@ -115,6 +115,10 @@ export function gameEvent(event) {
     case 'nearMiss':
       buzz('light');
       break;
+    case 'grind':
+      play('jump');
+      buzz('medium');
+      break;
     case 'power':
     case 'shield':
       play('power');

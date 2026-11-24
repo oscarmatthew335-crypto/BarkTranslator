@@ -229,3 +229,39 @@ test('the new analytics event is on the allow-list', () => {
   assert.ok(ALLOWED_EVENTS.has('controls_mode'));
   assert.ok(ALLOWED_EVENTS.has('run_end'));
 });
+
+// ---------- skateboard forgiveness ----------
+import { OBSTACLES as OBS2 } from '../src/game/stages.js';
+
+function jumpWindow(type) {
+  const o = OBS2[type];
+  const stage = { ...endlessStage('cat'), obstacles: { bench: 1 }, powerUps: [] };
+  let clear = 0;
+  for (let f = 0; f < 120; f++) {
+    let r = newRun(stage, { seed: 1 });
+    r = { ...r, entities: [{ id: 999, kind: 'obstacle', type, trackLane: 0, x: r.dist + 600, y: o.y, w: o.w, h: o.h, lane: o.lane, move: 0, warningS: 0 }], chunkEnd: 1e9 };
+    let hit = false;
+    for (let i = 0; i < 200; i++) {
+      r = step(r, DT, i === f ? { jump: true } : {});
+      if (r.events.includes('hit')) hit = true;
+    }
+    if (!hit) clear += 1;
+  }
+  return clear * DT;
+}
+
+test('jumping over a bench or bin has a generous timing window (over half a second)', () => {
+  for (const type of ['bench', 'trash']) assert.ok(jumpWindow(type) >= 0.55, `${type}: ${jumpWindow(type)}s`);
+  assert.ok(jumpWindow('cucumber') >= 0.4);
+});
+
+test('coming down onto a low obstacle grinds over it instead of a bump', () => {
+  const o = OBS2.bench;
+  const stage = { ...endlessStage('cat'), obstacles: { bench: 1 }, powerUps: [] };
+  let r = newRun(stage, { seed: 1 });
+  r = { ...r, player: { ...r.player, height: o.h * 0.6, vy: -50 }, entities: [{ id: 1, kind: 'obstacle', type: 'bench', trackLane: 0, x: r.dist, y: 0, w: o.w, h: o.h, lane: 'low', move: 0, warningS: 0 }], chunkEnd: 1e9 };
+  r = step(r, DT, {});
+  assert.ok(r.events.includes('grind'));
+  assert.ok(!r.events.includes('hit'));
+  assert.equal(r.hearts, newRun(stage, { seed: 1 }).hearts);
+});
