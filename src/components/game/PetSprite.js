@@ -216,6 +216,105 @@ export function squashStretch(feel, pose, rising) {
 
 const DUST = [SPRITES.fxDust1, SPRITES.fxDust2, SPRITES.fxDust3];
 
+// ---------- Skateboard rider (the runner's player) ----------
+
+const BOARDS = {
+  cat: [SPRITES.boardCat1, SPRITES.boardCat2, SPRITES.boardCat3, SPRITES.boardCat4],
+  dog: [SPRITES.boardDog1, SPRITES.boardDog2, SPRITES.boardDog3, SPRITES.boardDog4],
+};
+// height / width of each board frame: straight, lean right, flip (cat) or pop (dog), lean left
+const BOARD_AR = { cat: [1.414, 1.113, 1.306, 1.202], dog: [1.362, 0.988, 1.158, 1.049] };
+// Where the deck surface sits on each board frame (fraction of its height from the top).
+const DECK_Y = [0.45, 0.5, 0.5, 0.5];
+const PUSH_EVERY = 2.4; // seconds between pushes while cruising
+const PUSH_S = 0.45;
+
+// What the rider shows for a pose: pet frame key, board frame, pet mirrored, pet squash.
+export function skateMotion({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0 }) {
+  const ride = cat ? 'sit' : 'stand';
+  const t = (Number(phase) || 0) / 9; // phase runs ~9 per second
+  let key = ride;
+  let board = Math.abs(bank) > 3 ? (bank > 0 ? 1 : 3) : 0;
+  let flip = false;
+  let squash = 1;
+  let wobble = 0;
+  let lift = 0;
+  if (pose === 'jump') {
+    if (spin != null) {
+      // Kickflip: the board turns under the pet while it spins round.
+      board = spin < 0.2 ? 0 : spin < 0.45 ? 1 : spin < 0.7 ? 2 : spin < 0.9 ? 3 : 0;
+      if (spin >= 0.15 && spin < 0.38) key = 'spinSide';
+      else if (spin >= 0.38 && spin < 0.62) key = 'spinFront';
+      else if (spin >= 0.62 && spin < 0.85) {
+        key = 'spinSide';
+        flip = true;
+      }
+      lift = spin > 0.1 && spin < 0.9 ? 4 : 0;
+    } else {
+      squash = rising ? 0.94 : 1; // crouched for the ollie
+      if (!cat && rising) board = 2; // the dog's board pops up
+    }
+  } else if (pose === 'duck') squash = 0.72;
+  else if (pose === 'look') key = 'spinFront'; // rides switch, facing the camera
+  else if (pose === 'sit') key = cat ? 'sit' : 'sit2';
+  else if (pose === 'hurt') wobble = Math.sin(t * 40) * 9;
+  // A push every few seconds: a dip as a back paw touches down.
+  const u = t % PUSH_EVERY;
+  const push = pose === 'run' && u < PUSH_S ? Math.sin((u / PUSH_S) * Math.PI) : 0;
+  const cruise = pose === 'run' ? Math.sin(t * 2.6) * 0.6 : 0;
+  return { key, board, flip, squash: squash * (1 - push * 0.05), wobble, lift, bobY: push * 1.8 + cruise };
+}
+
+export function SkateRider({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, tint = null, variant = null, feel = null, shadow = true }) {
+  const maskId = useId().replace(/:/g, '_');
+  const sp = cat ? 'cat' : 'dog';
+  const m = skateMotion({ cat, phase, pose, rising, spin, bank });
+  const set = BACK_FRAMES[sp];
+  const fr = set[m.key] || set[cat ? 'sit' : 'stand'];
+  const own = variant ? fr[variant] : null;
+  const fill = own ? null : variant ? VARIANT_TINT[variant] : tint;
+
+  const bw = (cat ? 40 : 44) * size;
+  const bh = bw * BOARD_AR[sp][m.board];
+  const boardTop = floor - bh;
+  const deckY = boardTop + bh * DECK_Y[m.board];
+  const k = cat ? 0.85 : 1.1; // pet size on the board
+  const w = fr.pw * UNIT[sp] * size * k;
+  const h = fr.ph * UNIT[sp] * size * k;
+  const bodyX = fr.fit ? fr.fit.neck[0] : 0.5;
+  const feetY = deckY - m.lift + m.bobY;
+  const y0 = feetY - h;
+
+  const lean = bank * 0.7 + m.wobble;
+  const petT = [];
+  if (lean) petT.push(`rotate(${lean.toFixed(1)} ${cx} ${deckY})`);
+  if (m.squash !== 1) petT.push(`translate(0 ${feetY}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-feetY})`);
+  const sq = squashStretch(feel, pose, rising);
+  if (sq) petT.push(`translate(${cx} ${feetY}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-feetY})`);
+  if (m.flip) petT.push(`translate(${2 * cx} 0) scale(-1 1)`);
+  const ix = cx - bodyX * w; // mirrored by the transform when flipped
+
+  return (
+    <G>
+      {shadow && pose !== 'jump' ? <Ellipse cx={cx} cy={floor} rx={bw * 0.55} ry={3 * size} fill="rgba(36,29,59,0.22)" /> : null}
+      <SvgImage href={BOARDS[sp][m.board]} x={cx - bw / 2} y={boardTop + m.bobY * 0.3} width={bw} height={bh} preserveAspectRatio="none" />
+      <G transform={petT.join(' ') || undefined}>
+        <SvgImage href={own || fr.grey} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
+        {fill ? (
+          <>
+            <Defs>
+              <Mask id={maskId} maskUnits="userSpaceOnUse" x={ix} y={y0} width={w} height={h}>
+                <SvgImage href={fr.fur} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
+              </Mask>
+            </Defs>
+            <Rect x={ix} y={y0} width={w} height={h} fill={fill} opacity={0.6} mask={`url(#${maskId})`} />
+          </>
+        ) : null}
+      </G>
+    </G>
+  );
+}
+
 const neckPose = (key) => (key === 'duck' ? 'duck' : key === 'jumpUp' || key === 'jumpDown' || key.startsWith('spin') ? 'jump' : 'run');
 const showsFace = (fr) => fr.fx != null;
 
@@ -438,26 +537,11 @@ function BackPet({ cat, phase, pose, rising, spin, feel, happy, bank, colour, eq
   else if (cid === 'char-zebra') variant = 'zebra';
   else if (!cid && col.id === 'spotty') variant = 'spot';
   const tint = variant ? null : char?.palette?.body || col.hex;
-  const collarItem = shown.collar ? getItem(shown.collar) : null;
-  const wear = {
-    hat: shown.hat || null,
-    collar: collarItem,
-    neck: shown.neck || null,
-    glasses: shown.glasses || null,
-    royal: cid === 'char-royal',
-    astro: cid === 'char-astro',
-    ninja: cid === 'char-ninja',
-    cyberEar: cid === 'char-cyber' && !cat,
-  };
-  const m = backMotion(phase, pose, rising, spin);
   const sparkle = GOLD_SPARKLES[Math.floor((Number(phase) || 0) * 0.9) % 3];
   return (
     <G>
       {variant === 'gold' && pose !== 'duck' && pose !== 'sit' ? (
         <SvgImage href={sparkle} x={4} y={18} width={48} height={44} preserveAspectRatio="xMidYMid meet" opacity={0.9} />
-      ) : null}
-      {pose === 'run' && m.bounce > 0.75 ? (
-        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.8} />
       ) : null}
       {feel?.landT != null && feel.landT < 0.3 ? (
         // A wide dust puff at the feet on landing: grows, then fades.
@@ -471,7 +555,9 @@ function BackPet({ cat, phase, pose, rising, spin, feel, happy, bank, colour, eq
           opacity={Math.max(0, 0.9 - feel.landT * 2.6)}
         />
       ) : null}
-      <BackRunner cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} wear={wear} feel={feel} />
+      {/* On the runner the pet rides a skateboard; its look comes from the fur set
+          (colour or painted character), not from separate worn items. */}
+      <SkateRider cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} feel={feel} />
       {(happy || pose === 'look') && pose !== 'hurt' ? (
         <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}

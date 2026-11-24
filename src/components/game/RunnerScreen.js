@@ -511,7 +511,7 @@ export default function RunnerScreen({
                       const gp = projectBehind(goalDx, 0, 0);
                       return (
                         <G transform={`translate(${gp.x} ${gp.groundY}) scale(${gp.scale})`}>
-                          <Goal />
+                          <Goal theme={stage.theme} />
                         </G>
                       );
                     })()

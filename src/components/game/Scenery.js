@@ -66,6 +66,7 @@ export const THEMES = {
   beach: {
     painted: true,
     bg: 'beachBg',
+    arch: 'finishArchBeach',
     top: '#A4DDF1',
     roadside: 'beach',
     sky: '#BFEAFF',
@@ -82,6 +83,7 @@ export const THEMES = {
   braai: {
     painted: true,
     bg: 'braaiBg',
+    arch: 'finishArchBraai',
     top: '#FEA472',
     roadside: 'braai',
     sky: '#FFE2C2',
@@ -98,6 +100,7 @@ export const THEMES = {
   vet: {
     painted: true,
     bg: 'vetBg',
+    arch: 'finishArchVet',
     top: '#F1DDC5',
     roadside: 'vet',
     sky: '#EEE7FF',
@@ -112,12 +115,18 @@ export const THEMES = {
     prop: 'none' // indoors: no roadside props until the vet props are painted
   },
   home: {
+    painted: true,
+    bg: 'homeBg',
+    top: '#F0DCC4',
+    roadside: 'home',
+    arch: 'finishArchHome',
+    planks: true,
     sky: '#FFF1DA',
     skyTop: '#FFE1B5',
     skyLow: '#FFF8EB',
-    ground: '#D9A876',
-    edge: '#B98252',
-    path: '#F4DFC2',
+    ground: '#D4AB7D',
+    edge: '#A9784F',
+    path: '#EBCB9F',
     far: '#FAE2C6',
     farTree: '#EECDAA',
     prop: 'sofa'
@@ -217,12 +226,23 @@ const ROADSIDE = {
     { key: 'beachFlag', w: 30, h: 66 },
   ],
   braai: [
-    { key: 'parkOak', w: 84, h: 102 },
-    { key: 'bushFlowers', w: 46, h: 38 },
-    { key: 'parkPicnic', w: 60, h: 31 },
-    { key: 'bush', w: 46, h: 40 },
+    { key: 'braaiGrill', w: 30, h: 55 },
+    { key: 'braaiAloe', w: 30, h: 45 },
+    { key: 'braaiTable', w: 62, h: 37 },
+    { key: 'braaiLine', w: 40, h: 66 },
   ],
-  vet: [],
+  vet: [
+    { key: 'vetPlant', w: 40, h: 47 },
+    { key: 'vetChair', w: 38, h: 45 },
+    { key: 'vetScale', w: 42, h: 40 },
+    { key: 'vetSign', w: 34, h: 42 },
+  ],
+  home: [
+    { key: 'homeSofa', w: 66, h: 39 },
+    { key: 'homeLamp', w: 22, h: 63 },
+    { key: 'homePlant', w: 34, h: 55 },
+    { key: 'homeShelf', w: 46, h: 65 },
+  ],
 };
 const roadsideFor = (list, n) => list[((n % list.length) + list.length) % list.length];
 const TRACK_BOTTOM_P = (TRACK_BOTTOM_Y - HORIZON_Y) / (PLAYER_GROUND_Y - HORIZON_Y);
@@ -441,9 +461,11 @@ export function Midground({ theme, dist, reduceMotion = false }) {
   );
 }
 
-// The goal at the end of a stage: a painted finish arch over all three lanes.
-export const Goal = memo(function Goal() {
+// The goal at the end of a stage: a painted finish arch over all three lanes,
+// dressed for the place.
+export const Goal = memo(function Goal({ theme }) {
   const w = 236;
   const h = w * 0.615;
-  return <SvgImage href={SPRITES.finishArch} x={-w / 2} y={-h + 6} width={w} height={h} preserveAspectRatio="none" />;
+  const href = SPRITES[THEMES[theme]?.arch] || SPRITES.finishArch;
+  return <SvgImage href={href} x={-w / 2} y={-h + 6} width={w} height={h} preserveAspectRatio="none" />;
 });
