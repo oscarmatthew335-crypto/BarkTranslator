@@ -62,7 +62,7 @@
         "android.permission.MODIFY_AUDIO_SETTINGS",
         "android.permission.POST_NOTIFICATIONS"
       ],
-      "versionCode": 14,
+      "versionCode": 15,
       "blockedPermissions": [
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
@@ -126,7 +126,8 @@
           "delayAppMeasurementInit": true
         }
       ],
-      "expo-iap"
+      "expo-iap",
+      "./plugins/withOptionalFeatures"
     ],
     "web": {
       "favicon": "./assets/favicon.png"
