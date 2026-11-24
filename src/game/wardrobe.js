@@ -14,7 +14,19 @@ export const BODY_COLOURS = [
 ];
 
 // slot: where it goes on the pet. price in treats.
+// The runner shows the pet on its skateboard, so boards are what you collect.
+// Hats, glasses, neckwear and collars are retired (kept so old saves load and
+// can be refunded; see migrateWardrobe).
 export const ITEMS = [
+  { id: 'board-coral', slot: 'board', price: 0, colour: '#FF7A6B', art: 'coral' },
+  { id: 'board-ocean', slot: 'board', price: 0, colour: '#3F6FE0', art: 'ocean' },
+  { id: 'board-grape', slot: 'board', price: 80, colour: '#8E5BE8', art: 'grape' },
+  { id: 'board-mint', slot: 'board', price: 120, colour: '#2BC48A', art: 'mint' },
+  { id: 'board-candy', slot: 'board', price: 160, colour: '#FF5FA2', art: 'candy' },
+  { id: 'board-lime', slot: 'board', price: 220, colour: '#9BD33B', art: 'lime' },
+  { id: 'board-sky', slot: 'board', price: 300, colour: '#5CC8FF', art: 'sky' },
+  { id: 'board-midnight', slot: 'board', price: 450, colour: '#26305C', art: 'midnight', rare: true },
+  { id: 'board-gold', slot: 'board', price: 0, colour: '#FFC23B', art: 'gold', streakOnly: true },
   { id: 'collar-red', slot: 'collar', price: 0, colour: '#FF5A5F' },
   { id: 'collar-blue', slot: 'collar', price: 40, colour: '#5CC8FF' },
   { id: 'collar-bell', slot: 'collar', price: 80, colour: '#FFD43B', bell: true },
@@ -42,7 +54,10 @@ export const ITEMS = [
   { id: 'glasses-cyber', slot: 'glasses', price: 450, colour: '#00F5D4', cyber: true, rare: true }
 ];
 
-export const SLOTS = ['hat', 'glasses', 'neck', 'collar'];
+export const SLOTS = ['board'];
+export const RETIRED_SLOTS = ['hat', 'glasses', 'neck', 'collar'];
+export const isRetired = (item) => Boolean(item && RETIRED_SLOTS.includes(item.slot));
+export const defaultBoard = (pet) => (pet?.species === 'cat' ? 'board-coral' : 'board-ocean');
 export const getItem = (id) => ITEMS.find((i) => i.id === id) || null;
 export const getColour = (id) => BODY_COLOURS.find((c) => c.id === id) || BODY_COLOURS[0];
 
@@ -57,16 +72,37 @@ export function defaultColour(pet) {
 export function emptyWardrobe(pet) {
   return {
     colour: defaultColour(pet),
-    owned: ['collar-red'],
-    equipped: { collar: 'collar-red' },
+    owned: ['board-coral', 'board-ocean'],
+    equipped: { board: defaultBoard(pet) },
     ownedCharacters: [],
-    activeCharacter: null
+    activeCharacter: null,
+    boardsV1: true
+  };
+}
+
+// Old saves: give the two free boards, put one on, and pay back the treats
+// spent on hats, glasses, neckwear and collars (no longer shown). Runs once:
+// the result carries boardsV1. Returns { wardrobe, refund }.
+export function migrateWardrobe(wardrobe, pet) {
+  if (!wardrobe || wardrobe.boardsV1) return { wardrobe, refund: 0 };
+  const owned = Array.isArray(wardrobe.owned) ? wardrobe.owned : [];
+  let refund = 0;
+  for (const id of owned) {
+    const item = getItem(id);
+    if (isRetired(item) && !item.streakOnly) refund += item.price || 0;
+  }
+  const kept = owned.filter((id) => !isRetired(getItem(id)));
+  const hadChamp = owned.includes('bandana-champ');
+  const nextOwned = [...new Set([...kept, 'board-coral', 'board-ocean', ...(hadChamp ? ['board-gold'] : [])])];
+  return {
+    wardrobe: { ...wardrobe, owned: nextOwned, equipped: { board: hadChamp ? 'board-gold' : defaultBoard(pet) }, boardsV1: true },
+    refund
   };
 }
 
 export function canBuy(wardrobe, bank, itemId) {
   const item = getItem(itemId);
-  if (!item || item.streakOnly) return false;
+  if (!item || item.streakOnly || isRetired(item)) return false;
   return !wardrobe.owned.includes(itemId) && bank >= item.price;
 }
 
@@ -96,6 +132,7 @@ export function toggleWear(wardrobe, itemId) {
   if (!item || !wardrobe.owned.includes(itemId)) return wardrobe;
   const on = wardrobe.equipped[item.slot] === itemId;
   const equipped = { ...wardrobe.equipped };
+  if (on && item.slot === 'board') return wardrobe; // always riding one
   if (on) delete equipped[item.slot];
   else equipped[item.slot] = itemId;
   return { ...wardrobe, equipped };
@@ -106,7 +143,7 @@ export const setColour = (wardrobe, colour) => (getColour(colour).id === colour 
 // Next unowned paid cosmetic item for the "just out of reach" StageEnd nudge.
 export function nextUnownedItem(wardrobe, bank = 0) {
   const owned = new Set(wardrobe?.owned || []);
-  const unownedPaid = ITEMS.filter((i) => !i.streakOnly && i.price > 0 && !owned.has(i.id)).sort((a, b) => a.price - b.price);
+  const unownedPaid = ITEMS.filter((i) => !isRetired(i) && !i.streakOnly && i.price > 0 && !owned.has(i.id)).sort((a, b) => a.price - b.price);
   if (!unownedPaid.length) return null;
   const cleanBank = Math.max(0, Math.floor(Number(bank) || 0));
   const nextJustAbove = unownedPaid.find((i) => i.price > cleanBank);

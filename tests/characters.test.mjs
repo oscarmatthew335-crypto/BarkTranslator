@@ -48,7 +48,7 @@ test('characters: unlock rules reject not enough treats, already owned, unknown 
   assert.equal(canUnlockCharacter(res.wardrobe, 5000, 'char-zebra'), false);
 });
 
-test('characters: save migration keeps old wardrobes intact and adds defaults', () => {
+test('characters: save migration keeps colour and characters, swaps worn items for boards with a refund', () => {
   const pet = { id: 'p1', species: 'cat', name: 'Milo' };
   const oldState = {
     ...emptyGameState(),
@@ -65,8 +65,13 @@ test('characters: save migration keeps old wardrobes intact and adds defaults', 
   };
   const migrated = petGame(oldState, pet);
   assert.equal(migrated.wardrobe.colour, 'ginger');
-  assert.deepEqual(migrated.wardrobe.owned, ['collar-red', 'hat-crown']);
-  assert.deepEqual(migrated.wardrobe.equipped, { collar: 'collar-red', hat: 'hat-crown' });
+  assert.deepEqual(migrated.wardrobe.owned, ['board-coral', 'board-ocean']);
+  assert.deepEqual(migrated.wardrobe.equipped, { board: 'board-coral' });
+  assert.equal(migrated.bank, 250 + 250, 'the crown (250) is paid back; the free collar is not');
+  assert.equal(migrated.wardrobe.boardsV1, true);
+  // Loading a saved, already-migrated wardrobe does not refund again.
+  const again = petGame({ ...oldState, pets: { p1: migrated } }, pet);
+  assert.equal(again.bank, migrated.bank);
   assert.deepEqual(migrated.wardrobe.ownedCharacters, []);
   assert.equal(migrated.wardrobe.activeCharacter, null);
 });

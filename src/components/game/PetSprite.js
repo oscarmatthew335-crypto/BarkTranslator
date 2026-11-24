@@ -25,6 +25,8 @@ function PetSprite({
   rising = true,
   spin = null,
   feel = null,
+  clock = null,
+  board = null,
 }) {
   if (view === 'back' && pose !== 'front') {
     return (
@@ -35,6 +37,8 @@ function PetSprite({
         rising={rising}
         spin={spin}
         feel={feel}
+        clock={clock}
+        board={board}
         happy={happy}
         bank={bank}
         colour={colour}
@@ -218,11 +222,19 @@ const DUST = [SPRITES.fxDust1, SPRITES.fxDust2, SPRITES.fxDust3];
 
 // ---------- Skateboard rider (the runner's player) ----------
 
-const BOARDS = {
-  cat: [SPRITES.boardCat1, SPRITES.boardCat2, SPRITES.boardCat3, SPRITES.boardCat4],
-  dog: [SPRITES.boardDog1, SPRITES.boardDog2, SPRITES.boardDog3, SPRITES.boardDog4],
+const frames4 = (k) => [1, 2, 3, 4].map((i) => SPRITES[`board${k}${i}`]);
+// Each board: its 4 frames and which painted board it was made from (for its shape).
+export const BOARD_ART = {
+  'board-coral': { src: 'cat', frames: frames4('Cat') },
+  'board-ocean': { src: 'dog', frames: frames4('Dog') },
+  'board-grape': { src: 'cat', frames: frames4('Grape') },
+  'board-mint': { src: 'dog', frames: frames4('Mint') },
+  'board-candy': { src: 'cat', frames: frames4('Candy') },
+  'board-lime': { src: 'dog', frames: frames4('Lime') },
+  'board-sky': { src: 'cat', frames: frames4('Sky') },
+  'board-midnight': { src: 'dog', frames: frames4('Midnight') },
+  'board-gold': { src: 'cat', frames: frames4('Gold') },
 };
-// height / width of each board frame: straight, lean right, flip (cat) or pop (dog), lean left
 const BOARD_AR = { cat: [1.414, 1.113, 1.306, 1.202], dog: [1.362, 0.988, 1.158, 1.049] };
 // Where the deck surface sits on each board frame (fraction of its height from the top).
 const DECK_Y = [0.45, 0.5, 0.5, 0.5];
@@ -230,8 +242,9 @@ const PUSH_EVERY = 2.2; // seconds between pushes while cruising
 const PUSH_S = 0.5;
 
 // What the rider shows for a pose: riding frame, board frame, spin angle, pet squash.
-export function skateMotion({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0 }) {
-  const t = (Number(phase) || 0) / 9; // phase runs ~9 per second
+export function skateMotion({ cat, phase = 0, clock = null, pose = 'run', rising = true, spin = null, bank = 0 }) {
+  // Seconds: the run's clock when given (pushes keep real time at any speed).
+  const t = clock != null ? Number(clock) || 0 : (Number(phase) || 0) / 9;
   let key = 'ride';
   let board = Math.abs(bank) > 3 ? (bank > 0 ? 1 : 3) : 0;
   let turn = 0;
@@ -258,17 +271,31 @@ export function skateMotion({ cat, phase = 0, pose = 'run', rising = true, spin 
   return { key, board, turn, squash: squash * (1 - dip * 0.03), wobble, lift, bobY: dip * 1.2 + cruise };
 }
 
-export function SkateRider({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, tint = null, variant = null, feel = null, shadow = true }) {
+// How a pet looks on its board: painted set (variant) or grey tinted with its colour.
+export function riderLook(colour, character) {
+  const char = typeof character === 'string' ? getCharacter(character) : character;
+  const cid = char?.id || null;
+  const col = getColour(colour);
+  let variant = null;
+  if (cid === 'char-gold') variant = 'gold';
+  else if (cid === 'char-cyber') variant = 'cyber';
+  else if (cid === 'char-zebra') variant = 'zebra';
+  else if (!cid && col.id === 'spotty') variant = 'spot';
+  return { variant, tint: variant ? null : char?.palette?.body || col.hex };
+}
+
+export function SkateRider({ cat, phase = 0, clock = null, board: boardId = null, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, tint = null, variant = null, feel = null, shadow = true }) {
   const maskId = useId().replace(/:/g, '_');
   const sp = cat ? 'cat' : 'dog';
-  const m = skateMotion({ cat, phase, pose, rising, spin, bank });
+  const m = skateMotion({ cat, phase, clock, pose, rising, spin, bank });
   const set = SKATE_FRAMES[sp];
   const fr = set[m.key] || set.ride;
   const own = variant ? fr[variant] : null;
   const fill = own ? null : variant ? VARIANT_TINT[variant] : tint;
 
+  const art = BOARD_ART[boardId] || BOARD_ART[cat ? 'board-coral' : 'board-ocean'];
   const bw = (cat ? 40 : 44) * size;
-  const bh = bw * BOARD_AR[sp][m.board];
+  const bh = bw * BOARD_AR[art.src][m.board];
   const boardTop = floor - bh;
   const deckY = boardTop + bh * DECK_Y[m.board];
   const h = (cat ? 74 : 78) * size; // the pet's frame height on the board
@@ -288,7 +315,7 @@ export function SkateRider({ cat, phase = 0, pose = 'run', rising = true, spin =
   return (
     <G>
       {shadow && pose !== 'jump' ? <Ellipse cx={cx} cy={floor} rx={bw * 0.55} ry={3 * size} fill="rgba(36,29,59,0.22)" /> : null}
-      <SvgImage href={BOARDS[sp][m.board]} x={cx - bw / 2} y={boardTop + m.bobY * 0.3} width={bw} height={bh} preserveAspectRatio="none" />
+      <SvgImage href={art.frames[m.board]} x={cx - bw / 2} y={boardTop + m.bobY * 0.3} width={bw} height={bh} preserveAspectRatio="none" />
       <G transform={petT.join(' ') || undefined}>
         <SvgImage href={own || fr.grey} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
         {fill ? (
@@ -517,7 +544,7 @@ export function BackRunner({
 const GOLD_SPARKLES = [SPRITES.goldSparkle1, SPRITES.goldSparkle2, SPRITES.goldSparkle3];
 
 // The player seen from behind, dressed from the wardrobe and character.
-function BackPet({ cat, phase, pose, rising, spin, feel, happy, bank, colour, equipped, character }) {
+function BackPet({ cat, phase, pose, rising, spin, feel, clock, board, happy, bank, colour, equipped, character }) {
   const char = typeof character === 'string' ? getCharacter(character) : character;
   const cid = char?.id || null;
   const shown = char ? effectiveEquipped({ equipped }, cid) : equipped || {};
@@ -548,7 +575,7 @@ function BackPet({ cat, phase, pose, rising, spin, feel, happy, bank, colour, eq
       ) : null}
       {/* On the runner the pet rides a skateboard; its look comes from the fur set
           (colour or painted character), not from separate worn items. */}
-      <SkateRider cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} feel={feel} />
+      <SkateRider cat={cat} phase={phase} clock={clock} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} feel={feel} board={board || equipped?.board} />
       {(happy || pose === 'look') && pose !== 'hurt' ? (
         <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}

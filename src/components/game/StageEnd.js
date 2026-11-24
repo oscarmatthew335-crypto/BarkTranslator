@@ -61,7 +61,7 @@ export default function StageEnd({
   return (
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <Sticker radius={R.viewport} color={C.butter} innerStyle={s.card}>
-        {faceUri ? <Image source={{ uri: faceUri }} style={s.face} accessibilityIgnoresInvertColors /> : <PetPreview species={pet.species} wardrobe={wardrobe} size={108} pose="front" />}
+        {faceUri ? <Image source={{ uri: faceUri }} style={s.face} accessibilityIgnoresInvertColors /> : <PetPreview species={pet.species} wardrobe={wardrobe} size={108} />}
         <Text style={s.title} maxFontSizeMultiplier={1.5}>
           {result.chase
             ? t('game.end.caughtBy', { chaser: t(stage.chaser?.nameKey || 'game.chaser.bath') })

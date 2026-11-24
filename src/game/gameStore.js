@@ -6,7 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emptyProgress } from './progress';
-import { emptyWardrobe } from './wardrobe';
+import { emptyWardrobe, migrateWardrobe } from './wardrobe';
 import { emptyStreak, emptyWeeklyBest } from './daily';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
@@ -195,7 +195,7 @@ export function petGame(state, pet) {
   const speciesBest = state?.bestScores?.[sp] || { endless: 0, chase: 0 };
   const saved = state?.pets?.[pet.id];
   if (!saved) return { ...base, bestScores: { ...base.bestScores, ...speciesBest } };
-  return {
+  const merged = {
     ...base,
     ...saved,
     bestScores: {
@@ -209,12 +209,18 @@ export function petGame(state, pet) {
       owned: Array.isArray(saved.wardrobe?.owned) ? saved.wardrobe.owned : base.wardrobe.owned,
       equipped: { ...base.wardrobe.equipped, ...(saved.wardrobe?.equipped || {}) },
       ownedCharacters: Array.isArray(saved.wardrobe?.ownedCharacters) ? saved.wardrobe.ownedCharacters : [],
-      activeCharacter: saved.wardrobe?.activeCharacter ?? null
+      activeCharacter: saved.wardrobe?.activeCharacter ?? null,
+      boardsV1: Boolean(saved.wardrobe?.boardsV1)
     },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     recentRuns: Array.isArray(saved.recentRuns) ? saved.recentRuns : [],
     round: { ...base.round, ...(saved.round || {}) }
   };
+  // Boards replaced worn items: refund those once and hand out the free boards.
+  const mig = migrateWardrobe(merged.wardrobe, pet);
+  return mig.refund || mig.wardrobe !== merged.wardrobe
+    ? { ...merged, wardrobe: mig.wardrobe, bank: (Number(merged.bank) || 0) + mig.refund }
+    : merged;
 }
 
 export function removePetGame(state, petId) {

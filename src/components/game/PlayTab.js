@@ -892,7 +892,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     <ScrollView style={s.container} contentContainerStyle={s.content}>
       <ScreenTitle title={t('game.title', { petName: pet.name })} subtitle={t('game.subtitle', { petName: pet.name })} />
       <Sticker radius={R.viewport} innerStyle={s.hero}>
-        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} pose="front" />
+        <PetPreview species={pet.species} wardrobe={game.wardrobe} size={96} />
         <View style={{ flex: 1, gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Text style={s.heroLine} accessibilityLabel={t('game.treatsA11y', { n: game.bank })}>

@@ -555,6 +555,7 @@ export default function RunnerScreen({
                       rising={run.player.vy > 0}
                       spin={reduceMotion ? null : spinP}
                       feel={feel}
+                      clock={run.t}
                       view="back"
                     />
                     {run.power.shield ? (

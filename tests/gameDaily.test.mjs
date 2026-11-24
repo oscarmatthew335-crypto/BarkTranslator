@@ -193,29 +193,32 @@ test('daily challenge: one per day, picks only open stages, completes once, and 
   assert.ok(challengeFor('2026-10-20', 'cat', opened));
 });
 
-test('wardrobe: 8 colours, expanded cosmetic items, buy with treats, wear and take off', () => {
+test('wardrobe: 8 colours, boards bought with treats, always riding one', () => {
   assert.equal(BODY_COLOURS.length, 8);
-  assert.ok(ITEMS.length >= 25);
+  assert.ok(ITEMS.filter((i) => i.slot === 'board').length >= 8);
   assert.equal(defaultColour({ species: 'dog', breedId: 'gsd' }), 'brown');
   assert.equal(defaultColour({ species: 'dog', breedId: 'rescue' }), 'golden');
   assert.equal(defaultColour({ species: 'cat' }), 'grey');
   let w = emptyWardrobe({ species: 'dog' });
-  assert.equal(canBuy(w, 50, 'hat-party'), false, 'not enough treats');
-  let r = buy(w, 50, 'hat-party');
+  assert.equal(w.equipped.board, 'board-ocean');
+  assert.equal(emptyWardrobe({ species: 'cat' }).equipped.board, 'board-coral');
+  assert.equal(canBuy(w, 50, 'board-grape'), false, 'not enough treats');
+  assert.equal(canBuy(w, 9999, 'hat-party'), false, 'worn items are retired');
+  let r = buy(w, 50, 'board-grape');
   assert.equal(r.bank, 50);
-  r = buy(w, 100, 'hat-party');
-  assert.equal(r.bank, 40);
-  assert.ok(r.wardrobe.owned.includes('hat-party'));
-  assert.equal(r.wardrobe.equipped.hat, 'hat-party');
-  assert.equal(buy(r.wardrobe, 999, 'hat-party').bank, 999, 'no buying twice');
-  w = toggleWear(r.wardrobe, 'hat-party');
-  assert.equal(w.equipped.hat, undefined);
-  w = toggleWear(w, 'hat-party');
-  assert.equal(w.equipped.hat, 'hat-party');
-  assert.equal(toggleWear(w, 'hat-crown'), w, "can't wear what you don't own");
+  r = buy(w, 100, 'board-grape');
+  assert.equal(r.bank, 20);
+  assert.ok(r.wardrobe.owned.includes('board-grape'));
+  assert.equal(r.wardrobe.equipped.board, 'board-grape');
+  assert.equal(buy(r.wardrobe, 999, 'board-grape').bank, 999, 'no buying twice');
+  assert.equal(toggleWear(r.wardrobe, 'board-grape'), r.wardrobe, 'tapping the board you ride keeps it');
+  w = toggleWear(r.wardrobe, 'board-ocean');
+  assert.equal(w.equipped.board, 'board-ocean');
+  assert.equal(toggleWear(w, 'board-sky'), w, "can't ride what you don't own");
   assert.equal(setColour(w, 'black').colour, 'black');
   assert.equal(setColour(w, 'rainbow').colour, w.colour);
 });
+
 
 test('local counters: sessions per day, first open, and day-1/7/30 returns', () => {
   let c = emptyCounters();
@@ -266,7 +269,7 @@ test('counts made at the same moment are all kept (none overwrite another)', asy
   assert.equal(now.questionsAsked, 3);
 });
 
-test('streak rewards table and Day 7 Week Champ bandana unlock', () => {
+test('streak rewards table and Day 7 Week Champ gold board unlock', () => {
   assert.deepEqual(STREAK_REWARDS, { 1: 10, 2: 15, 3: 20, 5: 30, 7: 50 });
   assert.deepEqual(streakRewardFor(1), { treats: 10, item: null });
   assert.deepEqual(streakRewardFor(2), { treats: 15, item: null });
@@ -283,11 +286,12 @@ test('streak rewards table and Day 7 Week Champ bandana unlock', () => {
   assert.equal(nextStreakReward(7), null);
 
   let w = emptyWardrobe({ species: 'dog' });
-  assert.equal(canBuy(w, 9999, STREAK_DAY7_ITEM), false, 'Week Champ bandana is streak-only, not bought with treats');
+  assert.equal(STREAK_DAY7_ITEM, 'board-gold');
+  assert.equal(canBuy(w, 9999, STREAK_DAY7_ITEM), false, 'the gold board is streak-only, not bought with treats');
   w = unlockItem(w, STREAK_DAY7_ITEM);
   assert.ok(w.owned.includes(STREAK_DAY7_ITEM));
   w = toggleWear(w, STREAK_DAY7_ITEM);
-  assert.equal(w.equipped.neck, STREAK_DAY7_ITEM);
+  assert.equal(w.equipped.board, STREAK_DAY7_ITEM);
 });
 
 test('local streak reminders: off by default, streak >= 2, not played today, at most one per day at 18:00 local', async () => {

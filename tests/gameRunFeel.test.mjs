@@ -90,7 +90,7 @@ test('recordRecentRun keeps a rolling window of 5 runs', () => {
 test('nextUnownedItem picks the cheapest wardrobe item not yet owned', () => {
   const emptyWardrobe = { owned: [], equipped: {} };
   const first = nextUnownedItem(emptyWardrobe, 10);
-  const purchasable = ITEMS.filter((i) => !i.streakOnly && i.price > 0).sort((a, b) => a.price - b.price);
+  const purchasable = ITEMS.filter((i) => i.slot === 'board' && !i.streakOnly && i.price > 0).sort((a, b) => a.price - b.price);
   assert.equal(first.item.price, purchasable[0].price);
   assert.equal(first.needed, Math.max(0, first.item.price - 10));
   assert.equal(first.progress, Math.min(1, 10 / first.item.price));

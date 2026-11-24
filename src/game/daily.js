@@ -43,7 +43,7 @@ export const STREAK_REWARDS = {
   7: 50
 };
 
-export const STREAK_DAY7_ITEM = 'bandana-champ';
+export const STREAK_DAY7_ITEM = 'board-gold';
 
 export function streakRewardFor(dayCount) {
   const n = Math.max(0, Math.floor(Number(dayCount) || 0));

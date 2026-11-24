@@ -14,9 +14,13 @@ import {
 import { getStoreProducts, buyProduct, onPurchaseEvent } from '../../game/purchases';
 import PetPreview from './PetPreview';
 import { SlotTabIcon, ColourHeadTileSvg, ItemTileSvg } from './WardrobeIcons';
+import { BOARD_ART } from './PetSprite';
+import { Image } from 'react-native';
 
-const SIDE_TABS = ['colour', 'hat', 'glasses', 'neck', 'collar'];
-const BOTTOM_TABS = ['colour', 'hat', 'glasses', 'neck', 'collar', 'characters', 'packs'];
+const SIDE_TABS = ['colour', 'board'];
+const BOTTOM_TABS = ['colour', 'board', 'characters', 'packs'];
+// Characters with painted riding art; the others stay with players who own them.
+const RIDING_CHARS = ['char-gold', 'char-cyber', 'char-zebra'];
 
 // Folder-tab dress-up wardrobe matching the kawaii cartoon style guide.
 // All cosmetic, all earned by playing or via optional treat packs.
@@ -136,7 +140,7 @@ export default function Wardrobe({
               {t('game.wardrobe.title', { petName: pet.name })}
             </Text>
             <View style={s.previewBox}>
-              <PetPreview species={pet.species} wardrobe={wardrobe} character={previewCharId} size={146} pose="front" />
+              <PetPreview species={pet.species} wardrobe={wardrobe} character={previewCharId} size={146} />
             </View>
             <StickerButton
               small
@@ -268,7 +272,11 @@ export default function Wardrobe({
                     accessibilityState={{ selected: wearing, disabled }}
                     accessibilityLabel={t(`game.item.${item.id}`)}
                   >
-                    <ItemTileSvg item={item} size={44} />
+                    {item.slot === 'board' ? (
+                      <Image source={BOARD_ART[item.id]?.frames[0]} style={s.boardTile} resizeMode="contain" />
+                    ) : (
+                      <ItemTileSvg item={item} size={44} />
+                    )}
                     <Text style={s.tileLabel} numberOfLines={1}>
                       {t(`game.item.${item.id}`)}
                     </Text>
@@ -276,7 +284,11 @@ export default function Wardrobe({
                       <Text style={s.tileBadgeText} numberOfLines={1}>
                         {owned
                           ? wearing
-                            ? t('game.wardrobe.takeOff')
+                            ? item.slot === 'board'
+                              ? t('game.wardrobe.riding')
+                              : t('game.wardrobe.takeOff')
+                            : item.slot === 'board'
+                            ? t('game.wardrobe.ride')
                             : t('game.wardrobe.wear')
                           : item.streakOnly
                           ? t('game.wardrobe.streak7')
@@ -300,13 +312,13 @@ export default function Wardrobe({
                 style={[s.charCard, !wardrobe.activeCharacter && s.charCardOn]}
                 accessibilityRole="button"
               >
-                <PetPreview species={pet.species} wardrobe={wardrobe} character={null} size={78} pose="front" />
+                <PetPreview species={pet.species} wardrobe={wardrobe} character={null} size={78} />
                 <Text style={s.charName} numberOfLines={1}>{t('game.char.myPet')}</Text>
                 <Text style={s.charBadge}>
                   {!wardrobe.activeCharacter ? t('game.char.wearing') : t('game.wardrobe.wear')}
                 </Text>
               </Pressable>
-              {CHARACTERS.map((ch) => {
+              {CHARACTERS.filter((ch) => RIDING_CHARS.includes(ch.id) || isCharacterOwned(wardrobe, ch.id)).map((ch) => {
                 const owned = isCharacterOwned(wardrobe, ch.id);
                 const wearing = wardrobe.activeCharacter === ch.id;
                 const p = ch.productId ? products[ch.productId] : null;
@@ -328,7 +340,7 @@ export default function Wardrobe({
                     style={[s.charCard, wearing && s.charCardOn, !owned && s.charCardLocked]}
                     accessibilityRole="button"
                   >
-                    <PetPreview species={pet.species} wardrobe={wardrobe} character={ch.id} size={78} pose="front" />
+                    <PetPreview species={pet.species} wardrobe={wardrobe} character={ch.id} size={78} />
                     <Text style={s.charName} numberOfLines={2}>
                       {t('game.char.petAs', { petName: pet.name, character: t(ch.nameKey) })}
                     </Text>
@@ -573,6 +585,7 @@ const s = StyleSheet.create({
   tileDim: {
     opacity: 0.58
   },
+  boardTile: { width: 40, height: 50 },
   tileLabel: {
     fontFamily: F.semibold,
     fontSize: 12,
