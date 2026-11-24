@@ -39,6 +39,43 @@ export const BACK_FRAMES = {
 BACK_FRAMES.dog.jumpUp = BACK_FRAMES.dog.jump;
 BACK_FRAMES.dog.jumpDown = BACK_FRAMES.dog.jump;
 BACK_FRAMES.dog.sit = BACK_FRAMES.dog.sit2;
+
+// Where things sit on each frame, measured from the art (fractions of the
+// frame): head = [cx, cy, rx, ry, tilt deg] (the skull, ears not included),
+// crown = top of the skull where a hat sits, neck = [x, y, width] where a
+// collar wraps, face = -1..1 which way the face is turned (+ = right).
+// The head is drawn again over neckwear and glasses, so whatever passes in
+// front of the face or chest is hidden, as it would be from behind.
+const FIT = {
+  cat: {
+    run1: { head: [0.655, 0.43, 0.27, 0.14, 0], crown: [0.66, 0.31], neck: [0.62, 0.585, 0.42], face: 0.3 },
+    run2: { head: [0.545, 0.465, 0.275, 0.135, 0], crown: [0.55, 0.34], neck: [0.53, 0.63, 0.42], face: 0.3 },
+    jumpUp: { head: [0.555, 0.27, 0.27, 0.16, 0], crown: [0.55, 0.11], neck: [0.57, 0.45, 0.36], face: 0 },
+    jumpDown: { head: [0.62, 0.4, 0.26, 0.155, 0], crown: [0.6, 0.25], neck: [0.62, 0.57, 0.36], face: 0 },
+    duck: { head: [0.67, 0.65, 0.27, 0.11, 0], crown: [0.66, 0.55], neck: [0.62, 0.78, 0.4], face: 0 },
+    hurt: { head: [0.52, 0.38, 0.33, 0.17, -5], crown: [0.48, 0.21], neck: [0.55, 0.57, 0.4], face: 0 },
+    look: { head: [0.68, 0.33, 0.29, 0.17, 0], crown: [0.66, 0.17], neck: [0.62, 0.53, 0.36], face: 1 },
+    sit: { head: [0.58, 0.31, 0.38, 0.19, 0], crown: [0.58, 0.12], neck: [0.58, 0.52, 0.5], face: 0 },
+    spinSide: { head: [0.6, 0.33, 0.34, 0.17, 0], crown: [0.55, 0.15], neck: [0.6, 0.53, 0.36], face: 1 },
+    spinFront: { head: [0.59, 0.31, 0.36, 0.18, 0], crown: [0.58, 0.12], neck: [0.59, 0.52, 0.4], face: 0 },
+  },
+  dog: {
+    run1: { head: [0.62, 0.29, 0.24, 0.18, 0], crown: [0.6, 0.11], neck: [0.6, 0.47, 0.36], face: 1 },
+    run2: { head: [0.55, 0.25, 0.25, 0.17, 0], crown: [0.52, 0.07], neck: [0.55, 0.43, 0.38], face: 1 },
+    jump: { head: [0.62, 0.25, 0.25, 0.17, 0], crown: [0.6, 0.08], neck: [0.6, 0.44, 0.36], face: 1 },
+    duck: { head: [0.67, 0.45, 0.21, 0.13, 0], crown: [0.65, 0.33], neck: [0.66, 0.6, 0.32], face: 0.5 },
+    stand: { head: [0.51, 0.35, 0.21, 0.15, 0], crown: [0.5, 0.21], neck: [0.51, 0.53, 0.36], face: 0 },
+    hurt: { head: [0.5, 0.29, 0.27, 0.16, -10], crown: [0.52, 0.15], neck: [0.5, 0.46, 0.36], face: 0 },
+    look: { head: [0.63, 0.27, 0.28, 0.2, 0], crown: [0.6, 0.08], neck: [0.6, 0.48, 0.38], face: 1 },
+    sit2: { head: [0.5, 0.25, 0.35, 0.17, 0], crown: [0.5, 0.08], neck: [0.5, 0.44, 0.5], face: 0 },
+    spinSide: { head: [0.7, 0.32, 0.26, 0.21, 0], crown: [0.62, 0.12], neck: [0.6, 0.53, 0.34], face: 1 },
+    spinFront: { head: [0.55, 0.29, 0.33, 0.19, 0], crown: [0.57, 0.1], neck: [0.55, 0.5, 0.4], face: 0 },
+    run3: { head: [0.63, 0.32, 0.24, 0.15, 0], crown: [0.56, 0.18], neck: [0.6, 0.49, 0.34], face: 1 },
+    run4: { head: [0.58, 0.31, 0.23, 0.15, 0], crown: [0.55, 0.17], neck: [0.58, 0.49, 0.34], face: 1 },
+    duckSpot: { head: [0.67, 0.47, 0.2, 0.12, -10], crown: [0.6, 0.37], neck: [0.62, 0.62, 0.3], face: 1 },
+  },
+};
+for (const sp of Object.keys(FIT)) for (const [k, fit] of Object.entries(FIT[sp])) if (BACK_FRAMES[sp][k]) BACK_FRAMES[sp][k].fit = fit;
 // A variant set without its own frame for a pose uses this frame instead, if it has one.
 BACK_FRAMES.dog.sit2.alt = 'stand';
 BACK_FRAMES.dog.duck.alt = 'duckSpot';

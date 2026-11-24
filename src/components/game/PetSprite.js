@@ -1,5 +1,5 @@
 import React, { memo, useId } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, Image as SvgImage } from 'react-native-svg';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, ClipPath, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
@@ -219,25 +219,26 @@ const DUST = [SPRITES.fxDust1, SPRITES.fxDust2, SPRITES.fxDust3];
 const neckPose = (key) => (key === 'duck' ? 'duck' : key === 'jumpUp' || key === 'jumpDown' || key.startsWith('spin') ? 'jump' : 'run');
 const showsFace = (fr) => fr.fx != null;
 
-// A curved collar band across the back of the neck.
-function BackCollar({ item, cx, y, w }) {
-  const t = Math.max(2, w * 0.13);
-  const d = `M ${cx - w / 2} ${y - t * 0.4} Q ${cx} ${y + t * 1.3} ${cx + w / 2} ${y - t * 0.4}`;
+// A collar round the neck, seen from behind and a little above: a ring whose
+// far side is hidden when the head is drawn over it.
+function BackCollar({ item, cx, y, w, rot = 0 }) {
+  const t = Math.max(1.6, w * 0.11);
+  const rx = w / 2;
+  const ry = rx * 0.34;
   const bits = [];
-  if (item.bell) bits.push(<Circle key="b" cx={cx + w * 0.44} cy={y + t * 0.2} r={t * 0.75} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.8} />);
+  // Tag or bell hangs at the front: hidden from behind. Gems run along the back.
   if (item.gem) {
     const n = item.rare ? 5 : 3;
     for (let i = 0; i < n; i++) {
-      const u = (i + 1) / (n + 1);
-      const gx = cx - w / 2 + w * u;
-      const gy = y - t * 0.4 + 2 * (1 - u) * u * t * 1.7 + 0.2;
-      bits.push(<Circle key={i} cx={gx} cy={gy} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
+      const a = Math.PI * (0.2 + (0.6 * (i + 0.5)) / n);
+      bits.push(<Circle key={i} cx={cx - Math.cos(a) * rx} cy={y + Math.sin(a) * ry} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
     }
   }
+  if (item.bell) bits.push(<Circle key="b" cx={cx + rx * 0.92} cy={y + ry * 0.5} r={t * 0.7} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.6} />);
   return (
-    <G>
-      <Path d={d} stroke="#5A3A24" strokeWidth={t + 1.4} fill="none" strokeLinecap="round" />
-      <Path d={d} stroke={item.colour} strokeWidth={t} fill="none" strokeLinecap="round" />
+    <G transform={rot ? `rotate(${rot.toFixed(1)} ${cx} ${y})` : undefined}>
+      <Ellipse cx={cx} cy={y} rx={rx} ry={ry} stroke="#5A3A24" strokeWidth={t + 1.2} fill="none" />
+      <Ellipse cx={cx} cy={y} rx={rx} ry={ry} stroke={item.colour} strokeWidth={t} fill="none" />
       {bits}
     </G>
   );
@@ -280,61 +281,106 @@ export function BackRunner({
   if (sq) outer.push(`translate(${cx} ${floor}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-floor})`);
   const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
 
-  const headW = fr.hw * w;
-  const skullY = y0 + fr.top * h;
-  const neckY = y0 + fr.ny * h;
+  // Fit points (see FIT in backArt.js), in this frame's coordinates. Things
+  // worn are placed on the real head and neck, mirrored when the frame is.
+  const F = fr.fit || { head: [fr.hx, fr.top + 0.12, fr.hw / 2, 0.14, 0], crown: [fr.hx, fr.top + 0.04], neck: [fr.hx, fr.ny, fr.hw * 0.7], face: 0 };
+  const mx = (fx) => (m.flip ? 2 * cx - (x0 + fx * w) : x0 + fx * w);
+  const fy = (v) => y0 + v * h;
+  const headCx = mx(F.head[0]);
+  const headCy = fy(F.head[1]);
+  const headRx = F.head[2] * w;
+  const headRy = F.head[3] * h;
+  const headRot = (m.flip ? -1 : 1) * F.head[4];
+  const faceDir = (m.flip ? -1 : 1) * F.face;
+  const crownX = mx(F.crown[0]);
+  const crownY = fy(F.crown[1]);
+  const neckX = mx(F.neck[0]);
+  const neckY = fy(F.neck[1]);
+  const neckW = F.neck[2] * w;
+  const headW = headRx * 2;
   const face = showsFace(fr);
-  const faceX = face ? x0 + fr.fx * w : cx;
+  const faceX = face ? mx(fr.fx) : cx;
   const faceY = face ? y0 + fr.fy * h : 0;
   const np = neckPose(m.key);
   const sideOn = m.key === 'spinSide';
+  const rotAt = (x, y, k = 1) => (headRot ? `rotate(${(headRot * k).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})` : undefined);
 
   const neck = wear.royal ? BACK_NECK['char-royal'] : wear.neck ? BACK_NECK[wear.neck] : null;
   const hatId = wear.royal ? 'hat-crown' : wear.hat;
   const hat = hatId ? BACK_HATS[hatId] : null;
   const glasses = wear.glasses ? BACK_GLASSES[wear.glasses] : null;
 
-  const layers = [];
+  // under: drawn before the head is redrawn, so the head covers what is in front of it.
+  const under = [];
   if (neck && neck.cape) {
-    const cw = headW * 1.25;
-    layers.push(<Img key="cape" art={neck[np]} cx={cx} top={neckY - headW * 0.18} w={cw} />);
+    const cw = neckW * 1.7;
+    under.push(<Img key="cape" art={neck[np]} cx={neckX} top={neckY - neckW * 0.25} w={cw} />);
   }
-  if (wear.collar && !wear.astro) layers.push(<BackCollar key="collar" item={wear.collar} cx={cx} y={neckY} w={headW * 0.62} />);
+  if (wear.collar && !wear.astro) under.push(<BackCollar key="collar" item={wear.collar} cx={neckX} y={neckY} w={neckW * 1.02} rot={headRot * 0.5} />);
   if (neck && !neck.cape && !neck.band) {
-    const bw = headW * 0.95;
+    // The band goes round the neck; its far side is hidden by the head, the knot shows.
+    const bw = neckW * 1.18;
     const art = neck[np];
-    layers.push(<Img key="neck" art={art} cx={cx} top={neckY - bw * art.ar * 0.3} w={bw} />);
+    under.push(
+      <G key="neck" transform={rotAt(neckX, neckY, 0.5)}>
+        <Img art={art} cx={neckX} top={neckY - bw * art.ar * (np === 'jump' ? 0.2 : 0.28)} w={bw} />
+      </G>
+    );
   }
   if (neck && neck.band) {
     const art = face ? neck.front : neck.back;
-    const bw = headW * (face ? 0.55 : 0.7);
-    layers.push(<Img key="bow" art={art} cx={face ? faceX : cx} top={neckY - bw * art.ar * 0.5} w={bw} />);
+    const bw = neckW * (face ? 0.75 : 0.9);
+    under.push(<Img key="bow" art={art} cx={face ? faceX : neckX} top={neckY - bw * art.ar * 0.5} w={bw} />);
   }
-  if (wear.astro && !face) layers.push(<Img key="pack" art={BACK_CHAR.pack} cx={cx} top={neckY} w={headW * 0.72} />);
+  if (wear.astro && !face) under.push(<Img key="pack" art={BACK_CHAR.pack} cx={neckX} top={neckY} w={neckW * 1.2} />);
+  if (glasses && !sideOn && !face) {
+    // From behind the lenses are hidden by the head; the arms show over the ears.
+    const gw = headW * 1.12;
+    const gx = headCx + faceDir * headRx * 0.18;
+    const gy = headCy + headRy * 0.05;
+    under.push(
+      <G key="gl" transform={rotAt(gx, gy)}>
+        <Img art={glasses.front || glasses.back} cx={gx} top={gy - gw * (glasses.front || glasses.back).ar * 0.5} w={gw} />
+      </G>
+    );
+  }
+
+  // over: on top of the head.
+  const over = [];
   if (wear.ninja) {
     const art = BACK_CHAR.headband[np];
-    const bw = headW * 1.05;
-    layers.push(<Img key="band" art={art} cx={cx} top={skullY + headW * (face ? 0.1 : 0.28) - bw * art.ar * 0.3} w={bw} />);
-    if (face) layers.push(<Img key="mask" art={BACK_CHAR.mask} cx={faceX} top={faceY + headW * 0.12} w={headW * 0.6} />);
+    const bw = headW * 1.12;
+    const by = face ? fy(F.head[1] - F.head[3] * 0.55) : fy(F.head[1] - F.head[3] * 0.15);
+    over.push(
+      <G key="band" transform={rotAt(headCx, by)}>
+        <Img art={art} cx={headCx} top={by - bw * art.ar * 0.3} w={bw} />
+      </G>
+    );
+    if (face) over.push(<Img key="mask" art={BACK_CHAR.mask} cx={faceX} top={faceY + headW * 0.12} w={headW * 0.6} />);
   }
-  if (glasses && !sideOn) {
-    if (face) layers.push(<Img key="gl" art={glasses.front} cx={faceX} top={faceY - fr.fw * w * glasses.front.ar * 0.5} w={fr.fw * w} />);
-    else {
-      const gw = headW * 1.05;
-      layers.push(<Img key="gl" art={glasses.back} cx={cx} top={skullY + headW * 0.42 - gw * glasses.back.ar * 0.5} w={gw} />);
-    }
-  }
-  if (wear.cyberEar) layers.push(<Img key="ear" art={BACK_CHAR.ear} cx={cx + headW * 0.36} top={skullY - headW * 0.02} w={headW * 0.34} />);
+  if (glasses && !sideOn && face) over.push(<Img key="gl" art={glasses.front} cx={faceX} top={faceY - fr.fw * w * glasses.front.ar * 0.5} w={fr.fw * w} />);
+  if (wear.cyberEar) over.push(<Img key="ear" art={BACK_CHAR.ear} cx={headCx + headRx * 0.72} top={crownY - headW * 0.02} w={headW * 0.34} />);
   if (hat) {
+    // Sits on the crown, tilted with the head, its brim slightly into the fur.
     const hw2 = headW * hat.k;
-    layers.push(<Img key="hat" art={hat} cx={cx} top={skullY + headW * hat.sink - hw2 * hat.ar - headW * hat.lift} w={hw2} />);
+    const base = crownY + headW * hat.sink * 0.6 - headW * hat.lift;
+    over.push(
+      <G key="hat" transform={rotAt(crownX, base)}>
+        <Img art={hat} cx={crownX} top={base - hw2 * hat.ar} w={hw2} />
+      </G>
+    );
   }
   if (wear.astro) {
-    // A glass bubble centred on the head, its rim at the neck.
-    const hw3 = headW * 1.22;
+    // A glass bubble round the head, its rim at the neck.
+    const hw3 = headW * 1.35;
     const hh = hw3 * BACK_CHAR.helmet.ar;
-    layers.push(<Img key="helmet" art={BACK_CHAR.helmet} cx={cx} top={neckY + headW * 0.08 - hh} w={hw3} opacity={0.8} />);
+    over.push(<Img key="helmet" art={BACK_CHAR.helmet} cx={headCx} top={neckY + headRy * 0.2 - hh} w={hw3} opacity={0.8} />);
   }
+  const headClipId = `${maskId}h`;
+  const needHead = under.length > 0;
+  // The head again (unmirrored frame coordinates; the flip is applied outside).
+  const hx0 = x0 + F.head[0] * w;
+  const nx0 = x0 + F.neck[0] * w;
 
   return (
     <G>
@@ -355,7 +401,24 @@ export function BackRunner({
             </>
           ) : null}
         </G>
-        {layers}
+        {under}
+        {needHead ? (
+          <G transform={flipT}>
+            <Defs>
+              <ClipPath id={headClipId}>
+                <Ellipse cx={hx0} cy={headCy} rx={headRx * 1.04} ry={headRy * 1.06} transform={F.head[4] ? `rotate(${F.head[4]} ${hx0} ${headCy})` : undefined} />
+                <Rect x={hx0 - headRx * 1.7} y={y0} width={headRx * 3.4} height={Math.max(0, headCy - y0)} />
+                {/* the neck down to the collar line: the far side of a collar goes behind it */}
+                <Rect x={nx0 - neckW * 0.62} y={headCy} width={neckW * 1.24} height={Math.max(0, neckY - headCy)} />
+              </ClipPath>
+            </Defs>
+            <G clipPath={`url(#${headClipId})`}>
+              <SvgImage href={own || fr.grey} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+              {fill ? <Rect x={x0} y={y0} width={w} height={h} fill={fill} opacity={0.6} mask={`url(#${maskId})`} /> : null}
+            </G>
+          </G>
+        ) : null}
+        {over}
       </G>
     </G>
   );
