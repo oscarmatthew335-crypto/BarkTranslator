@@ -1,10 +1,10 @@
 import React, { memo, useId } from 'react';
-import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, Image as SvgImage } from 'react-native-svg';
+import { G, Ellipse, Circle, Path, Rect, Line, Polygon, Defs, Mask, ClipPath, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
 import { SPRITES } from './sprites';
-import { BACK_FRAMES, BACK_HATS, BACK_NECK, BACK_GLASSES, BACK_CHAR, UNIT } from './backArt';
+import { BACK_FRAMES, BACK_HATS, BACK_NECK, BACK_GLASSES, BACK_CHAR, UNIT, SKATE_FRAMES } from './backArt';
 
 const INK = C.ink;
 
@@ -24,6 +24,9 @@ function PetSprite({
   view = 'side',
   rising = true,
   spin = null,
+  feel = null,
+  clock = null,
+  board = null,
 }) {
   if (view === 'back' && pose !== 'front') {
     return (
@@ -33,6 +36,9 @@ function PetSprite({
         pose={pose}
         rising={rising}
         spin={spin}
+        feel={feel}
+        clock={clock}
+        board={board}
         happy={happy}
         bank={bank}
         colour={colour}
@@ -160,7 +166,8 @@ export const SPIN_S = 0.45; // seconds for the double-jump spin
 // Which painted frame to show, plus the smooth bob and sway between frames.
 function backMotion(phase, pose, rising, spin, rate = 1) {
   const a = (Number(phase) || 0) * rate * 0.5;
-  const step = ((Math.floor(a / (Math.PI / 2)) % 2) + 2) % 2;
+  const step4 = ((Math.floor(a / (Math.PI / 2)) % 4) + 4) % 4;
+  const step = step4 % 2;
   let key = step === 0 ? 'run1' : 'run2';
   let flip = false;
   if (pose === 'jump') {
@@ -181,6 +188,7 @@ function backMotion(phase, pose, rising, spin, rate = 1) {
   const bounce = Math.abs(Math.sin(a * 2));
   return {
     key,
+    step4,
     flip,
     bounce,
     bobY: running ? -bounce * 3 : pose === 'hurt' ? 2 : 0,
@@ -189,28 +197,172 @@ function backMotion(phase, pose, rising, spin, rate = 1) {
   };
 }
 
+// Squash and stretch around take-off and landing (feel: { jumpT, landT,
+// fastFall } in seconds since; null when motion is reduced). Returns [sx, sy].
+export function squashStretch(feel, pose, rising) {
+  if (!feel) return null;
+  const { jumpT, landT, fastFall } = feel;
+  if (landT != null && landT < 0.08) {
+    const k = 1 - landT / 0.08;
+    return [1 + 0.1 * k, 1 - 0.14 * k];
+  }
+  if (jumpT != null && jumpT < 0.06) {
+    const k = 1 - jumpT / 0.06;
+    return [1 + 0.08 * k, 1 - 0.12 * k];
+  }
+  if (pose === 'jump' && rising && jumpT != null && jumpT < 0.3) {
+    const k = 1 - (jumpT - 0.06) / 0.24;
+    return [1 - 0.06 * k, 1 + 0.08 * k];
+  }
+  if (pose === 'jump' && fastFall) return [0.95, 1.06];
+  return null;
+}
+
+const DUST = [SPRITES.fxDust1, SPRITES.fxDust2, SPRITES.fxDust3];
+
+// ---------- Skateboard rider (the runner's player) ----------
+
+const frames4 = (k) => [1, 2, 3, 4].map((i) => SPRITES[`board${k}${i}`]);
+// Each board: its 4 frames and which painted board it was made from (for its shape).
+export const BOARD_ART = {
+  'board-coral': { src: 'cat', frames: frames4('Cat') },
+  'board-ocean': { src: 'dog', frames: frames4('Dog') },
+  'board-grape': { src: 'cat', frames: frames4('Grape') },
+  'board-mint': { src: 'dog', frames: frames4('Mint') },
+  'board-candy': { src: 'cat', frames: frames4('Candy') },
+  'board-lime': { src: 'dog', frames: frames4('Lime') },
+  'board-sky': { src: 'cat', frames: frames4('Sky') },
+  'board-midnight': { src: 'dog', frames: frames4('Midnight') },
+  'board-gold': { src: 'cat', frames: frames4('Gold') },
+};
+const BOARD_AR = { cat: [1.414, 1.113, 1.306, 1.202], dog: [1.362, 0.988, 1.158, 1.049] };
+// Where the deck surface sits on each board frame (fraction of its height from the top).
+const DECK_Y = [0.45, 0.5, 0.5, 0.5];
+const PUSH_EVERY = 2.2; // seconds between pushes while cruising
+const PUSH_S = 0.5;
+
+// What the rider shows for a pose: riding frame, board frame, spin angle, pet squash.
+export function skateMotion({ cat, phase = 0, clock = null, pose = 'run', rising = true, spin = null, bank = 0 }) {
+  // Seconds: the run's clock when given (pushes keep real time at any speed).
+  const t = clock != null ? Number(clock) || 0 : (Number(phase) || 0) / 9;
+  let key = 'ride';
+  let board = Math.abs(bank) > 3 ? (bank > 0 ? 1 : 3) : 0;
+  let turn = 0;
+  let squash = 1;
+  let wobble = 0;
+  let lift = 0;
+  if (pose === 'jump') {
+    key = 'ollie';
+    if (spin != null) {
+      // Kickflip: the board turns under the pet while the pet spins a full turn.
+      board = spin < 0.2 ? 0 : spin < 0.45 ? 1 : spin < 0.7 ? 2 : spin < 0.9 ? 3 : 0;
+      turn = spin > 0.1 && spin < 0.9 ? ((spin - 0.1) / 0.8) * 360 : 0;
+      lift = spin > 0.1 && spin < 0.9 ? 4 : 0;
+    } else if (!cat && rising) board = 2; // the dog's board pops its nose up
+  } else if (pose === 'duck') key = 'duck';
+  else if (pose === 'look') key = 'look';
+  else if (pose === 'hurt') wobble = Math.sin(t * 40) * 9;
+  // Every few seconds a back paw pushes off the ground.
+  const u = t % PUSH_EVERY;
+  const pushing = pose === 'run' && u < PUSH_S;
+  if (pushing) key = 'push';
+  const dip = pushing ? Math.sin((u / PUSH_S) * Math.PI) : 0;
+  const cruise = pose === 'run' ? Math.sin(t * 2.6) * 0.6 : 0;
+  return { key, board, turn, squash: squash * (1 - dip * 0.03), wobble, lift, bobY: cruise, push: dip };
+}
+
+// How a pet looks on its board: painted set (variant) or grey tinted with its colour.
+export function riderLook(colour, character) {
+  const char = typeof character === 'string' ? getCharacter(character) : character;
+  const cid = char?.id || null;
+  const col = getColour(colour);
+  let variant = null;
+  if (cid === 'char-gold') variant = 'gold';
+  else if (cid === 'char-cyber') variant = 'cyber';
+  else if (cid === 'char-zebra') variant = 'zebra';
+  else if (!cid && col.id === 'spotty') variant = 'spot';
+  return { variant, tint: variant ? null : char?.palette?.body || col.hex };
+}
+
+export function SkateRider({ cat, phase = 0, clock = null, board: boardId = null, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, tint = null, variant = null, feel = null, shadow = true }) {
+  const maskId = useId().replace(/:/g, '_');
+  const sp = cat ? 'cat' : 'dog';
+  const m = skateMotion({ cat, phase, clock, pose, rising, spin, bank });
+  const set = SKATE_FRAMES[sp];
+  const fr = set[m.key] || set.ride;
+  const own = variant ? fr[variant] : null;
+  const fill = own ? null : variant ? VARIANT_TINT[variant] : tint;
+
+  const art = BOARD_ART[boardId] || BOARD_ART[cat ? 'board-coral' : 'board-ocean'];
+  const bw = (cat ? 40 : 44) * size;
+  const bh = bw * BOARD_AR[art.src][m.board];
+  const boardTop = floor - bh;
+  const deckY = boardTop + bh * DECK_Y[m.board];
+  const h = (cat ? 74 : 78) * size; // the pet's frame height on the board
+  const w = h * (set.pw / set.ph);
+  const ix = cx - fr.cx * w;
+  const feetY = deckY - m.lift + m.bobY;
+  const y0 = feetY - h;
+
+  // Push: the pet leans out over the paw side, dust kicks up from the ground
+  // there and the board surges forward (drawn a touch bigger).
+  const pawX = fr.paw ? fr.paw[variant || 'base'] ?? fr.paw.base : null;
+  const pawSide = pawX == null ? 0 : pawX < 0.5 ? -1 : 1;
+  const petT = [];
+  const lean = bank * 0.7 + m.wobble + pawSide * m.push * 7;
+  if (lean) petT.push(`rotate(${lean.toFixed(1)} ${cx} ${deckY})`);
+  if (m.turn) petT.push(`rotate(${m.turn.toFixed(0)} ${cx} ${(feetY - h * 0.4).toFixed(1)})`);
+  if (m.squash !== 1) petT.push(`translate(0 ${feetY}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-feetY})`);
+  const sq = squashStretch(feel, pose, rising);
+  if (sq) petT.push(`translate(${cx} ${feetY}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-feetY})`);
+
+  return (
+    <G>
+      {shadow && pose !== 'jump' ? <Ellipse cx={cx} cy={floor} rx={bw * 0.55} ry={3 * size} fill="rgba(36,29,59,0.22)" /> : null}
+      <SvgImage href={art.frames[m.board]} x={cx - (bw * (1 + m.push * 0.06)) / 2} y={boardTop + m.bobY * 0.3 - m.push * 2} width={bw * (1 + m.push * 0.06)} height={bh * (1 + m.push * 0.06)} preserveAspectRatio="none" />
+      <G transform={petT.join(' ') || undefined}>
+        <SvgImage href={own || fr.grey} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
+        {fill ? (
+          <>
+            <Defs>
+              <Mask id={maskId} maskUnits="userSpaceOnUse" x={ix} y={y0} width={w} height={h}>
+                <SvgImage href={fr.fur} x={ix} y={y0} width={w} height={h} preserveAspectRatio="none" />
+              </Mask>
+            </Defs>
+            <Rect x={ix} y={y0} width={w} height={h} fill={fill} opacity={0.6} mask={`url(#${maskId})`} />
+          </>
+        ) : null}
+      </G>
+      {pawSide && m.push > 0.2 ? (
+        <SvgImage href={SPRITES.fxDust1} x={cx + pawSide * bw * 0.62 - 12} y={floor - 12} width={24 + m.push * 8} height={12} opacity={Math.min(1, m.push * 1.4)} preserveAspectRatio="none" />
+      ) : null}
+    </G>
+  );
+}
+
 const neckPose = (key) => (key === 'duck' ? 'duck' : key === 'jumpUp' || key === 'jumpDown' || key.startsWith('spin') ? 'jump' : 'run');
 const showsFace = (fr) => fr.fx != null;
 
-// A curved collar band across the back of the neck.
-function BackCollar({ item, cx, y, w }) {
-  const t = Math.max(2, w * 0.13);
-  const d = `M ${cx - w / 2} ${y - t * 0.4} Q ${cx} ${y + t * 1.3} ${cx + w / 2} ${y - t * 0.4}`;
+// A collar round the neck, seen from behind and a little above: a ring whose
+// far side is hidden when the head is drawn over it.
+function BackCollar({ item, cx, y, w, rot = 0 }) {
+  const t = Math.max(1.6, w * 0.11);
+  const rx = w / 2;
+  const ry = rx * 0.34;
   const bits = [];
-  if (item.bell) bits.push(<Circle key="b" cx={cx + w * 0.44} cy={y + t * 0.2} r={t * 0.75} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.8} />);
+  // Tag or bell hangs at the front: hidden from behind. Gems run along the back.
   if (item.gem) {
     const n = item.rare ? 5 : 3;
     for (let i = 0; i < n; i++) {
-      const u = (i + 1) / (n + 1);
-      const gx = cx - w / 2 + w * u;
-      const gy = y - t * 0.4 + 2 * (1 - u) * u * t * 1.7 + 0.2;
-      bits.push(<Circle key={i} cx={gx} cy={gy} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
+      const a = Math.PI * (0.2 + (0.6 * (i + 0.5)) / n);
+      bits.push(<Circle key={i} cx={cx - Math.cos(a) * rx} cy={y + Math.sin(a) * ry} r={t * 0.32} fill={item.rare ? '#FFFFFF' : '#5BE38F'} stroke="#24164A" strokeWidth={0.4} />);
     }
   }
+  if (item.bell) bits.push(<Circle key="b" cx={cx + rx * 0.92} cy={y + ry * 0.5} r={t * 0.7} fill="#FFC23B" stroke="#7A4B1F" strokeWidth={0.6} />);
   return (
-    <G>
-      <Path d={d} stroke="#5A3A24" strokeWidth={t + 1.4} fill="none" strokeLinecap="round" />
-      <Path d={d} stroke={item.colour} strokeWidth={t} fill="none" strokeLinecap="round" />
+    <G transform={rot ? `rotate(${rot.toFixed(1)} ${cx} ${y})` : undefined}>
+      <Ellipse cx={cx} cy={y} rx={rx} ry={ry} stroke="#5A3A24" strokeWidth={t + 1.2} fill="none" />
+      <Ellipse cx={cx} cy={y} rx={rx} ry={ry} stroke={item.colour} strokeWidth={t} fill="none" />
       {bits}
     </G>
   );
@@ -225,12 +377,16 @@ const Img = ({ art, cx, top, w, opacity }) =>
 // glasses, royal, astro, ninja, cyberEar } (ids / items to draw).
 export function BackRunner({
   cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, rate,
-  tint = null, variant = null, wear = {}, shadow = true,
+  tint = null, variant = null, wear = {}, shadow = true, feel = null,
 }) {
   const maskId = useId().replace(/:/g, '_');
   const sp = cat ? 'cat' : 'dog';
   const m = backMotion(phase, pose, rising, spin, rate);
-  const fr = BACK_FRAMES[sp][m.key] || BACK_FRAMES[sp].run1;
+  const set = BACK_FRAMES[sp];
+  let fr = set[m.key] || set.run1;
+  // A set with four run frames (spotty dog) steps through all of them.
+  if (variant && (m.key === 'run1' || m.key === 'run2') && set.run3?.[variant]) fr = set[['run1', 'run3', 'run2', 'run4'][m.step4]] || fr;
+  if (variant && !fr[variant] && fr.alt && set[fr.alt]?.[variant]) fr = set[fr.alt];
   const u = UNIT[sp] * size;
   const w = fr.pw * u;
   const h = fr.ph * u;
@@ -245,63 +401,110 @@ export function BackRunner({
   const tilt = bank * (pose === 'duck' ? 0.6 : 1) + (pose === 'hurt' ? 7 : 0) + m.sway;
   if (tilt) outer.push(`rotate(${tilt.toFixed(1)} ${cx} ${floor})`);
   if (m.squash !== 1) outer.push(`translate(0 ${floor}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-floor})`);
+  const sq = squashStretch(feel, pose, rising);
+  if (sq) outer.push(`translate(${cx} ${floor}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-floor})`);
   const flipT = m.flip ? `translate(${2 * cx} 0) scale(-1 1)` : undefined;
 
-  const headW = fr.hw * w;
-  const skullY = y0 + fr.top * h;
-  const neckY = y0 + fr.ny * h;
+  // Fit points (see FIT in backArt.js), in this frame's coordinates. Things
+  // worn are placed on the real head and neck, mirrored when the frame is.
+  const F = fr.fit || { head: [fr.hx, fr.top + 0.12, fr.hw / 2, 0.14, 0], crown: [fr.hx, fr.top + 0.04], neck: [fr.hx, fr.ny, fr.hw * 0.7], face: 0 };
+  const mx = (fx) => (m.flip ? 2 * cx - (x0 + fx * w) : x0 + fx * w);
+  const fy = (v) => y0 + v * h;
+  const headCx = mx(F.head[0]);
+  const headCy = fy(F.head[1]);
+  const headRx = F.head[2] * w;
+  const headRy = F.head[3] * h;
+  const headRot = (m.flip ? -1 : 1) * F.head[4];
+  const faceDir = (m.flip ? -1 : 1) * F.face;
+  const crownX = mx(F.crown[0]);
+  const crownY = fy(F.crown[1]);
+  const neckX = mx(F.neck[0]);
+  const neckY = fy(F.neck[1]);
+  const neckW = F.neck[2] * w;
+  const headW = headRx * 2;
   const face = showsFace(fr);
-  const faceX = face ? x0 + fr.fx * w : cx;
+  const faceX = face ? mx(fr.fx) : cx;
   const faceY = face ? y0 + fr.fy * h : 0;
   const np = neckPose(m.key);
   const sideOn = m.key === 'spinSide';
+  const rotAt = (x, y, k = 1) => (headRot ? `rotate(${(headRot * k).toFixed(1)} ${x.toFixed(1)} ${y.toFixed(1)})` : undefined);
 
   const neck = wear.royal ? BACK_NECK['char-royal'] : wear.neck ? BACK_NECK[wear.neck] : null;
   const hatId = wear.royal ? 'hat-crown' : wear.hat;
   const hat = hatId ? BACK_HATS[hatId] : null;
   const glasses = wear.glasses ? BACK_GLASSES[wear.glasses] : null;
 
-  const layers = [];
+  // under: drawn before the head is redrawn, so the head covers what is in front of it.
+  const under = [];
   if (neck && neck.cape) {
-    const cw = headW * 1.25;
-    layers.push(<Img key="cape" art={neck[np]} cx={cx} top={neckY - headW * 0.18} w={cw} />);
+    const cw = neckW * 1.7;
+    under.push(<Img key="cape" art={neck[np]} cx={neckX} top={neckY - neckW * 0.25} w={cw} />);
   }
-  if (wear.collar && !wear.astro) layers.push(<BackCollar key="collar" item={wear.collar} cx={cx} y={neckY} w={headW * 0.62} />);
+  if (wear.collar && !wear.astro) under.push(<BackCollar key="collar" item={wear.collar} cx={neckX} y={neckY} w={neckW * 1.02} rot={headRot * 0.5} />);
   if (neck && !neck.cape && !neck.band) {
-    const bw = headW * 0.95;
+    // The band goes round the neck; its far side is hidden by the head, the knot shows.
+    const bw = neckW * 1.18;
     const art = neck[np];
-    layers.push(<Img key="neck" art={art} cx={cx} top={neckY - bw * art.ar * 0.3} w={bw} />);
+    under.push(
+      <G key="neck" transform={rotAt(neckX, neckY, 0.5)}>
+        <Img art={art} cx={neckX} top={neckY - bw * art.ar * (np === 'jump' ? 0.2 : 0.28)} w={bw} />
+      </G>
+    );
   }
   if (neck && neck.band) {
     const art = face ? neck.front : neck.back;
-    const bw = headW * (face ? 0.55 : 0.7);
-    layers.push(<Img key="bow" art={art} cx={face ? faceX : cx} top={neckY - bw * art.ar * 0.5} w={bw} />);
+    const bw = neckW * (face ? 0.75 : 0.9);
+    under.push(<Img key="bow" art={art} cx={face ? faceX : neckX} top={neckY - bw * art.ar * 0.5} w={bw} />);
   }
-  if (wear.astro && !face) layers.push(<Img key="pack" art={BACK_CHAR.pack} cx={cx} top={neckY} w={headW * 0.72} />);
+  if (wear.astro && !face) under.push(<Img key="pack" art={BACK_CHAR.pack} cx={neckX} top={neckY} w={neckW * 1.2} />);
+  if (glasses && !sideOn && !face) {
+    // From behind the lenses are hidden by the head; the arms show over the ears.
+    const gw = headW * 1.12;
+    const gx = headCx + faceDir * headRx * 0.18;
+    const gy = headCy + headRy * 0.05;
+    under.push(
+      <G key="gl" transform={rotAt(gx, gy)}>
+        <Img art={glasses.front || glasses.back} cx={gx} top={gy - gw * (glasses.front || glasses.back).ar * 0.5} w={gw} />
+      </G>
+    );
+  }
+
+  // over: on top of the head.
+  const over = [];
   if (wear.ninja) {
     const art = BACK_CHAR.headband[np];
-    const bw = headW * 1.05;
-    layers.push(<Img key="band" art={art} cx={cx} top={skullY + headW * (face ? 0.1 : 0.28) - bw * art.ar * 0.3} w={bw} />);
-    if (face) layers.push(<Img key="mask" art={BACK_CHAR.mask} cx={faceX} top={faceY + headW * 0.12} w={headW * 0.6} />);
+    const bw = headW * 1.12;
+    const by = face ? fy(F.head[1] - F.head[3] * 0.55) : fy(F.head[1] - F.head[3] * 0.15);
+    over.push(
+      <G key="band" transform={rotAt(headCx, by)}>
+        <Img art={art} cx={headCx} top={by - bw * art.ar * 0.3} w={bw} />
+      </G>
+    );
+    if (face) over.push(<Img key="mask" art={BACK_CHAR.mask} cx={faceX} top={faceY + headW * 0.12} w={headW * 0.6} />);
   }
-  if (glasses && !sideOn) {
-    if (face) layers.push(<Img key="gl" art={glasses.front} cx={faceX} top={faceY - fr.fw * w * glasses.front.ar * 0.5} w={fr.fw * w} />);
-    else {
-      const gw = headW * 1.05;
-      layers.push(<Img key="gl" art={glasses.back} cx={cx} top={skullY + headW * 0.42 - gw * glasses.back.ar * 0.5} w={gw} />);
-    }
-  }
-  if (wear.cyberEar) layers.push(<Img key="ear" art={BACK_CHAR.ear} cx={cx + headW * 0.36} top={skullY - headW * 0.02} w={headW * 0.34} />);
+  if (glasses && !sideOn && face) over.push(<Img key="gl" art={glasses.front} cx={faceX} top={faceY - fr.fw * w * glasses.front.ar * 0.5} w={fr.fw * w} />);
+  if (wear.cyberEar) over.push(<Img key="ear" art={BACK_CHAR.ear} cx={headCx + headRx * 0.72} top={crownY - headW * 0.02} w={headW * 0.34} />);
   if (hat) {
+    // Sits on the crown, tilted with the head, its brim slightly into the fur.
     const hw2 = headW * hat.k;
-    layers.push(<Img key="hat" art={hat} cx={cx} top={skullY + headW * hat.sink - hw2 * hat.ar - headW * hat.lift} w={hw2} />);
+    const base = crownY + headW * hat.sink * 0.6 - headW * hat.lift;
+    over.push(
+      <G key="hat" transform={rotAt(crownX, base)}>
+        <Img art={hat} cx={crownX} top={base - hw2 * hat.ar} w={hw2} />
+      </G>
+    );
   }
   if (wear.astro) {
-    // A glass bubble centred on the head, its rim at the neck.
-    const hw3 = headW * 1.22;
+    // A glass bubble round the head, its rim at the neck.
+    const hw3 = headW * 1.35;
     const hh = hw3 * BACK_CHAR.helmet.ar;
-    layers.push(<Img key="helmet" art={BACK_CHAR.helmet} cx={cx} top={neckY + headW * 0.08 - hh} w={hw3} opacity={0.8} />);
+    over.push(<Img key="helmet" art={BACK_CHAR.helmet} cx={headCx} top={neckY + headRy * 0.2 - hh} w={hw3} opacity={0.8} />);
   }
+  const headClipId = `${maskId}h`;
+  const needHead = under.length > 0;
+  // The head again (unmirrored frame coordinates; the flip is applied outside).
+  const hx0 = x0 + F.head[0] * w;
+  const nx0 = x0 + F.neck[0] * w;
 
   return (
     <G>
@@ -322,7 +525,24 @@ export function BackRunner({
             </>
           ) : null}
         </G>
-        {layers}
+        {under}
+        {needHead ? (
+          <G transform={flipT}>
+            <Defs>
+              <ClipPath id={headClipId}>
+                <Ellipse cx={hx0} cy={headCy} rx={headRx * 1.04} ry={headRy * 1.06} transform={F.head[4] ? `rotate(${F.head[4]} ${hx0} ${headCy})` : undefined} />
+                <Rect x={hx0 - headRx * 1.7} y={y0} width={headRx * 3.4} height={Math.max(0, headCy - y0)} />
+                {/* the neck down to the collar line: the far side of a collar goes behind it */}
+                <Rect x={nx0 - neckW * 0.62} y={headCy} width={neckW * 1.24} height={Math.max(0, neckY - headCy)} />
+              </ClipPath>
+            </Defs>
+            <G clipPath={`url(#${headClipId})`}>
+              <SvgImage href={own || fr.grey} x={x0} y={y0} width={w} height={h} preserveAspectRatio="none" />
+              {fill ? <Rect x={x0} y={y0} width={w} height={h} fill={fill} opacity={0.6} mask={`url(#${maskId})`} /> : null}
+            </G>
+          </G>
+        ) : null}
+        {over}
       </G>
     </G>
   );
@@ -331,39 +551,38 @@ export function BackRunner({
 const GOLD_SPARKLES = [SPRITES.goldSparkle1, SPRITES.goldSparkle2, SPRITES.goldSparkle3];
 
 // The player seen from behind, dressed from the wardrobe and character.
-function BackPet({ cat, phase, pose, rising, spin, happy, bank, colour, equipped, character }) {
+function BackPet({ cat, phase, pose, rising, spin, feel, clock, board, happy, bank, colour, equipped, character }) {
   const char = typeof character === 'string' ? getCharacter(character) : character;
   const cid = char?.id || null;
   const shown = char ? effectiveEquipped({ equipped }, cid) : equipped || {};
   const col = getColour(colour);
   let variant = null;
   if (cid === 'char-gold') variant = 'gold';
-  else if (cat && cid === 'char-cyber') variant = 'cyber';
-  else if (cat && cid === 'char-zebra') variant = 'zebra';
-  else if (cat && !cid && col.id === 'spotty') variant = 'spot';
+  else if (cid === 'char-cyber') variant = 'cyber';
+  else if (cid === 'char-zebra') variant = 'zebra';
+  else if (!cid && col.id === 'spotty') variant = 'spot';
   const tint = variant ? null : char?.palette?.body || col.hex;
-  const collarItem = shown.collar ? getItem(shown.collar) : null;
-  const wear = {
-    hat: shown.hat || null,
-    collar: collarItem,
-    neck: shown.neck || null,
-    glasses: shown.glasses || null,
-    royal: cid === 'char-royal',
-    astro: cid === 'char-astro',
-    ninja: cid === 'char-ninja',
-    cyberEar: cid === 'char-cyber' && !cat,
-  };
-  const m = backMotion(phase, pose, rising, spin);
   const sparkle = GOLD_SPARKLES[Math.floor((Number(phase) || 0) * 0.9) % 3];
   return (
     <G>
       {variant === 'gold' && pose !== 'duck' && pose !== 'sit' ? (
         <SvgImage href={sparkle} x={4} y={18} width={48} height={44} preserveAspectRatio="xMidYMid meet" opacity={0.9} />
       ) : null}
-      {pose === 'run' && m.bounce > 0.75 ? (
-        <SvgImage href={SPRITES.dustPuff} x={12} y={34} width={32} height={15} preserveAspectRatio="xMidYMid meet" opacity={0.8} />
+      {feel?.landT != null && feel.landT < 0.3 ? (
+        // A wide dust puff at the feet on landing: grows, then fades.
+        <SvgImage
+          href={DUST[Math.min(2, Math.floor(feel.landT / 0.1))]}
+          x={28 - 32 - feel.landT * 30}
+          y={30 - feel.landT * 10}
+          width={64 + feel.landT * 60}
+          height={26 + feel.landT * 20}
+          preserveAspectRatio="none"
+          opacity={Math.max(0, 0.9 - feel.landT * 2.6)}
+        />
       ) : null}
-      <BackRunner cat={cat} phase={phase} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} wear={wear} />
+      {/* On the runner the pet rides a skateboard; its look comes from the fur set
+          (colour or painted character), not from separate worn items. */}
+      <SkateRider cat={cat} phase={phase} clock={clock} pose={pose} rising={rising} spin={spin} bank={bank} tint={tint} variant={variant} feel={feel} board={board || equipped?.board} />
       {(happy || pose === 'look') && pose !== 'hurt' ? (
         <SvgImage href={SPRITES.sparkles} x={2} y={-30} width={34} height={26} preserveAspectRatio="xMidYMid meet" />
       ) : null}

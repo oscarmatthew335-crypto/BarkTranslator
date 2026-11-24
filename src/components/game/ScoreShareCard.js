@@ -40,7 +40,7 @@ const ScoreShareCard = forwardRef(function ScoreShareCard(
             {faceUri ? (
               <Image source={{ uri: faceUri }} style={s.facePhoto} />
             ) : (
-              <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={150} pose="front" />
+              <PetPreview species={pet?.species || 'dog'} wardrobe={wardrobe} size={150} />
             )}
           </View>
           <Text style={s.headline} numberOfLines={2}>

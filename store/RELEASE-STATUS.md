@@ -1,3 +1,21 @@
+# Pawlingo 3.0.0 release (skateboard update)
+
+- **Version:** `3.0.0`, **versionCode** `14` (was 2.9.1 / 13)
+- **Build:** Android App Bundle via EAS, profile `production` (EAS holds the upload key; Play App Signing on)
+- **Listing:** new title, short description, full description and "What's new" in `store/listing.md`
+- **Graphics:** `store/graphics/` (feature graphic, 6 screenshots, icon); preview video goes to YouTube
+
+## Steps
+1. Merge PR #43 into `main`.
+2. On the PC, in the project folder: `git checkout main && git pull`, then
+   `npx.cmd eas-cli@latest build -p android --profile production`
+   and download the `.aab` from the link it prints when it finishes.
+3. Play Console → Production (or Internal testing first) → Create new release → upload the `.aab`, paste "What's new" from `store/listing.md`.
+4. Play Console → Store presence → Main store listing: paste title, short and full description, upload the feature graphic and screenshots, add the YouTube link.
+5. Send for review.
+
+---
+
 # Pawlingo Release 1 Status
 
 Release build prepared for Google Play internal testing.

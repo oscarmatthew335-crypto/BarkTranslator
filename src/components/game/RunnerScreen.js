@@ -3,10 +3,11 @@ import { View, Text, Pressable, Image, StyleSheet, AppState, PanResponder, BackH
 import Svg, { G, Rect, Ellipse, Text as SvgText, Image as SvgImage, ClipPath, Defs, Circle, Line } from 'react-native-svg';
 import { C, F, INK_WIDTH, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
-import { VIEW_W, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun } from '../../game/engine';
+import { VIEW_W, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun, laneLean } from '../../game/engine';
 import { getColour } from '../../game/wardrobe';
 import { runGoalProgress } from '../../game/runFeel';
-import { startGameAudio, gameEvent } from '../../game/sfx';
+import { startGameAudio, gameEvent, setGameReduceMotion } from '../../game/sfx';
+import { track as trackEvent } from '../../game/analytics';
 import { count } from '../../game/counters';
 import { isRewardedReady, showRewardedAd } from '../../game/ads';
 import PetSprite, { SPIN_S } from './PetSprite';
@@ -16,7 +17,22 @@ import { ColourHeadTileSvg } from './WardrobeIcons';
 import { SPRITES } from './sprites';
 import { StickerButton } from '../ui';
 
-const SWIPE_PX = 22;
+// A swipe counts after about 6% of the screen width (24-48 px), so it feels
+// the same on small and large phones.
+export const swipeThreshold = (width) => Math.max(24, Math.min(48, Math.round((width || 0) * 0.06)));
+const SWIPE_HINT_RUNS = 3;
+const SWIPE_HINT_S = 4;
+const FPS_WINDOW_S = 2;
+let controlsModeSent = false;
+
+// Painted effects drawn in the world: a sparkle ring on a treat, a bonk on a bump.
+const FX_ART = {
+  pop: [SPRITES.fxPop1, SPRITES.fxPop2, SPRITES.fxPop3],
+  bonk: [SPRITES.fxBonk1, SPRITES.fxBonk2],
+};
+const FX_LIFE = { pop: 0.3, bonk: 0.45, plus: 0.4 };
+const MAX_FX = 8;
+const COUNTDOWN_ART = { 3: SPRITES.cd3, 2: SPRITES.cd2, 1: SPRITES.cd1 };
 const COUNTDOWN_STEP_MS = 500;
 const REDUCE_MOTION_START_MS = 400;
 const CONTINUE_RING_SECONDS = 5;
@@ -75,11 +91,21 @@ export default function RunnerScreen({
   premium = false,
   onFinish,
   onQuit,
-  onFps
+  onFps,
+  runNumber = 0
 }) {
   const { t } = useI18n();
   const runRef = useRef(null);
-  if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion });
+  if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion, firstRun: runNumber === 1 });
+  const fxRef = useRef([]);
+  const goUntilRef = useRef(0);
+  const newBestAtRef = useRef(null);
+  const swipePxRef = useRef(swipeThreshold(0));
+  const fpsStatRef = useRef({ avg: 0, min: 0, dts: [] });
+  const fpsTapsRef = useRef({ n: 0, at: 0 });
+  const [fpsShown, setFpsShown] = useState(false);
+  const [duckPressed, setDuckPressed] = useState(false);
+  const showSwipeHint = !showJumpDuckButtons && runNumber > 0 && runNumber <= SWIPE_HINT_RUNS;
   const input = useRef({ jump: false, duck: false, swipeDuck: false, left: false, right: false, laneLeft: false, laneRight: false });
   const pausedRef = useRef(true);
   const particlesRef = useRef([]);
@@ -139,6 +165,17 @@ export default function RunnerScreen({
   }, [soundOn, vibrationOn]);
 
   useEffect(() => {
+    setGameReduceMotion(reduceMotion);
+  }, [reduceMotion]);
+
+  // Which controls this player uses, once per session.
+  useEffect(() => {
+    if (controlsModeSent) return;
+    controlsModeSent = true;
+    trackEvent('controls_mode', { mode: showJumpDuckButtons ? 'buttons' : 'swipe' });
+  }, []);
+
+  useEffect(() => {
     if (countdown === null || paused) return;
     if (reduceMotion) {
       const tm = setTimeout(() => {
@@ -151,6 +188,7 @@ export default function RunnerScreen({
     }
     if (countdown <= 0) {
       resetInputs();
+      goUntilRef.current = Date.now() + 600;
       setCountdown(null);
       setStarted(true);
       pausedRef.current = false;
@@ -194,8 +232,31 @@ export default function RunnerScreen({
             else if (ev === 'smash') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 18);
           }
           particlesRef.current = pool;
-        } else if (particlesRef.current.length) {
+          let fx = fxRef.current.map((f) => ({ ...f, age: f.age + dt })).filter((f) => f.age < FX_LIFE[f.kind]);
+          const addFx = (f) => {
+            fx.push({ id: `${next.t}-${Math.random()}`, age: 0, ...f });
+            if (fx.length > MAX_FX) fx = fx.slice(-MAX_FX);
+          };
+          for (const ev of next.events) {
+            if (ev === 'collect') {
+              addFx({ kind: 'pop', x: pProj.x, y: pProj.y - 24 });
+              addFx({ kind: 'plus', x: pProj.x + 10, y: pProj.y - 40 });
+            } else if (ev === 'trick') addFx({ kind: 'pop', x: pProj.x, y: pProj.y - 30 });
+            else if (ev === 'hit' || ev === 'shield') addFx({ kind: 'bonk', x: pProj.x, y: pProj.y - 34 });
+          }
+          fxRef.current = fx;
+        } else if (particlesRef.current.length || fxRef.current.length) {
           particlesRef.current = [];
+          fxRef.current = [];
+        }
+        // fps over the last 2 seconds (shown in test builds only).
+        const st = fpsStatRef.current;
+        if (dt > 0) {
+          st.dts.push(dt);
+          let sum = st.dts.reduce((a, b) => a + b, 0);
+          while (sum > FPS_WINDOW_S && st.dts.length > 1) sum -= st.dts.shift();
+          st.avg = st.dts.length / sum;
+          st.min = 1 / Math.max(...st.dts);
         }
         runRef.current = next;
         frames += 1;
@@ -308,11 +369,12 @@ export default function RunnerScreen({
       },
       onPanResponderMove: (_, g) => {
         if (swiped || pausedRef.current) return;
-        if (Math.abs(g.dx) > SWIPE_PX && Math.abs(g.dx) >= Math.abs(g.dy)) {
+        const px = swipePxRef.current;
+        if (Math.abs(g.dx) > px && Math.abs(g.dx) >= Math.abs(g.dy)) {
           swiped = true;
           if (g.dx < 0) input.current.laneLeft = true;
           else input.current.laneRight = true;
-        } else if (Math.abs(g.dy) > SWIPE_PX) {
+        } else if (Math.abs(g.dy) > px) {
           swiped = true;
           if (g.dy > 0) input.current.swipeDuck = true;
           else input.current.jump = true;
@@ -379,7 +441,15 @@ export default function RunnerScreen({
 
   const playerLanePos = run.player.lanePos ?? 0;
   const playerProj = projectBehind(0, playerLanePos, run.player.height);
-  const playerBank = ((run.player.targetLane ?? 0) - playerLanePos) * 18;
+  // Leans into a lane change: peaks early, upright again on arrival.
+  const playerBank = reduceMotion ? 0 : laneLean(run.player);
+  const feel = reduceMotion ? null : { jumpT: run.player.justJumpedT, landT: run.player.justLandedT, fastFall: run.player.fastFall };
+  const maxSpeedNow = (isScoreMode ? run.stage.maxSpeed || 410 : (run.stage.speed || 260) + (run.stage.ramp || 0)) * (run.speedScale || 1);
+  const fast = !reduceMotion && countdown === null && (run.power.speed > 0 || currentSpeed(run) > maxSpeedNow * 0.85);
+  const showGo = !reduceMotion && countdown === null && Date.now() < goUntilRef.current;
+  if (isScoreMode && bestScore > 0 && run.score > bestScore && newBestAtRef.current == null) newBestAtRef.current = run.t;
+  const newBestT = newBestAtRef.current == null ? null : run.t - newBestAtRef.current;
+  const hintT = countdown === null && started ? run.t : 0;
   const playerScale = playerProj.scale * 1.18;
   const playerShadowRx = Math.max(8, 21 - run.player.height * 0.08);
 
@@ -415,7 +485,10 @@ export default function RunnerScreen({
     <View style={s.wrap}>
       <View
         style={s.stage}
-        onLayout={(e) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+        onLayout={(e) => {
+          swipePxRef.current = swipeThreshold(e.nativeEvent.layout.width);
+          setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
+        }}
       >
         <View
           style={s.touchCanvas}
@@ -438,7 +511,7 @@ export default function RunnerScreen({
                       const gp = projectBehind(goalDx, 0, 0);
                       return (
                         <G transform={`translate(${gp.x} ${gp.groundY}) scale(${gp.scale})`}>
-                          <Goal />
+                          <Goal theme={stage.theme} />
                         </G>
                       );
                     })()
@@ -458,7 +531,17 @@ export default function RunnerScreen({
                     <Ellipse cx={playerProj.x} cy={playerProj.groundY} rx={playerShadowRx} ry={3.2} fill="rgba(36,29,59,0.22)" opacity={blink ? 0.5 : 1} />
                   ) : null}
                   <G transform={`translate(${playerProj.x} ${playerProj.y}) scale(${playerScale}) translate(-28 -44)`} opacity={blink ? 0.5 : 1}>
-                    {run.power.shield ? <Circle cx={28} cy={24} r={30} fill="rgba(92,200,255,0.25)" stroke={C.sky} strokeWidth={2} /> : null}
+                    {run.power.magnet > 0 ? (
+                      <SvgImage
+                        href={Math.floor(run.t * 5) % 2 ? SPRITES.fxMagnet2 : SPRITES.fxMagnet1}
+                        x={-14}
+                        y={-16}
+                        width={84}
+                        height={84}
+                        opacity={0.75}
+                        preserveAspectRatio="xMidYMid meet"
+                      />
+                    ) : null}
                     <PetSprite
                       species={pet.species}
                       colour={wardrobe.colour}
@@ -471,8 +554,16 @@ export default function RunnerScreen({
                       bank={playerBank}
                       rising={run.player.vy > 0}
                       spin={reduceMotion ? null : spinP}
+                      feel={feel}
+                      clock={run.t}
                       view="back"
                     />
+                    {run.power.shield ? (
+                      <SvgImage href={SPRITES.fxShield} x={-8} y={-14} width={72} height={72} opacity={0.45} preserveAspectRatio="xMidYMid meet" />
+                    ) : null}
+                    {run.power.double > 0 ? (
+                      <SvgImage href={SPRITES.fxDouble} x={18} y={-26 + (reduceMotion ? 0 : Math.sin(run.t * 6) * 2)} width={22} height={16} preserveAspectRatio="xMidYMid meet" />
+                    ) : null}
                     {faceUri ? <NameTag name={pet.name} faceUri={faceUri} /> : null}
                   </G>
                   {entitiesBehind.map(renderProjectedThing)}
@@ -488,6 +579,29 @@ export default function RunnerScreen({
                     }
                     return <Circle key={p.id} cx={p.x} cy={p.y} r={p.r} fill={p.color} opacity={alpha} />;
                   })}
+                  {fxRef.current.map((f) => {
+                    const u = f.age / FX_LIFE[f.kind];
+                    if (f.kind === 'plus') {
+                      return (
+                        <SvgText key={f.id} x={f.x} y={f.y - u * 14} fontSize={10} fontWeight="bold" fill={C.butter} stroke={C.ink} strokeWidth={0.8} opacity={1 - u} textAnchor="middle">
+                          +1
+                        </SvgText>
+                      );
+                    }
+                    const frames = FX_ART[f.kind];
+                    const href = frames[Math.min(frames.length - 1, Math.floor(u * frames.length))];
+                    const sz = f.kind === 'pop' ? 26 + u * 14 : 34;
+                    return <SvgImage key={f.id} href={href} x={f.x - sz / 2} y={f.y - sz / 2} width={sz} height={sz} opacity={f.kind === 'pop' ? 1 - u * 0.6 : 1} preserveAspectRatio="xMidYMid meet" />;
+                  })}
+                  {fast ? (
+                    // Speed lines streaming past both edges.
+                    <G opacity={run.power.speed > 0 ? 0.55 : 0.3}>
+                      <SvgImage href={Math.floor(run.t * 12) % 2 ? SPRITES.fxSpeed2 : SPRITES.fxSpeed1} x={-6} y={viewMinY + totalViewH * 0.22} width={60} height={totalViewH * 0.56} preserveAspectRatio="none" />
+                      <G transform={`translate(${CAM_W} 0) scale(-1 1)`}>
+                        <SvgImage href={Math.floor(run.t * 12) % 2 ? SPRITES.fxSpeed1 : SPRITES.fxSpeed2} x={-6} y={viewMinY + totalViewH * 0.22} width={60} height={totalViewH * 0.56} preserveAspectRatio="none" />
+                      </G>
+                    </G>
+                  ) : null}
                 </G>
               </Svg>
             )}
@@ -508,7 +622,21 @@ export default function RunnerScreen({
                   <Text style={s.hudMiniLabel} numberOfLines={1}>
                     {t(stage.nameKey)}
                   </Text>
-                  <Text style={s.hudBigNum} numberOfLines={1}>
+                  <Text
+                    style={s.hudBigNum}
+                    numberOfLines={1}
+                    onPress={() => {
+                      // Hidden: tap the score 5 times to show the fps counter.
+                      const now = Date.now();
+                      const tp = fpsTapsRef.current;
+                      tp.n = now - tp.at < 800 ? tp.n + 1 : 1;
+                      tp.at = now;
+                      if (tp.n >= 5) {
+                        tp.n = 0;
+                        setFpsShown((v) => !v);
+                      }
+                    }}
+                  >
                     {isScoreMode ? run.score : `${pct}%`}
                   </Text>
                 </View>
@@ -684,28 +812,72 @@ export default function RunnerScreen({
                 </Pressable>
               </View>
 
-              <Pressable
-                style={[s.spriteCtrlBtn, jumpPressed && s.circleBtnPressed]}
-                onPressIn={() => {
-                  setJumpPressed(true);
-                  input.current.jump = true;
-                }}
-                onPressOut={() => setJumpPressed(false)}
-                accessibilityRole="button"
-                accessibilityLabel={t('game.jump')}
-              >
-                <Image source={SPRITES.btnUp} style={s.btnSprite} resizeMode="contain" />
-              </Pressable>
+              <View style={s.ctrlLeftGroup}>
+                <Pressable
+                  style={[s.spriteCtrlBtn, duckPressed && s.circleBtnPressed]}
+                  onPressIn={() => {
+                    setDuckPressed(true);
+                    input.current.duck = true;
+                  }}
+                  onPressOut={() => {
+                    setDuckPressed(false);
+                    input.current.duck = false;
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('game.duck')}
+                >
+                  <Image source={SPRITES.btnDown} style={s.btnSprite} resizeMode="contain" />
+                </Pressable>
+                <Pressable
+                  style={[s.spriteCtrlBtn, jumpPressed && s.circleBtnPressed]}
+                  onPressIn={() => {
+                    setJumpPressed(true);
+                    input.current.jump = true;
+                  }}
+                  onPressOut={() => setJumpPressed(false)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('game.jump')}
+                >
+                  <Image source={SPRITES.btnUp} style={s.btnSprite} resizeMode="contain" />
+                </Pressable>
+              </View>
             </View>
           ) : null}
 
           {!paused && countdown !== null && !reduceMotion && countdown > 0 && (
-            <View style={s.countdownOverlay} pointerEvents="none">
-              <View style={s.countdownBubble}>
-                <Text style={s.countdownText}>{countdown}</Text>
-              </View>
+            <View style={s.countdownOverlay} pointerEvents="none" accessibilityLabel={String(countdown)}>
+              <Image key={countdown} source={COUNTDOWN_ART[countdown] || SPRITES.cd1} style={s.countdownSign} resizeMode="contain" />
             </View>
           )}
+          {!paused && showGo ? (
+            <View style={s.countdownOverlay} pointerEvents="none">
+              <Image source={SPRITES.cdGo} style={s.goSign} resizeMode="contain" />
+            </View>
+          ) : null}
+
+          {newBestT != null && newBestT < 1.8 ? (
+            <View style={s.newBestWrap} pointerEvents="none" accessibilityLabel={t('game.newBestBanner')}>
+              <Image
+                source={SPRITES.newBest}
+                style={[s.newBestImg, !reduceMotion && { transform: [{ scale: Math.min(1, 0.6 + newBestT * 3) }] }, { opacity: newBestT > 1.4 ? Math.max(0, (1.8 - newBestT) / 0.4) : 1 }]}
+                resizeMode="contain"
+              />
+            </View>
+          ) : null}
+
+          {showSwipeHint && hintT < SWIPE_HINT_S && !paused ? (
+            <View style={s.swipeHintWrap} pointerEvents="none">
+              <Text style={[s.swipeHint, { opacity: hintT > SWIPE_HINT_S - 1 ? SWIPE_HINT_S - hintT : 1 }]}>{t('game.swipeHint')}</Text>
+            </View>
+          ) : null}
+
+          {__DEV__ || fpsShown ? (
+            <View style={s.fpsBox} pointerEvents="none">
+              <Text style={s.fpsText}>
+                {Math.round(fpsStatRef.current.avg)} fps · min {Math.round(fpsStatRef.current.min)}
+              </Text>
+            </View>
+          ) : null}
 
           {continuePrompt && (
             <View style={s.overlay}>
@@ -781,7 +953,7 @@ export default function RunnerScreen({
               )}
               <View style={s.overlayButtons}>
                 <StickerButton label={started ? t('game.resume') : t('game.go')} emoji="▶️" onPress={begin} />
-                <StickerButton label={t('game.quit')} color={C.paper} onPress={onQuit} />
+                <StickerButton label={t('game.quit')} color={C.paper} onPress={() => onQuit?.(resultOf(runRef.current))} />
               </View>
             </View>
           )}
@@ -1035,6 +1207,14 @@ const s = StyleSheet.create({
   btnSprite: { width: 52, height: 52 },
   circleBtnPressed: { transform: [{ scale: 0.94 }] },
   countdownOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9, elevation: 9, alignItems: 'center', justifyContent: 'center' },
+  countdownSign: { width: 96, height: 146 },
+  goSign: { width: 190, height: 113 },
+  newBestWrap: { position: 'absolute', top: 118, left: 0, right: 0, alignItems: 'center', zIndex: 8 },
+  newBestImg: { width: 220, height: 90 },
+  swipeHintWrap: { position: 'absolute', bottom: 28, left: 16, right: 16, alignItems: 'center', zIndex: 6 },
+  swipeHint: { fontFamily: F.bold, fontSize: 15, color: C.paper, backgroundColor: 'rgba(36,29,59,0.62)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 18, overflow: 'hidden', textAlign: 'center' },
+  fpsBox: { position: 'absolute', left: 8, bottom: 8, backgroundColor: 'rgba(0,0,0,0.55)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, zIndex: 20 },
+  fpsText: { color: '#9CFF9C', fontSize: 11, fontFamily: F.bold },
   countdownBubble: { width: 84, height: 84, borderRadius: 42, borderWidth: INK_WIDTH, borderColor: C.ink, backgroundColor: C.butter, alignItems: 'center', justifyContent: 'center' },
   countdownText: { fontFamily: F.bold, fontSize: 44, color: C.ink },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, elevation: 10, backgroundColor: 'rgba(242,239,252,0.92)', alignItems: 'center', justifyContent: 'center', padding: 16 },

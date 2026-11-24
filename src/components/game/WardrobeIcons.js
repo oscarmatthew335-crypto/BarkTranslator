@@ -44,6 +44,12 @@ export function SlotTabIcon({ slot, active = false, size = 22 }) {
             strokeLinejoin="round"
           />
         </G>
+      ) : slot === 'board' ? (
+        <G>
+          <Rect x={4} y={12} width={20} height={4} rx={2} fill={active ? C.tomato : fill} stroke={stroke} strokeWidth={1.8} />
+          <Circle cx={9} cy={20} r={2.6} fill={active ? C.butter : fill} stroke={stroke} strokeWidth={1.8} />
+          <Circle cx={19} cy={20} r={2.6} fill={active ? C.butter : fill} stroke={stroke} strokeWidth={1.8} />
+        </G>
       ) : slot === 'collar' ? (
         <G>
           <Path d="M6 12 Q14 17.5 22 12" stroke={active ? C.tomato : stroke} strokeWidth={4} fill="none" strokeLinecap="round" />

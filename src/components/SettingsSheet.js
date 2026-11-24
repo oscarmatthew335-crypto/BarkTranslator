@@ -184,7 +184,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
               <Row
                 title={t('settings.jumpDuckButtonsTitle')}
                 sub={t('settings.jumpDuckButtonsSub')}
-                value={options?.showJumpDuckButtons !== false}
+                value={Boolean(options?.showJumpDuckButtons)}
                 onChange={(v) => setOptions({ showJumpDuckButtons: Boolean(v) })}
                 divider
               />

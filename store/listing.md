@@ -1,54 +1,70 @@
 # Google Play Store Listing — Pawlingo (`com.pawlingo.app`)
 
 ## App Title (max 30 chars)
-Pawlingo: Dog & Cat Translator
+Pawlingo: Pet Skateboard Run
+
+(28 chars. Was "Pawlingo: Dog & Cat Translator". The game now leads; "translator" stays in the description and tags.)
 
 ## Short Description (max 80 chars)
-Translate dog barks & cat meows, teach your pet's real sounds & share videos!
+Skate as your own dog or cat! Jump, dodge, grab treats and unlock fur and boards
+
+(80 chars, the limit)
 
 ## Monetization Disclosure
 Contains ads · In-app purchases
 
+## What's new in 3.0.0 (max 500 chars)
+Your pet now rides a skateboard! 🛹
+• Brand-new riding art for cats and dogs, with ollies, kickflips and a look-back when you pull off a trick
+• Pick your board: 9 boards to collect, including a gold one for a 7-day streak
+• Fur sets: Gold, Cyber and Zebra, painted for every pose
+• New places: Home, plus fresh props at the braai and the vet
+• Smoother lanes, a fairer warm-up and easier jumps
+Treats you spent on hats and glasses have been refunded.
+
+(about 470 chars)
+
 ## Full Description (max 4,000 chars)
-Ever wished you knew what your dog's dramatic sigh at the braai or your cat's 3 AM hallway yowl really meant?
+Your dog or cat, on a skateboard, skating through the park, the beach, the braai and the vet. How far can they go?
 
-**Pawlingo** listens to your dog or cat, measures the real sound (how many barks or meows, how loud, pitch, tone and rhythm), and turns it into hilarious, spot-on translations in 12 distinct personalities—while learning your individual pet's vocal habits over time.
+**Pawlingo** is a quick, cheerful skate-runner starring your own pet. Swipe to change lanes, jump over puddles and bins, duck under sprinklers, and grab bones, balls and fish along the way. Pull off a double-jump kickflip and your pet spins round to grin at you.
 
-### 🎙️ LISTENS FOR REAL (NO FAKE TIMERS)
-Unlike novelty apps that invent a quote even in a silent room, Pawlingo measures the actual audio from your microphone:
-- **Tap to Listen**: Tap the paw button and let your pet speak—Pawlingo automatically stops when your pet goes quiet.
-- **Acoustic Pattern Detection**: Distinguishes between sharp alert barks, rapid-fire yips, extended howls/rants, soft whines, purrs, trills, chirps and hisses.
-- **Personal Sound Learning**: Every time you tell Pawlingo what your pet really meant (Food, At the Gate, Walkies, Attention, Zoomies), it saves a private acoustic fingerprint on your phone. After a few examples, Pawlingo starts guessing what your pet wants before you even pick a situation!
+### 🛹 SKATE AS YOUR OWN PET
+- Dog or cat, in your pet's own fur colour
+- Ollies, kickflips, ducks and a look-back when you nail a trick
+- Swipe controls, with optional on-screen buttons
 
-### 🐶 DOG MODE & 🐱 CAT MODE (12 VOICES UNLOCKED)
-Switch between Dog and Cat profiles—or add all your pets in one household:
-- **Dog Voices**: Local SA Boet, Grumpy Old Man, Sassy Diva, Officer K-9, Velcro Puppy & Sir Barkington.
-- **Cat Voices**: Local SA Chommie, Grumpy Old Tom, Drama Queen, Evil Overlord, Chaos Kitten & Pharaoh's Heir.
-- **Fits Your Home & Time of Day**: Mark each pet as *Indoors* or *Has a garden* so indoor cats never talk about backyard fences, and midnight snack lines only appear at night.
+### 🌍 SIX PLACES TO SKATE
+Garden, park, beach, braai, vet and home, each with its own obstacles, props and finish arch. Robot vacuums, pigeons, puddles, sprinklers and a runaway bathtub are all out to stop you.
 
-### 🎬 SHAREABLE VIDEO & PICTURE CARDS
-- **Live Camera Clips**: With the camera on, Pawlingo films your pet while it listens and generates a ready-to-share MP4 video with your pet's real recorded sound and an animated comic speech bubble!
-- **One-Tap Replay**: Replay your pet's real recorded bark or meow anytime from your Journal.
+### 🎯 MODES FOR EVERY DAY
+- **Stages**: beat each place to unlock the next
+- **Endless**: one long run for a high score
+- **Chase**: stay ahead of the runaway bath
+- **Daily run and challenges**: a new course and goal every day, with streak rewards
 
-### 📼 TRANSLATE CLIPS YOU ALREADY HAVE
-Pets never perform on cue. Pick a video or voice note of your pet from your gallery, or share one straight to Pawlingo from WhatsApp or your camera app, and it translates the sound in it.
-- **Catch sounds I just missed**: switch it on and Pawlingo keeps the last 10 seconds of sound in your phone's memory while the listening screen is open, so if your cat meows just before you tap, it still catches it. Those 10 seconds are never saved or sent anywhere.
+### 🎨 COLLECT BOARDS AND FUR SETS
+Earn treats as you play and spend them on new boards. Unlock the Gold, Cyber and Zebra fur sets. Everything is just for looks; nothing you buy makes the game easier.
+
+### 🐾 PLUS A PET TRANSLATOR, FOR FUN
+Tap to listen and Pawlingo measures your pet's real bark or meow (how many, how loud, what pattern) and turns it into a funny translation in one of 12 personalities. Make a shareable video of your pet "talking", play real dog and cat sounds back, and read quick guides to body language.
 
 ### 🌍 ENGLISH, AFRIKAANS & ISIZULU
-Use the app in English, Afrikaans or isiZulu (Settings → Language). A quick three-step welcome sets up your first pet.
-
-### 🐕 SPEAK BACK & DECODE BODY LANGUAGE
-- **Speak Dog & Cat Soundboard**: Play real, natural dog and cat vocalizations (CC0 recordings) plus posture coaching so your pet understands your body language, alongside built-in training clickers, whistles and attention cues.
-- **Behaviour Decoder**: Bite-sized science guides on tail wagging, play sneezes, slow blinks, ear postures and South African pet safety tips.
+Use the app in English, Afrikaans or isiZulu.
 
 ### 🔒 PRIVATE BY DEFAULT
-Your pets, journal and personal sound fingerprints stay on your phone—no account or sign-up required. You can optionally opt in to share short sound clips to help train the community translator, and you can switch sharing off or delete everything you've shared with one tap in Settings.
+No account or sign-up. Your pets and progress stay on your phone. You can choose to share short sound clips to help improve the translator, and switch that off or delete what you shared at any time.
 
-*Note: Pawlingo is made for entertainment and bonding with your pet, not veterinary or medical diagnosis.*
+*Pawlingo is for fun and bonding with your pet. Translations are entertainment, not veterinary advice.*
 
 ## Keywords / Tags
-dog translator, cat translator, bark translator, meow translator, pet translator, dog sounds, cat sounds, pet behaviour, dog clicker, puppy training, South Africa
+pet game, dog game, cat game, skateboard game, runner game, endless runner, dog translator, cat translator, pet translator, South Africa
 
+## Graphics (in `store/graphics/`)
+- Feature graphic: `feature-graphic-1024x500.png`
+- Phone screenshots (1080×1920, in this order): `screenshot-1.png` … `screenshot-6.png`
+- Icon: `icon-512.png`
+- Preview video: upload `pawlingo-preview-30s.mp4` to YouTube (public or unlisted, ads off) and paste the link under Store listing → Preview video.
 
 ## Support Email
 pawlingo@zdns.co.za

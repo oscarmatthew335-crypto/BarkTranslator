@@ -72,12 +72,36 @@ function play(name, rate = 1) {
   } catch (_) {}
 }
 
+// Haptics: at most one buzz per HAPTIC_GAP_MS, and none with motion reduced.
+export const HAPTIC_GAP_MS = 60;
+let lastHapticAt = 0;
+let hapticsCalm = false;
+export function setGameReduceMotion(on) {
+  hapticsCalm = Boolean(on);
+}
+export function hapticAllowed(now = Date.now()) {
+  if (!vibrationEnabled || hapticsCalm) return false;
+  if (now - lastHapticAt < HAPTIC_GAP_MS) return false;
+  lastHapticAt = now;
+  return true;
+}
+function buzz(kind) {
+  if (!hapticAllowed()) return;
+  const H = Haptics;
+  const p =
+    kind === 'select'
+      ? H.selectionAsync()
+      : kind === 'success'
+      ? H.notificationAsync(H.NotificationFeedbackType.Success)
+      : H.impactAsync(kind === 'heavy' ? H.ImpactFeedbackStyle.Heavy : kind === 'medium' ? H.ImpactFeedbackStyle.Medium : H.ImpactFeedbackStyle.Light);
+  p?.catch?.(() => {});
+}
+
 // One call per engine event (see game/engine.js step()).
 export function gameEvent(event) {
   switch (event) {
     case 'jump':
       play('jump');
-      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
       break;
     case 'collect': {
       const now = Date.now();
@@ -85,24 +109,34 @@ export function gameEvent(event) {
       lastCollectAt = now;
       collectStreak = nextStreak;
       play('collect', rate);
-      if (vibrationEnabled) Haptics.selectionAsync().catch(() => {});
+      buzz('select');
       break;
     }
+    case 'nearMiss':
+      buzz('light');
+      break;
+    case 'grind':
+      play('jump');
+      buzz('medium');
+      break;
     case 'power':
     case 'shield':
+      play('power');
+      buzz('success');
+      break;
     case 'smash':
       play('power');
-      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      buzz('light');
       break;
     case 'hit':
     case 'out':
     case 'caught':
       play('hit');
-      if (vibrationEnabled) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      buzz('heavy');
       break;
     case 'finish':
       play('goal');
-      if (vibrationEnabled) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      buzz('success');
       break;
     default:
   }

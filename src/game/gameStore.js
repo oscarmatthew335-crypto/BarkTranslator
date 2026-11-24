@@ -6,7 +6,7 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emptyProgress } from './progress';
-import { emptyWardrobe } from './wardrobe';
+import { emptyWardrobe, migrateWardrobe } from './wardrobe';
 import { emptyStreak, emptyWeeklyBest } from './daily';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
@@ -46,6 +46,14 @@ export function recordModeRun(modeRuns, modeOrStage) {
   const key = typeof modeOrStage === 'string' ? modeOrStage : modeKeyFor(modeOrStage);
   const base = { ...emptyModeRuns(), ...(modeRuns || {}) };
   return { ...base, [key]: (base[key] || 0) + 1 };
+}
+
+// Runs played on this phone, over every pet and mode.
+export function totalRuns(state) {
+  return Object.values(state?.pets || {}).reduce(
+    (n, p) => n + Object.values(p?.modeRuns || {}).reduce((m, v) => m + (Number(v) || 0), 0),
+    0
+  );
 }
 
 export function emptyPetGame(pet) {
@@ -94,7 +102,7 @@ export const emptyGameState = () => ({
     recentRunHours: [],
     livesEmptyAtClose: false,
     lastReminderDay: null,
-    showJumpDuckButtons: true,
+    showJumpDuckButtons: false, // swipe first; players from before keep their buttons (see loadGame)
     lastCharacterNudgeDay: null
   }
 });
@@ -143,7 +151,12 @@ export async function loadGame() {
         extraSavers: Math.max(0, Math.floor(Number(data.extraSavers) || 0)),
         store: { ...def.store, ...(data.store || {}) },
         premium: Boolean(data.premium),
-        options: { ...def.options, ...(data.options || {}) }
+        options: {
+          ...def.options,
+          ...(data.options || {}),
+          // Swipe-only is the default for new players; anyone who already ran keeps the buttons.
+          showJumpDuckButtons: data.options?.showJumpDuckButtons ?? totalRuns(data) > 0
+        }
       };
     }
   } catch (_) {}
@@ -182,7 +195,7 @@ export function petGame(state, pet) {
   const speciesBest = state?.bestScores?.[sp] || { endless: 0, chase: 0 };
   const saved = state?.pets?.[pet.id];
   if (!saved) return { ...base, bestScores: { ...base.bestScores, ...speciesBest } };
-  return {
+  const merged = {
     ...base,
     ...saved,
     bestScores: {
@@ -196,12 +209,18 @@ export function petGame(state, pet) {
       owned: Array.isArray(saved.wardrobe?.owned) ? saved.wardrobe.owned : base.wardrobe.owned,
       equipped: { ...base.wardrobe.equipped, ...(saved.wardrobe?.equipped || {}) },
       ownedCharacters: Array.isArray(saved.wardrobe?.ownedCharacters) ? saved.wardrobe.ownedCharacters : [],
-      activeCharacter: saved.wardrobe?.activeCharacter ?? null
+      activeCharacter: saved.wardrobe?.activeCharacter ?? null,
+      boardsV1: Boolean(saved.wardrobe?.boardsV1)
     },
     modeRuns: { ...base.modeRuns, ...(saved.modeRuns || {}) },
     recentRuns: Array.isArray(saved.recentRuns) ? saved.recentRuns : [],
     round: { ...base.round, ...(saved.round || {}) }
   };
+  // Boards replaced worn items: refund those once and hand out the free boards.
+  const mig = migrateWardrobe(merged.wardrobe, pet);
+  return mig.refund || mig.wardrobe !== merged.wardrobe
+    ? { ...merged, wardrobe: mig.wardrobe, bank: (Number(merged.bank) || 0) + mig.refund }
+    : merged;
 }
 
 export function removePetGame(state, petId) {

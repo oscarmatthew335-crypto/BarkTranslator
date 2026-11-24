@@ -58,48 +58,75 @@ export const THEMES = {
     path: '#F3DFAC',
     far: '#B6DFCB',
     farTree: '#9ECFC0',
-    prop: 'bench'
+    prop: 'bench',
+    path: '#CFCAC2',
+    edge: '#8E8A84',
+    roadside: 'park'
   },
   beach: {
+    painted: true,
+    bg: 'beachBg',
+    arch: 'finishArchBeach',
+    top: '#A4DDF1',
+    roadside: 'beach',
     sky: '#BFEAFF',
     skyTop: '#7ECFF5',
     skyLow: '#E4F7FF',
-    ground: '#F7DE9B',
-    edge: '#E3BE62',
-    path: '#FFF0C2',
+    ground: '#FFE1AD',
+    edge: '#C99A62',
+    path: '#E7C08C',
+    planks: true,
     far: '#9EDFF7',
     farTree: '#7FD0F0',
     prop: 'umbrella'
   },
   braai: {
+    painted: true,
+    bg: 'braaiBg',
+    arch: 'finishArchBraai',
+    top: '#FEA472',
+    roadside: 'braai',
     sky: '#FFE2C2',
     skyTop: '#FFC994',
     skyLow: '#FFF3E4',
-    ground: '#A2CC5E',
-    edge: '#759F3A',
-    path: '#ECD59F',
+    ground: '#D3A357',
+    edge: '#8E4E3A',
+    path: '#C7795C',
+    bricks: true,
     far: '#F6D7B0',
     farTree: '#E5BC8B',
     prop: 'braai'
   },
   vet: {
+    painted: true,
+    bg: 'vetBg',
+    arch: 'finishArchVet',
+    top: '#F1DDC5',
+    roadside: 'vet',
     sky: '#EEE7FF',
     skyTop: '#D6CAFA',
     skyLow: '#F8F5FF',
-    ground: '#D9D2F0',
-    edge: '#B7AEDB',
-    path: '#F7F5FF',
+    ground: '#DCDEDB',
+    edge: '#A9B4BE',
+    path: '#F6F7F8',
+    tiles: true,
     far: '#E6E0FA',
     farTree: '#D3CAF2',
-    prop: 'cross'
+    prop: 'none' // indoors: no roadside props until the vet props are painted
   },
   home: {
+    painted: true,
+    bg: 'homeBg',
+    top: '#F0DCC4',
+    roadside: 'home',
+    arch: 'finishArchHome',
+    planks: true,
     sky: '#FFF1DA',
     skyTop: '#FFE1B5',
     skyLow: '#FFF8EB',
-    ground: '#D9A876',
-    edge: '#B98252',
-    path: '#F4DFC2',
+    ground: '#D4AB7D',
+    edge: '#A9784F',
+    path: '#EBCB9F',
     far: '#FAE2C6',
     farTree: '#EECDAA',
     prop: 'sofa'
@@ -109,6 +136,7 @@ export const THEMES = {
 const PROP_GAP = 240;
 
 function Prop({ type, index = 0 }) {
+  if (type === 'none') return null;
   if (type === 'tree' || type === 'bench') {
     return (
       <G>
@@ -178,13 +206,45 @@ const SKY_HORIZON = 0.74;
 
 // Roadside props, cycled by a stable slot number so each keeps its look while
 // it scrolls past. Sizes are in near-lane units (scaled by perspective).
-const ROADSIDE = [
-  { key: 'treeSingle', w: 81, h: 100 },
-  { key: 'bushFlowers', w: 46, h: 38 },
-  { key: 'lampPost', w: 27, h: 96 },
-  { key: 'bush', w: 46, h: 40 },
-];
-const roadsideFor = (n) => ROADSIDE[((n % ROADSIDE.length) + ROADSIDE.length) % ROADSIDE.length];
+const ROADSIDE = {
+  garden: [
+    { key: 'treeSingle', w: 81, h: 100 },
+    { key: 'bushFlowers', w: 46, h: 38 },
+    { key: 'lampPost', w: 27, h: 96 },
+    { key: 'bush', w: 46, h: 40 },
+  ],
+  park: [
+    { key: 'parkOak', w: 84, h: 102 },
+    { key: 'parkPicnic', w: 60, h: 31 },
+    { key: 'parkBin', w: 20, h: 44 },
+    { key: 'parkFence', w: 58, h: 38 },
+  ],
+  beach: [
+    { key: 'beachPalm', w: 72, h: 96 },
+    { key: 'beachCastle', w: 46, h: 42 },
+    { key: 'beachUmbrella', w: 64, h: 76 },
+    { key: 'beachFlag', w: 30, h: 66 },
+  ],
+  braai: [
+    { key: 'braaiGrill', w: 30, h: 55 },
+    { key: 'braaiAloe', w: 30, h: 45 },
+    { key: 'braaiTable', w: 62, h: 37 },
+    { key: 'braaiLine', w: 40, h: 66 },
+  ],
+  vet: [
+    { key: 'vetPlant', w: 40, h: 47 },
+    { key: 'vetChair', w: 38, h: 45 },
+    { key: 'vetScale', w: 42, h: 40 },
+    { key: 'vetSign', w: 34, h: 42 },
+  ],
+  home: [
+    { key: 'homeSofa', w: 66, h: 39 },
+    { key: 'homeLamp', w: 22, h: 63 },
+    { key: 'homePlant', w: 34, h: 55 },
+    { key: 'homeShelf', w: 46, h: 65 },
+  ],
+};
+const roadsideFor = (list, n) => list[((n % list.length) + list.length) % list.length];
 const TRACK_BOTTOM_P = (TRACK_BOTTOM_Y - HORIZON_Y) / (PLAYER_GROUND_Y - HORIZON_Y);
 
 // Painted behind-the-back park sky + distant horizon hills and trees above HORIZON_Y.
@@ -195,19 +255,13 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
   if (th.painted) {
     return (
       <G>
-        <Defs>
-          <LinearGradient id="paintedSkyGrad" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0%" stopColor="#BFE9E7" />
-            <Stop offset="100%" stopColor="#BFE9E7" />
-          </LinearGradient>
-        </Defs>
-        {/* Seamless sky extension above HORIZON_Y */}
-        <Rect x={-40} y={-800} width={CAM_W + 80} height={820} fill="url(#paintedSkyGrad)" />
+        {/* Seamless sky extension above the painting */}
+        <Rect x={-40} y={-800} width={CAM_W + 80} height={820} fill={th.top || '#BFE9E7'} />
         {/* Painted sky, sun, hills and treeline. Its grass line (74% down the
             picture) sits on HORIZON_Y; it is sized so even the tallest phone
             view (2.4:1) shows no gap above it, and the sides crop evenly. */}
         <SvgImage
-          href={SPRITES.skyBg}
+          href={SPRITES[th.bg || 'skyBg']}
           x={CENTER_X - SKY_W / 2}
           y={HORIZON_Y - SKY_H * SKY_HORIZON}
           width={SKY_W}
@@ -304,6 +358,10 @@ export function Midground({ theme, dist, reduceMotion = false }) {
         return (
           <G key={`m-${i}`}>
             <Polygon points={`${l1},${b.groundY} ${r1},${b.groundY} ${r0},${a.groundY} ${l0},${a.groundY}`} fill="rgba(182,146,84,0.14)" />
+            {/* Boardwalk planks, brick paving or floor tiles: seams across the road */}
+            {th.planks || th.bricks || th.tiles ? (
+              <Line x1={l0} y1={a.groundY} x2={r0} y2={a.groundY} stroke={th.edge} strokeWidth={Math.max(0.6, 1.6 * a.scale)} opacity={th.tiles ? 0.45 : 0.6} />
+            ) : null}
             {/* Left and right lane divider dashes */}
             <Polygon
               points={`${dl1 - hw * 0.6},${b.groundY} ${dl1 + hw * 0.6},${b.groundY} ${dl0 + hw},${a.groundY} ${dl0 - hw},${a.groundY}`}
@@ -350,11 +408,11 @@ export function Midground({ theme, dist, reduceMotion = false }) {
               height={ph}
               preserveAspectRatio="xMidYMax meet"
             />
-            {th.painted ? (
+            {th.painted && (ROADSIDE[th.roadside || 'garden'] || []).length ? (
               <>
                 {[
-                  [left, roadsideFor(slot)],
-                  [right, roadsideFor(slot + 2)],
+                  [left, roadsideFor(ROADSIDE[th.roadside || 'garden'], slot)],
+                  [right, roadsideFor(ROADSIDE[th.roadside || 'garden'], slot + 2)],
                 ].map(([pos, prop], side) => (
                   <SvgImage
                     key={side}
@@ -403,14 +461,11 @@ export function Midground({ theme, dist, reduceMotion = false }) {
   );
 }
 
-// The goal at the end of a stage: a flag banner across the finish line.
-export const Goal = memo(function Goal() {
-  return (
-    <G>
-      <Line x1={-60} y1={0} x2={-60} y2={-64} stroke={INK} strokeWidth={3} strokeLinecap="round" />
-      <Line x1={60} y1={0} x2={60} y2={-64} stroke={INK} strokeWidth={3} strokeLinecap="round" />
-      <Polygon points="-60,-64 60,-64 60,-46 -60,-46" fill={C.butter} stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
-      <Path d="M-16 0 Q 0 -16 16 0 Z" fill={C.pink} stroke={INK} strokeWidth={2} />
-    </G>
-  );
+// The goal at the end of a stage: a painted finish arch over all three lanes,
+// dressed for the place.
+export const Goal = memo(function Goal({ theme }) {
+  const w = 236;
+  const h = w * 0.615;
+  const href = SPRITES[THEMES[theme]?.arch] || SPRITES.finishArch;
+  return <SvgImage href={href} x={-w / 2} y={-h + 6} width={w} height={h} preserveAspectRatio="none" />;
 });
