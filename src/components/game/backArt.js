@@ -127,3 +127,28 @@ export const BACK_CHAR = {
   headband: { run: { href: require('../../../assets/sprites/headband_ninja_run.png'), ar: 0.625 }, jump: { href: require('../../../assets/sprites/headband_ninja_jump.png'), ar: 1.5238 }, duck: { href: require('../../../assets/sprites/headband_ninja_duck.png'), ar: 0.582 } },
   mask: { href: require('../../../assets/sprites/mask_ninja.png'), ar: 0.6094 },
 };
+
+// The pet riding its skateboard, seen from behind: ride, push (a back paw
+// down), duck, ollie and look (face turned to the camera). One painted set per
+// fur set; grey is tinted with the pet's colour through its fur mask.
+// cx = where the body's middle sits across the frame (fraction).
+export const SKATE_FRAMES = {
+  cat: {
+    pw: 236,
+    ph: 320,
+    ride: { cx: 0.574, grey: require('../../../assets/sprites/skate_cat_base_ride.png'), fur: require('../../../assets/sprites/skate_cat_base_ride_fur.png'), gold: require('../../../assets/sprites/skate_cat_gold_ride.png'), cyber: require('../../../assets/sprites/skate_cat_cyber_ride.png'), zebra: require('../../../assets/sprites/skate_cat_zebra_ride.png'), spot: require('../../../assets/sprites/skate_cat_spot_ride.png') },
+    push: { cx: 0.555, grey: require('../../../assets/sprites/skate_cat_base_push.png'), fur: require('../../../assets/sprites/skate_cat_base_push_fur.png'), gold: require('../../../assets/sprites/skate_cat_gold_push.png'), cyber: require('../../../assets/sprites/skate_cat_cyber_push.png'), zebra: require('../../../assets/sprites/skate_cat_zebra_push.png'), spot: require('../../../assets/sprites/skate_cat_spot_push.png') },
+    duck: { cx: 0.556, grey: require('../../../assets/sprites/skate_cat_base_duck.png'), fur: require('../../../assets/sprites/skate_cat_base_duck_fur.png'), gold: require('../../../assets/sprites/skate_cat_gold_duck.png'), cyber: require('../../../assets/sprites/skate_cat_cyber_duck.png'), zebra: require('../../../assets/sprites/skate_cat_zebra_duck.png'), spot: require('../../../assets/sprites/skate_cat_spot_duck.png') },
+    ollie: { cx: 0.548, grey: require('../../../assets/sprites/skate_cat_base_ollie.png'), fur: require('../../../assets/sprites/skate_cat_base_ollie_fur.png'), gold: require('../../../assets/sprites/skate_cat_gold_ollie.png'), cyber: require('../../../assets/sprites/skate_cat_cyber_ollie.png'), zebra: require('../../../assets/sprites/skate_cat_zebra_ollie.png'), spot: require('../../../assets/sprites/skate_cat_spot_ollie.png') },
+    look: { cx: 0.504, grey: require('../../../assets/sprites/skate_cat_base_look.png'), fur: require('../../../assets/sprites/skate_cat_base_look_fur.png'), gold: require('../../../assets/sprites/skate_cat_gold_look.png'), cyber: require('../../../assets/sprites/skate_cat_cyber_look.png'), zebra: require('../../../assets/sprites/skate_cat_zebra_look.png'), spot: require('../../../assets/sprites/skate_cat_spot_look.png') },
+  },
+  dog: {
+    pw: 242,
+    ph: 320,
+    ride: { cx: 0.543, grey: require('../../../assets/sprites/skate_dog_base_ride.png'), fur: require('../../../assets/sprites/skate_dog_base_ride_fur.png'), gold: require('../../../assets/sprites/skate_dog_gold_ride.png'), cyber: require('../../../assets/sprites/skate_dog_cyber_ride.png'), zebra: require('../../../assets/sprites/skate_dog_zebra_ride.png'), spot: require('../../../assets/sprites/skate_dog_spot_ride.png') },
+    push: { cx: 0.483, grey: require('../../../assets/sprites/skate_dog_base_push.png'), fur: require('../../../assets/sprites/skate_dog_base_push_fur.png'), gold: require('../../../assets/sprites/skate_dog_gold_push.png'), cyber: require('../../../assets/sprites/skate_dog_cyber_push.png'), zebra: require('../../../assets/sprites/skate_dog_zebra_push.png'), spot: require('../../../assets/sprites/skate_dog_spot_push.png') },
+    duck: { cx: 0.516, grey: require('../../../assets/sprites/skate_dog_base_duck.png'), fur: require('../../../assets/sprites/skate_dog_base_duck_fur.png'), gold: require('../../../assets/sprites/skate_dog_gold_duck.png'), cyber: require('../../../assets/sprites/skate_dog_cyber_duck.png'), zebra: require('../../../assets/sprites/skate_dog_zebra_duck.png'), spot: require('../../../assets/sprites/skate_dog_spot_duck.png') },
+    ollie: { cx: 0.501, grey: require('../../../assets/sprites/skate_dog_base_ollie.png'), fur: require('../../../assets/sprites/skate_dog_base_ollie_fur.png'), gold: require('../../../assets/sprites/skate_dog_gold_ollie.png'), cyber: require('../../../assets/sprites/skate_dog_cyber_ollie.png'), zebra: require('../../../assets/sprites/skate_dog_zebra_ollie.png'), spot: require('../../../assets/sprites/skate_dog_spot_ollie.png') },
+    look: { cx: 0.482, grey: require('../../../assets/sprites/skate_dog_base_look.png'), fur: require('../../../assets/sprites/skate_dog_base_look_fur.png'), gold: require('../../../assets/sprites/skate_dog_gold_look.png'), cyber: require('../../../assets/sprites/skate_dog_cyber_look.png'), zebra: require('../../../assets/sprites/skate_dog_zebra_look.png'), spot: require('../../../assets/sprites/skate_dog_spot_look.png') },
+  },
+};

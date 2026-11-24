@@ -4,7 +4,7 @@ import { C } from '../../theme';
 import { getColour, getItem } from '../../game/wardrobe';
 import { getCharacter, effectiveEquipped } from '../../game/characters';
 import { SPRITES } from './sprites';
-import { BACK_FRAMES, BACK_HATS, BACK_NECK, BACK_GLASSES, BACK_CHAR, UNIT } from './backArt';
+import { BACK_FRAMES, BACK_HATS, BACK_NECK, BACK_GLASSES, BACK_CHAR, UNIT, SKATE_FRAMES } from './backArt';
 
 const INK = C.ink;
 
@@ -226,51 +226,44 @@ const BOARDS = {
 const BOARD_AR = { cat: [1.414, 1.113, 1.306, 1.202], dog: [1.362, 0.988, 1.158, 1.049] };
 // Where the deck surface sits on each board frame (fraction of its height from the top).
 const DECK_Y = [0.45, 0.5, 0.5, 0.5];
-const PUSH_EVERY = 2.4; // seconds between pushes while cruising
-const PUSH_S = 0.45;
+const PUSH_EVERY = 2.2; // seconds between pushes while cruising
+const PUSH_S = 0.5;
 
-// What the rider shows for a pose: pet frame key, board frame, pet mirrored, pet squash.
+// What the rider shows for a pose: riding frame, board frame, spin angle, pet squash.
 export function skateMotion({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0 }) {
-  const ride = cat ? 'sit' : 'stand';
   const t = (Number(phase) || 0) / 9; // phase runs ~9 per second
-  let key = ride;
+  let key = 'ride';
   let board = Math.abs(bank) > 3 ? (bank > 0 ? 1 : 3) : 0;
-  let flip = false;
+  let turn = 0;
   let squash = 1;
   let wobble = 0;
   let lift = 0;
   if (pose === 'jump') {
+    key = 'ollie';
     if (spin != null) {
-      // Kickflip: the board turns under the pet while it spins round.
+      // Kickflip: the board turns under the pet while the pet spins a full turn.
       board = spin < 0.2 ? 0 : spin < 0.45 ? 1 : spin < 0.7 ? 2 : spin < 0.9 ? 3 : 0;
-      if (spin >= 0.15 && spin < 0.38) key = 'spinSide';
-      else if (spin >= 0.38 && spin < 0.62) key = 'spinFront';
-      else if (spin >= 0.62 && spin < 0.85) {
-        key = 'spinSide';
-        flip = true;
-      }
+      turn = spin > 0.1 && spin < 0.9 ? ((spin - 0.1) / 0.8) * 360 : 0;
       lift = spin > 0.1 && spin < 0.9 ? 4 : 0;
-    } else {
-      squash = rising ? 0.94 : 1; // crouched for the ollie
-      if (!cat && rising) board = 2; // the dog's board pops up
-    }
-  } else if (pose === 'duck') squash = 0.72;
-  else if (pose === 'look') key = 'spinFront'; // rides switch, facing the camera
-  else if (pose === 'sit') key = cat ? 'sit' : 'sit2';
+    } else if (!cat && rising) board = 2; // the dog's board pops its nose up
+  } else if (pose === 'duck') key = 'duck';
+  else if (pose === 'look') key = 'look';
   else if (pose === 'hurt') wobble = Math.sin(t * 40) * 9;
-  // A push every few seconds: a dip as a back paw touches down.
+  // Every few seconds a back paw pushes off the ground.
   const u = t % PUSH_EVERY;
-  const push = pose === 'run' && u < PUSH_S ? Math.sin((u / PUSH_S) * Math.PI) : 0;
+  const pushing = pose === 'run' && u < PUSH_S;
+  if (pushing) key = 'push';
+  const dip = pushing ? Math.sin((u / PUSH_S) * Math.PI) : 0;
   const cruise = pose === 'run' ? Math.sin(t * 2.6) * 0.6 : 0;
-  return { key, board, flip, squash: squash * (1 - push * 0.05), wobble, lift, bobY: push * 1.8 + cruise };
+  return { key, board, turn, squash: squash * (1 - dip * 0.03), wobble, lift, bobY: dip * 1.2 + cruise };
 }
 
 export function SkateRider({ cat, phase = 0, pose = 'run', rising = true, spin = null, bank = 0, cx = 28, floor = 44, size = 1, tint = null, variant = null, feel = null, shadow = true }) {
   const maskId = useId().replace(/:/g, '_');
   const sp = cat ? 'cat' : 'dog';
   const m = skateMotion({ cat, phase, pose, rising, spin, bank });
-  const set = BACK_FRAMES[sp];
-  const fr = set[m.key] || set[cat ? 'sit' : 'stand'];
+  const set = SKATE_FRAMES[sp];
+  const fr = set[m.key] || set.ride;
   const own = variant ? fr[variant] : null;
   const fill = own ? null : variant ? VARIANT_TINT[variant] : tint;
 
@@ -278,21 +271,19 @@ export function SkateRider({ cat, phase = 0, pose = 'run', rising = true, spin =
   const bh = bw * BOARD_AR[sp][m.board];
   const boardTop = floor - bh;
   const deckY = boardTop + bh * DECK_Y[m.board];
-  const k = cat ? 0.85 : 1.1; // pet size on the board
-  const w = fr.pw * UNIT[sp] * size * k;
-  const h = fr.ph * UNIT[sp] * size * k;
-  const bodyX = fr.fit ? fr.fit.neck[0] : 0.5;
+  const h = (cat ? 74 : 78) * size; // the pet's frame height on the board
+  const w = h * (set.pw / set.ph);
+  const ix = cx - fr.cx * w;
   const feetY = deckY - m.lift + m.bobY;
   const y0 = feetY - h;
 
-  const lean = bank * 0.7 + m.wobble;
   const petT = [];
+  const lean = bank * 0.7 + m.wobble;
   if (lean) petT.push(`rotate(${lean.toFixed(1)} ${cx} ${deckY})`);
+  if (m.turn) petT.push(`rotate(${m.turn.toFixed(0)} ${cx} ${(feetY - h * 0.4).toFixed(1)})`);
   if (m.squash !== 1) petT.push(`translate(0 ${feetY}) scale(1 ${m.squash.toFixed(3)}) translate(0 ${-feetY})`);
   const sq = squashStretch(feel, pose, rising);
   if (sq) petT.push(`translate(${cx} ${feetY}) scale(${sq[0].toFixed(3)} ${sq[1].toFixed(3)}) translate(${-cx} ${-feetY})`);
-  if (m.flip) petT.push(`translate(${2 * cx} 0) scale(-1 1)`);
-  const ix = cx - bodyX * w; // mirrored by the transform when flipped
 
   return (
     <G>
