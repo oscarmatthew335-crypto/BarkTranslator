@@ -32,6 +32,7 @@ const FX_ART = {
 };
 const FX_LIFE = { pop: 0.3, bonk: 0.45, plus: 0.4 };
 const MAX_FX = 8;
+const HIGH_LIFT = 2.4;
 const COUNTDOWN_ART = { 3: SPRITES.cd3, 2: SPRITES.cd2, 1: SPRITES.cd1 };
 const COUNTDOWN_STEP_MS = 500;
 const REDUCE_MOTION_START_MS = 400;
@@ -460,12 +461,16 @@ export default function RunnerScreen({
   const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce) : null;
 
   const renderProjectedThing = (e) => {
-    const proj = projectBehind(e.dx, e.trackLane ?? 0, e.y);
+    // The rider on its board is drawn about 2.4x taller than its hit box, so
+    // things to duck under are drawn that much higher too: at the rider's head,
+    // clearly above the ducked pose, instead of looking like they sit on the road.
+    const shownY = e.kind === 'obstacle' && e.y > 0 ? e.y * HIGH_LIFT : e.y;
+    const proj = projectBehind(e.dx, e.trackLane ?? 0, shownY);
     const drawY = proj.y + (e.type === 'bird' && !reduceMotion ? Math.sin(run.t * 8 + e.x * 0.05) * 4 * proj.scale : 0);
     const sScale = proj.scale * (e.kind === 'obstacle' ? 1.08 : 1.15);
     return (
       <G key={e.id}>
-        {e.y > 0 ? (
+        {shownY > 0 ? (
           <Ellipse
             cx={proj.x}
             cy={proj.groundY}
@@ -475,7 +480,7 @@ export default function RunnerScreen({
           />
         ) : null}
         <G transform={`translate(${proj.x} ${drawY}) scale(${sScale}) translate(${-e.w / 2} ${-e.h})`}>
-          <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} lift={e.y} t={run.t} />
+          <Thing kind={e.kind} type={e.type} w={e.w} h={e.h} lift={shownY} t={run.t} />
         </G>
       </G>
     );
