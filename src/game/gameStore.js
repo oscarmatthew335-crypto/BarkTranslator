@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { emptyProgress } from './progress';
 import { emptyWardrobe, migrateWardrobe } from './wardrobe';
 import { emptyStreak, emptyWeeklyBest } from './daily';
+import { emptyGiftState } from './dailyGift';
 import { emptyRoundState } from './treatRound';
 import { emptyLives } from './lives';
 import { emptyInterstitialState } from './interstitial';
@@ -88,6 +89,7 @@ export const emptyGameState = () => ({
   lives: emptyLives(),
   interstitial: emptyInterstitialState(),
   doubleTreats: emptyDoubleTreatsState(),
+  gift: emptyGiftState(),
   extraSavers: 0,
   store: emptyStoreState(),
   premium: false,
@@ -99,6 +101,7 @@ export const emptyGameState = () => ({
     reminderPromptCount: 0,
     reminderDismissedAt: null,
     reminderIgnoredCount: 0,
+    giftPromptV1: false,
     recentRunHours: [],
     livesEmptyAtClose: false,
     lastReminderDay: null,
@@ -148,6 +151,7 @@ export async function loadGame() {
         lives: { ...def.lives, ...(data.lives || {}) },
         interstitial: { ...def.interstitial, ...(data.interstitial || {}) },
         doubleTreats: { ...def.doubleTreats, ...(data.doubleTreats || {}) },
+        gift: { ...def.gift, ...(data.gift || {}) },
         extraSavers: Math.max(0, Math.floor(Number(data.extraSavers) || 0)),
         store: { ...def.store, ...(data.store || {}) },
         premium: Boolean(data.premium),

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, StatusBar, Linking, AppState, BackHandler } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useCameraPermissions } from 'expo-camera';
+import * as Notifications from 'expo-notifications';
 import { useFonts, Fredoka_400Regular, Fredoka_500Medium, Fredoka_600SemiBold, Fredoka_700Bold } from '@expo-google-fonts/fredoka';
 
 import { C } from './src/theme';
@@ -58,8 +59,26 @@ function PetApp() {
   const [autoStartRun, setAutoStartRun] = useState(false);
   const [petsOpen, setPetsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [openedFromReminder, setOpenedFromReminder] = useState(false);
+  const handledNotifRef = useRef(new Set());
   const cameraRef = useRef(null);
   const shareCardRef = useRef(null);
+
+  useEffect(() => {
+    const handleResponse = (resp) => {
+      if (!resp) return;
+      const id = resp.notification?.request?.identifier || 'last';
+      if (handledNotifRef.current.has(id)) return;
+      handledNotifRef.current.add(id);
+      const giftDay = resp.notification?.request?.content?.data?.giftDay;
+      track('notification_opened', giftDay ? { day: giftDay } : {});
+      setActiveTab('play');
+      setOpenedFromReminder(true);
+    };
+    Notifications.getLastNotificationResponseAsync?.().then(handleResponse).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener?.(handleResponse);
+    return () => sub?.remove?.();
+  }, []);
 
   // On-phone usage counts for the hidden numbers screen (never sent).
   useEffect(() => {
@@ -246,6 +265,8 @@ function PetApp() {
             backRef={playBackRef}
             autoStart={autoStartRun}
             onAutoStarted={() => setAutoStartRun(false)}
+            openedFromReminder={openedFromReminder}
+            onReminderSourceConsumed={() => setOpenedFromReminder(false)}
           />
         )}
       </View>

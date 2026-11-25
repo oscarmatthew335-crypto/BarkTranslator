@@ -41,6 +41,14 @@ export function __resetNotificationsForTests(status = 'granted') {
   permissionStatus = status;
 }
 
+export async function getLastNotificationResponseAsync() {
+  return null;
+}
+
+export function addNotificationResponseReceivedListener() {
+  return { remove() {} };
+}
+
 export default {
   SchedulableTriggerInputTypes,
   setNotificationHandler,
@@ -48,5 +56,7 @@ export default {
   requestPermissionsAsync,
   scheduleNotificationAsync,
   cancelScheduledNotificationAsync,
-  cancelAllScheduledNotificationsAsync
+  cancelAllScheduledNotificationsAsync,
+  getLastNotificationResponseAsync,
+  addNotificationResponseReceivedListener
 };
