@@ -134,12 +134,22 @@ export default function useGame(pet) {
     [applyUpdate]
   );
 
+  const updateGift = useCallback(
+    (fn) =>
+      applyUpdate((base) => ({
+        ...base,
+        gift: fn(base.gift || emptyGameState().gift)
+      })),
+    [applyUpdate]
+  );
+
   return {
     ready: Boolean(state),
     game,
     lives: state?.lives || emptyGameState().lives,
     interstitial: state?.interstitial || emptyGameState().interstitial,
     doubleTreats: state?.doubleTreats || emptyGameState().doubleTreats,
+    gift: state?.gift || emptyGameState().gift,
     extraSavers: Math.max(0, Number(state?.extraSavers) || 0),
     store: state?.store || emptyStoreState(),
     premium: Boolean(state?.premium),
@@ -150,6 +160,7 @@ export default function useGame(pet) {
     updateDoubleTreats,
     updateExtraSavers,
     updateStore,
+    updateGift,
     setPremium,
     setOptions
   };

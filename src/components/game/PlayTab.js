@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, StyleSheet, Alert, Share } from 'react-native';
+import { View, Text, Pressable, ScrollView, StyleSheet, Alert, Share } from 'react-native';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import Svg from 'react-native-svg';
@@ -40,10 +40,19 @@ import {
   advanceChallenge,
   CHALLENGE_REWARD
 } from '../../game/daily';
+import { giftStatus, claimDailyGift } from '../../game/dailyGift';
+import DailyGiftModal from './DailyGiftModal';
 import { buy, toggleWear, setColour, unlockItem } from '../../game/wardrobe';
 import { getCharacter, buyCharacter, unlockCharacter, equipCharacter, characterNudge } from '../../game/characters';
-import { shouldOfferReminderPrompt, syncStreakReminder, cancelStreakReminders, computeUsualPlayHour, settleIgnoredReminder } from '../../game/reminders';
-import { setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
+import {
+  shouldOfferReminderPrompt,
+  syncStreakReminder,
+  cancelStreakReminders,
+  requestReminderPermission,
+  computeUsualPlayHour,
+  settleIgnoredReminder
+} from '../../game/reminders';
+import { startGameAudio, gameEvent, setGameSound, setGameVibration, gameNewBest } from '../../game/sfx';
 import { pickRewardLine, pickCaughtLine } from '../../lines';
 import Wardrobe from './Wardrobe';
 import LivesSheet from './LivesSheet';
@@ -74,7 +83,7 @@ const MAX_WAITING_POWER_UPS = 4;
 
 // The Play tab: a little runner starring the active pet. Screens:
 // hub (map and extras) -> run -> end card -> next stage / map.
-export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef, autoStart = false, onAutoStarted }) {
+export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef, autoStart = false, onAutoStarted, openedFromReminder = false, onReminderSourceConsumed }) {
   const { t, lang } = useI18n();
   const reduceMotion = useReduceMotion();
   const {
@@ -83,6 +92,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     lives,
     interstitial,
     doubleTreats,
+    gift,
     extraSavers,
     store,
     premium,
@@ -91,6 +101,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     updateLives,
     updateInterstitial,
     updateDoubleTreats,
+    updateGift,
     updateExtraSavers,
     updateStore,
     setPremium,
@@ -99,9 +110,11 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const [screen, setScreen] = useState({ name: 'hub' });
   const [livesSheet, setLivesSheet] = useState({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
   const [premiumOpen, setPremiumOpen] = useState(false);
+  const [giftModalOpen, setGiftModalOpen] = useState(false);
   const [adsStatus, setAdsStatus] = useState(() => getAdsStatus());
   const [now, setNow] = useState(() => Date.now());
   const scoreCardRef = useRef(null);
+  const giftAutoShownRef = useRef(null);
   const moments = useMoments();
   const petMoments = moments.all.filter((m) => m.petId === pet.id);
   const faceUri = petMoments.find((m) => m.id === game?.faceMomentId)?.uri || null;
@@ -173,6 +186,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   }, [screen.name, onRunningChange]);
 
   useEffect(() => {
+    if (!ready || !game || !moments.ready) return;
+    if (screen.name !== 'hub' || autoStart) return;
+    if (giftAutoShownRef.current === today) return;
+    const gStat = giftStatus(gift, today);
+    if (!gStat.claimedToday) {
+      giftAutoShownRef.current = today;
+      setGiftModalOpen(true);
+      track('gift_shown', { day: gStat.nextDay, ...(openedFromReminder ? { source: 'reminder' } : {}) });
+    }
+  }, [ready, game, moments.ready, screen.name, autoStart, gift, today, openedFromReminder]);
+
+  useEffect(() => {
     if (!ready || !game) return;
     if (!options?.reminders) {
       cancelStreakReminders();
@@ -181,6 +206,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     const ignored = settleIgnoredReminder({
       lastReminderDay: options.lastReminderDay,
       lastPlayedDay: game.streak?.lastDay,
+      lastGiftClaimedDay: gift?.lastClaimedDay || null,
       today,
       ignoredCount: options.reminderIgnoredCount
     });
@@ -191,10 +217,12 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     syncStreakReminder({
       enabled: Boolean(options.reminders),
       streak: game.streak,
+      gift,
+      species: pet.species,
       today,
       petName: pet.name,
       translateFn: t,
-      runHours: options.recentRunHours,
+      runHours: options?.recentRunHours,
       livesEmptyAtClose: Boolean(options.livesEmptyAtClose),
       ignoredCount: options.reminderIgnoredCount || 0,
       lastScheduledDay: options.lastReminderDay,
@@ -208,12 +236,15 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     ready,
     game?.streak?.count,
     game?.streak?.lastDay,
+    gift?.day,
+    gift?.lastClaimedDay,
     options?.reminders,
     options?.lastReminderDay,
     options?.recentRunHours,
     options?.livesEmptyAtClose,
     options?.reminderIgnoredCount,
     pet.name,
+    pet.species,
     today,
     t,
     setOptions
@@ -542,7 +573,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   // handled. During a run, RunnerScreen handles back itself (pause).
   if (backRef) {
     backRef.current = () => {
-      if (livesSheet.open || premiumOpen) return false; // their Modals close themselves
+      if (livesSheet.open || premiumOpen || giftModalOpen) return false; // their Modals close themselves
       if (screen.name === 'hub') return false;
       if (screen.name === 'run') return true;
       setScreen({ name: 'hub' });
@@ -613,6 +644,92 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       setScreen((sc) => (sc.name === 'end' ? { ...sc, doubleClaimed: true } : sc));
     }
   }, [screen, updateDoubleTreats, updateGame]);
+
+  // Guards against a double tap (Collect, then the backdrop) before the new
+  // gift state has rendered, which would add the treats twice.
+  const giftClaimedDayRef = useRef(null);
+  const handleCollectGift = useCallback(() => {
+    if (giftClaimedDayRef.current === today) return;
+    const res = claimDailyGift(gift, today);
+    if (!res.claimed) return;
+    giftClaimedDayRef.current = today;
+    updateGift(() => res.gift);
+    updateGame((g) => ({
+      ...g,
+      bank: (Number(g.bank) || 0) + res.treats,
+      lifetimeTreats: (Number(g.lifetimeTreats) || 0) + res.treats
+    }));
+    if (res.extraSavers > 0) updateExtraSavers((n) => n + res.extraSavers);
+    setOptions({ reminderIgnoredCount: 0, lastReminderDay: null });
+    startGameAudio(options?.sound, options?.vibration !== false).then(() => gameEvent('collect'));
+    track('gift_claimed', {
+      day: res.day,
+      amount: res.treats,
+      after_gap: res.afterGap ? 1 : 0,
+      ...(openedFromReminder ? { source: 'reminder' } : {})
+    });
+    if (openedFromReminder) onReminderSourceConsumed?.();
+    const offerPrompt = shouldOfferReminderPrompt({
+      giftClaimed: true,
+      giftPromptV1: Boolean(options?.giftPromptV1),
+      streakCount: streakShown(game?.streak || {}, today, extraSavers),
+      promptShown: Boolean(options?.reminderPromptShown),
+      promptCount: options?.reminderPromptCount ?? (options?.reminderPromptShown ? 1 : 0),
+      promptDismissedAt: options?.reminderDismissedAt,
+      remindersEnabled: Boolean(options?.reminders),
+      nowMs: Date.now()
+    });
+    if (offerPrompt) {
+      track('reminder_prompt_shown', { day: res.day });
+    }
+  }, [gift, today, updateGift, updateGame, updateExtraSavers, setOptions, options, openedFromReminder, onReminderSourceConsumed, game?.streak, extraSavers]);
+
+  const handleAcceptReminder = useCallback(async () => {
+    const granted = await requestReminderPermission();
+    track('reminder_permission', { granted });
+    const nextCount = (options?.reminderPromptCount || 0) + 1;
+    if (granted) {
+      const res = await syncStreakReminder({
+        enabled: true,
+        streak: game?.streak,
+        gift,
+        species: pet.species,
+        today,
+        petName: pet.name,
+        translateFn: t,
+        runHours: options?.recentRunHours,
+        livesEmptyAtClose: Boolean(options?.livesEmptyAtClose),
+        ignoredCount: 0,
+        requestPermissionOnSchedule: false
+      });
+      setOptions({
+        reminders: true,
+        reminderPromptShown: true,
+        reminderPromptCount: nextCount,
+        giftPromptV1: true,
+        reminderIgnoredCount: 0,
+        lastReminderDay: res?.scheduledForDay || null
+      });
+      track('reminder_enabled', { hour: computeUsualPlayHour(options?.recentRunHours) });
+    } else {
+      setOptions({
+        reminders: false,
+        reminderPromptShown: true,
+        reminderPromptCount: nextCount,
+        reminderDismissedAt: Date.now(),
+        giftPromptV1: true
+      });
+    }
+  }, [options, game?.streak, gift, pet.species, pet.name, today, t, setOptions]);
+
+  const handleDismissReminder = useCallback(() => {
+    setOptions({
+      reminderPromptShown: true,
+      reminderPromptCount: (options?.reminderPromptCount || 0) + 1,
+      reminderDismissedAt: Date.now(),
+      giftPromptV1: true
+    });
+  }, [options?.reminderPromptCount, setOptions]);
 
   if (!ready || !game || !moments.ready) return <View style={s.container} />;
 
@@ -744,6 +861,18 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
       />
     );
 
+  const giftStat = giftStatus(gift, today);
+  const showGiftReminderPrompt = shouldOfferReminderPrompt({
+    giftClaimed: giftStat.claimedToday,
+    giftPromptV1: Boolean(options?.giftPromptV1),
+    streakCount: game?.streak?.count || 0,
+    promptShown: Boolean(options?.reminderPromptShown),
+    promptCount: options?.reminderPromptCount ?? (options?.reminderPromptShown ? 1 : 0),
+    promptDismissedAt: options?.reminderDismissedAt,
+    nowMs: Date.now(),
+    remindersEnabled: Boolean(options?.reminders)
+  });
+
   const modals = (
     <>
       <LivesSheet
@@ -763,6 +892,21 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
         premium={premium}
         onGranted={(val) => setPremium(Boolean(val))}
         onClose={() => setPremiumOpen(false)}
+      />
+      <DailyGiftModal
+        visible={giftModalOpen}
+        day={giftStat.claimedToday ? giftStat.currentDay : giftStat.nextDay}
+        reward={giftStat.reward}
+        tomorrow={giftStat.tomorrow}
+        daysToBigGift={giftStat.daysToBigGift}
+        claimedToday={giftStat.claimedToday}
+        treatEmoji={species.id === 'cat' ? '🐟' : '🦴'}
+        showReminderPrompt={showGiftReminderPrompt}
+        reduceMotion={reduceMotion}
+        onCollect={handleCollectGift}
+        onAcceptReminder={handleAcceptReminder}
+        onDismissReminder={handleDismissReminder}
+        onClose={() => setGiftModalOpen(false)}
       />
     </>
   );
@@ -867,14 +1011,6 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
   const treatEmoji = species.id === 'cat' ? '🐟' : '🦴';
   const streak = streakShown(game.streak, today, extraSavers);
   const upcomingStreak = nextStreakReward(streak);
-  const showReminderPrompt = shouldOfferReminderPrompt({
-    streakCount: streak,
-    promptShown: Boolean(options?.reminderPromptShown),
-    promptCount: options?.reminderPromptCount ?? (options?.reminderPromptShown ? 1 : 0),
-    promptDismissedAt: options?.reminderDismissedAt,
-    nowMs: Date.now(),
-    remindersEnabled: options?.reminders
-  });
   const challenge = game.challenge?.day === today ? game.challenge : challengeFor(today, pet.species, game.progress);
   const dailyBest = game.daily.day === today ? game.daily.best : null;
   const continueStage = suggestedStage(game.progress, pet.species);
@@ -910,6 +1046,20 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
             {streak > 0 ? t('game.streak.days', { n: streak }) : t('game.streak.none')}
             {streak > 0 && saverAvailable(game.streak, today, extraSavers) ? ` · ${t('game.streak.saverNote')}` : ''}
           </Text>
+          <Pressable
+            onPress={() => {
+              setGiftModalOpen(true);
+              if (!giftStat.claimedToday) track('gift_shown', { day: giftStat.nextDay });
+            }}
+            style={[s.giftChip, !giftStat.claimedToday && s.giftChipReady]}
+            accessibilityRole="button"
+          >
+            <Text style={s.giftChipText}>
+              {giftStat.claimedToday
+                ? t('game.gift.chipCollected', { day: giftStat.currentDay })
+                : t('game.gift.chipReady', { day: giftStat.nextDay })}
+            </Text>
+          </Pressable>
           {upcomingStreak && (
             <Text style={s.heroSmall}>
               {upcomingStreak.item
@@ -929,52 +1079,6 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
           )}
         </View>
       </Sticker>
-
-      {showReminderPrompt && (
-        <Sticker radius={20} color={C.paper} style={{ marginTop: 12 }} innerStyle={s.photoCard}>
-          <Text style={s.photoTitle}>🔔 {t('game.reminder.promptTitle')}</Text>
-          <Text style={s.photoSub}>{t('game.reminder.promptSub', { petName: pet.name })}</Text>
-          <View style={s.row}>
-            <StickerButton
-              small
-              color={C.mint}
-              label={t('game.reminder.yesPlease')}
-              onPress={async () => {
-                await syncStreakReminder({
-                  enabled: true,
-                  streak: game.streak,
-                  today,
-                  petName: pet.name,
-                  translateFn: t,
-                  runHours: options?.recentRunHours,
-                  livesEmptyAtClose: Boolean(options?.livesEmptyAtClose),
-                  ignoredCount: 0,
-                  requestPermissionOnSchedule: true
-                });
-                setOptions({
-                  reminders: true,
-                  reminderPromptShown: true,
-                  reminderPromptCount: (options?.reminderPromptCount || 0) + 1,
-                  lastReminderDay: null
-                });
-                track('reminder_enabled', { hour: computeUsualPlayHour(options?.recentRunHours) });
-              }}
-            />
-            <StickerButton
-              small
-              color={C.paper}
-              label={t('game.photo.notNow')}
-              onPress={() =>
-                setOptions({
-                  reminderPromptShown: true,
-                  reminderPromptCount: (options?.reminderPromptCount || 0) + 1,
-                  reminderDismissedAt: Date.now()
-                })
-              }
-            />
-          </View>
-        </Sticker>
-      )}
 
       <View style={{ marginTop: 14 }}>
         <ModeCards species={pet.species} bestScores={game.bestScores} livesStatus={livesStatus} onPlay={startStage} />
@@ -1108,6 +1212,20 @@ const s = StyleSheet.create({
   hero: { padding: SP.cardPad, flexDirection: 'row', alignItems: 'center', gap: 14 },
   heroLine: { fontFamily: F.bold, fontSize: 20, color: C.ink, fontVariant: ['tabular-nums'] },
   heroSmall: { fontFamily: F.medium, fontSize: 13, color: C.ink, lineHeight: 18 },
+  giftChip: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: C.ink,
+    backgroundColor: C.bg
+  },
+  giftChipReady: {
+    backgroundColor: C.butter
+  },
+  giftChipText: { fontFamily: F.bold, fontSize: 12, color: C.ink },
   footnote: { fontFamily: F.regular, fontSize: 12, color: C.inkSoft, marginTop: 12, lineHeight: 17 },
   ready: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 4 },
   readyText: { fontFamily: F.medium, fontSize: 13, color: C.inkSoft },

@@ -12,6 +12,8 @@ import useGame from '../game/useGame';
 import { restorePremium } from '../game/purchases';
 import { getAdsStatus, openPrivacyOptions } from '../game/ads';
 import { count } from '../game/counters';
+import { requestReminderPermission, computeUsualPlayHour } from '../game/reminders';
+import { track } from '../game/analytics';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 export const PRIVACY_URL = API ? `${API}/privacy` : null;
@@ -178,7 +180,26 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 title={t('settings.streakReminderTitle')}
                 sub={t('settings.streakReminderSub', { petName: pet.name })}
                 value={Boolean(options?.reminders)}
-                onChange={(v) => setOptions({ reminders: Boolean(v), reminderPromptShown: true, lastReminderDay: null })}
+                onChange={async (v) => {
+                  if (v) {
+                    const granted = await requestReminderPermission();
+                    track('reminder_permission', { granted });
+                    if (granted) {
+                      setOptions({
+                        reminders: true,
+                        reminderPromptShown: true,
+                        giftPromptV1: true,
+                        reminderIgnoredCount: 0,
+                        lastReminderDay: null
+                      });
+                      track('reminder_enabled', { hour: computeUsualPlayHour(options?.recentRunHours) });
+                    } else {
+                      setOptions({ reminders: false, reminderPromptShown: true, giftPromptV1: true });
+                    }
+                  } else {
+                    setOptions({ reminders: false, lastReminderDay: null });
+                  }
+                }}
                 divider
               />
               <Row
