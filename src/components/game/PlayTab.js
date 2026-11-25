@@ -645,9 +645,14 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     }
   }, [screen, updateDoubleTreats, updateGame]);
 
+  // Guards against a double tap (Collect, then the backdrop) before the new
+  // gift state has rendered, which would add the treats twice.
+  const giftClaimedDayRef = useRef(null);
   const handleCollectGift = useCallback(() => {
+    if (giftClaimedDayRef.current === today) return;
     const res = claimDailyGift(gift, today);
     if (!res.claimed) return;
+    giftClaimedDayRef.current = today;
     updateGift(() => res.gift);
     updateGame((g) => ({
       ...g,
