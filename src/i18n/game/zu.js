@@ -5,7 +5,7 @@
 export default {
   'tab.play': 'Dlala',
   'game.title': 'Dlala no-{petName}',
-  'game.subtitle': 'Gijima, gxuma futhi uqoqe ukudla okumnandi. Kufushane: isiteji esisodwa sithatha cishe umzuzu.',
+  'game.subtitle': 'Gibela, gxuma futhi uqoqe ukudla okumnandi. Kufushane: isiteji esisodwa sithatha cishe umzuzu.',
   'game.playStage': 'Dlala i-{stage}',
   'game.pause': 'Misa kancane',
   'game.paused': 'Kumisiwe',
@@ -372,6 +372,9 @@ export default {
   'settings.streakReminderSub': "Isikhumbuzo esisodwa ngesikhathi sakho esijwayelekile uma isipho esilandelayo sika-{petName} sesilungile.",
   'settings.jumpDuckButtonsTitle': "Bonisa izinkinobho zokulawula",
   'settings.jumpDuckButtonsSub': "Izinkinobho zesobunxele, zesokudla, zokugxuma nokukhothama (ukuswayipha kusebenza njalo).",
+  'settings.reduceMotionTitle': "Nciphisa ukunyakaza",
+  'settings.reduceMotionSub': "Gcina ithrekhi iqondile futhi iyisicaba (isebenzisa uhlelo lwefoni ngokuzenzakalelayo).",
+  'game.placeBanner': "{emoji} {place}!",
   'game.end.weeklyBest': "Okuhamba phambili kwaleli sonto: {n}",
   'game.end.newWeeklyBest': "🎉 Okuhamba phambili okusha kwesonto!",
   'game.share.btn': "Yabelana",

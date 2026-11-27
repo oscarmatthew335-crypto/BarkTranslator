@@ -7,7 +7,7 @@ import { C, F, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
 import { Sticker, StickerButton, ScreenTitle, useReduceMotion } from '../ui';
 import useGame from '../../game/useGame';
-import { shouldShowHowTo, recordModeRun } from '../../game/gameStore';
+import { shouldShowHowTo, recordModeRun, effectiveReduceMotion } from '../../game/gameStore';
 import { recordStage, nextStageAfter, totalStars, suggestedStage, isUnlocked } from '../../game/progress';
 import { stagesFor, dailyStage, milestonesReached, milestoneReward } from '../../game/stages';
 import { hashString } from '../../game/random';
@@ -85,7 +85,7 @@ const MAX_WAITING_POWER_UPS = 4;
 // hub (map and extras) -> run -> end card -> next stage / map.
 export default function PlayTab({ pet, species, breed, history, onTeach, onUpdatePet, shareClips, settings, onUpdateSettings, onRunningChange, backRef, autoStart = false, onAutoStarted, openedFromReminder = false, onReminderSourceConsumed }) {
   const { t, lang } = useI18n();
-  const reduceMotion = useReduceMotion();
+  const systemReduceMotion = useReduceMotion();
   const {
     ready,
     game,
@@ -107,6 +107,7 @@ export default function PlayTab({ pet, species, breed, history, onTeach, onUpdat
     setPremium,
     setOptions
   } = useGame(pet);
+  const reduceMotion = effectiveReduceMotion(options, systemReduceMotion);
   const [screen, setScreen] = useState({ name: 'hub' });
   const [livesSheet, setLivesSheet] = useState({ open: false, pendingStage: null, pendingPowerUps: [], fromReplay: false });
   const [premiumOpen, setPremiumOpen] = useState(false);

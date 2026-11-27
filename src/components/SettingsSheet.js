@@ -9,11 +9,13 @@ import { useI18n, LANGUAGE_OPTIONS } from '../i18n';
 import GameStatsSheet from './game/GameStatsSheet';
 import PremiumSheet from './game/PremiumSheet';
 import useGame from '../game/useGame';
+import { effectiveReduceMotion } from '../game/gameStore';
 import { restorePremium } from '../game/purchases';
 import { getAdsStatus, openPrivacyOptions } from '../game/ads';
 import { count } from '../game/counters';
 import { requestReminderPermission, computeUsualPlayHour } from '../game/reminders';
 import { track } from '../game/analytics';
+import { useReduceMotion } from './ui';
 
 const API = (process.env.EXPO_PUBLIC_PAWLINGO_API || '').replace(/\/+$/, '');
 export const PRIVACY_URL = API ? `${API}/privacy` : null;
@@ -26,6 +28,7 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
   const [statsOpen, setStatsOpen] = useState(false);
   const [premiumOpen, setPremiumOpen] = useState(false);
   const { premium, options, setPremium, setOptions } = useGame(pet);
+  const systemReduceMotion = useReduceMotion();
   const adsStatus = getAdsStatus();
   useEffect(() => {
     getInstallId().then(setInstallId);
@@ -207,6 +210,17 @@ export default function SettingsSheet({ visible, onClose, data, onShowNotice }) 
                 sub={t('settings.jumpDuckButtonsSub')}
                 value={Boolean(options?.showJumpDuckButtons)}
                 onChange={(v) => setOptions({ showJumpDuckButtons: Boolean(v) })}
+                divider
+              />
+              <Row
+                title={t('settings.reduceMotionTitle')}
+                sub={t('settings.reduceMotionSub')}
+                value={effectiveReduceMotion(options, systemReduceMotion)}
+                onChange={(v) => {
+                  const on = Boolean(v);
+                  setOptions({ reduceMotion: on });
+                  track('reduce_motion', { on });
+                }}
                 divider
               />
             </View>

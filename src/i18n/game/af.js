@@ -5,7 +5,7 @@
 export default {
   'tab.play': 'Speel',
   'game.title': 'Speel saam met {petName}',
-  'game.subtitle': "Hardloop, spring en tel lekkernye op. Kort en kragtig: een vlak duur omtrent 'n minuut.",
+  'game.subtitle': "Ry, spring en tel lekkernye op. Kort en kragtig: een vlak duur omtrent 'n minuut.",
   'game.playStage': 'Speel {stage}',
   'game.pause': 'Pouse',
   'game.paused': 'Gepouseer',
@@ -372,6 +372,9 @@ export default {
   'settings.streakReminderSub': "Een herinnering op jou gewone tyd wanneer {petName} se volgende geskenk gereed is.",
   'settings.jumpDuckButtonsTitle': "Wys beheerknoppies",
   'settings.jumpDuckButtonsSub': "Links-, regs-, spring- en koesknoppies tydens lopies (vee werk altyd).",
+  'settings.reduceMotionTitle': "Verminder beweging",
+  'settings.reduceMotionSub': "Hou die baan reguit en plat (gebruik by verstek jou foon se instelling).",
+  'game.placeBanner': "{emoji} {place}!",
   'game.end.weeklyBest': "Hierdie week se beste: {n}",
   'game.end.newWeeklyBest': "🎉 Nuwe weeklikse beste!",
   'game.share.btn': "Deel",

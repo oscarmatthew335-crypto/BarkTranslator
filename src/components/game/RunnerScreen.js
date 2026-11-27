@@ -4,10 +4,12 @@ import Svg, { G, Rect, Ellipse, Text as SvgText, Image as SvgImage, ClipPath, De
 import { C, F, INK_WIDTH, R, SP } from '../../theme';
 import { useI18n } from '../../i18n';
 import { VIEW_W, PLAYER_X, HIT_INVULN_S, POWER_DURATION, CHASE_GAP_MAX, currentSpeed, newRun, step, visible, resultOf, canContinueRun, continueRun, laneLean } from '../../game/engine';
+import { trackCurveAt, trackHillAt } from '../../game/chunks';
+import { placeAtDist, PLACE_EMOJIS } from '../../game/stages';
 import { getColour } from '../../game/wardrobe';
 import { runGoalProgress } from '../../game/runFeel';
 import { startGameAudio, gameEvent, setGameReduceMotion } from '../../game/sfx';
-import { track as trackEvent } from '../../game/analytics';
+import { track as trackEvent, runModeFor } from '../../game/analytics';
 import { count } from '../../game/counters';
 import { isRewardedReady, showRewardedAd } from '../../game/ads';
 import PetSprite, { SPIN_S } from './PetSprite';
@@ -98,6 +100,9 @@ export default function RunnerScreen({
   const { t } = useI18n();
   const runRef = useRef(null);
   if (!runRef.current) runRef.current = newRun(stage, { seed, startPowerUps, reduceMotion, firstRun: runNumber === 1 });
+  const initialPlace = stage.endless || stage.chase ? placeAtDist(0) : stage.theme || 'garden';
+  const placeFxRef = useRef({ current: initialPlace, prev: null, fadeStartT: 0, bannerUntilT: -1 });
+  const reachedPlacesRef = useRef(new Set([initialPlace]));
   const fxRef = useRef([]);
   const goUntilRef = useRef(0);
   const newBestAtRef = useRef(null);
@@ -220,7 +225,11 @@ export default function RunnerScreen({
           let pool = particlesRef.current
             .map((p) => ({ ...p, age: p.age + dt, x: p.x + p.vx * dt, y: p.y + p.vy * dt }))
             .filter((p) => p.age < p.life);
-          const pProj = projectBehind(0, next.player.lanePos ?? 0, next.player.height);
+          const pOpts = {
+            curve: trackCurveAt(next.dist, next.seed, { reduceMotion }),
+            hillOffset: trackHillAt(next.dist, next.seed, { reduceMotion })
+          };
+          const pProj = projectBehind(0, next.player.lanePos ?? 0, next.player.height, pOpts);
           for (const ev of next.events) {
             if (ev === 'jump' || ev === 'doubleJump') pool = spawnParticles(pool, ev, pProj.x, pProj.y - 4);
             else if (ev === 'land' || ev === 'splash') pool = spawnParticles(pool, ev, pProj.x, pProj.groundY - 2);
@@ -388,6 +397,23 @@ export default function RunnerScreen({
   }, []);
 
   const run = runRef.current;
+  const activePlace = run.stage.endless || run.stage.chase ? run.place || placeAtDist(run.dist) : run.stage.theme || 'garden';
+  if ((run.stage.endless || run.stage.chase) && activePlace !== placeFxRef.current.current) {
+    const prevPlace = placeFxRef.current.current;
+    placeFxRef.current = { current: activePlace, prev: prevPlace, fadeStartT: run.t, bannerUntilT: run.t + 2.0 };
+    if (!reachedPlacesRef.current.has(activePlace)) {
+      reachedPlacesRef.current.add(activePlace);
+      trackRef.current?.('place_reached', { place: activePlace, mode: runModeFor(stage) });
+    }
+  }
+  const PLACE_FADE_S = reduceMotion ? 0.01 : 1.5;
+  const fadeElapsed = run.t - placeFxRef.current.fadeStartT;
+  const fadingPlace = Boolean(placeFxRef.current.prev) && fadeElapsed < PLACE_FADE_S;
+  const placeFadeAlpha = fadingPlace ? Math.max(0, Math.min(1, fadeElapsed / PLACE_FADE_S)) : 1;
+  const showPlaceBanner = (run.stage.endless || run.stage.chase) && run.t < placeFxRef.current.bannerUntilT;
+  const curve = trackCurveAt(run.dist, run.seed, { reduceMotion });
+  const hillOffset = trackHillAt(run.dist, run.seed, { reduceMotion });
+  const projOpts = { curve, hillOffset };
   const things = visible(run);
   const hurtFresh = run.invuln > HIT_INVULN_S - 0.25 && run.hits > 0;
   const nearMissFresh = (run.nearMissTimer || 0) > 0;
@@ -441,7 +467,7 @@ export default function RunnerScreen({
   const entitiesBehind = projected.filter((e) => e.dx <= 8);
 
   const playerLanePos = run.player.lanePos ?? 0;
-  const playerProj = projectBehind(0, playerLanePos, run.player.height);
+  const playerProj = projectBehind(0, playerLanePos, run.player.height, projOpts);
   // Leans into a lane change: peaks early, upright again on arrival.
   const playerBank = reduceMotion ? 0 : laneLean(run.player);
   const feel = reduceMotion ? null : { jumpT: run.player.justJumpedT, landT: run.player.justLandedT, fastFall: run.player.fastFall };
@@ -458,14 +484,14 @@ export default function RunnerScreen({
   // (higher on screen) as the gap shrinks, never on top of the pet.
   const chaserDx = -(0.26 + 0.09 * progress) * VISIBLE_DEPTH;
   const chaserLane = playerLanePos;
-  const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce) : null;
+  const chaserProj = showChaser ? projectBehind(chaserDx, chaserLane, chaserBounce, projOpts) : null;
 
   const renderProjectedThing = (e) => {
     // The rider on its board is drawn about 2.4x taller than its hit box, so
     // things to duck under are drawn that much higher too: at the rider's head,
     // clearly above the ducked pose, instead of looking like they sit on the road.
     const shownY = e.kind === 'obstacle' && e.y > 0 ? e.y * HIGH_LIFT : e.y;
-    const proj = projectBehind(e.dx, e.trackLane ?? 0, shownY);
+    const proj = projectBehind(e.dx, e.trackLane ?? 0, shownY, projOpts);
     const drawY = proj.y + (e.type === 'bird' && !reduceMotion ? Math.sin(run.t * 8 + e.x * 0.05) * 4 * proj.scale : 0);
     const sScale = proj.scale * (e.kind === 'obstacle' ? 1.08 : 1.15);
     return (
@@ -509,14 +535,20 @@ export default function RunnerScreen({
                   </ClipPath>
                 </Defs>
                 <G transform={shake ? `translate(${shake} 0)` : undefined}>
-                  <Backdrop theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
-                  <Midground theme={stage.theme} dist={run.dist} reduceMotion={reduceMotion} />
+                  {fadingPlace ? (
+                    <>
+                      <Backdrop theme={placeFxRef.current.prev} dist={run.dist} reduceMotion={reduceMotion} hillOffset={hillOffset} />
+                      <Midground theme={placeFxRef.current.prev} dist={run.dist} reduceMotion={reduceMotion} curve={curve} hillOffset={hillOffset} />
+                    </>
+                  ) : null}
+                  <Backdrop theme={activePlace} dist={run.dist} reduceMotion={reduceMotion} hillOffset={hillOffset} opacity={fadingPlace ? placeFadeAlpha : 1} />
+                  <Midground theme={activePlace} dist={run.dist} reduceMotion={reduceMotion} curve={curve} hillOffset={hillOffset} opacity={fadingPlace ? placeFadeAlpha : 1} />
                   {goalDx != null && goalDx <= VISIBLE_DEPTH && goalDx >= -20 ? (
                     (() => {
-                      const gp = projectBehind(goalDx, 0, 0);
+                      const gp = projectBehind(goalDx, 0, 0, projOpts);
                       return (
                         <G transform={`translate(${gp.x} ${gp.groundY}) scale(${gp.scale})`}>
-                          <Goal theme={stage.theme} />
+                          <Goal theme={activePlace} />
                         </G>
                       );
                     })()
@@ -525,8 +557,8 @@ export default function RunnerScreen({
                   {dashAlertItem ? (
                     <SvgImage
                       href={SPRITES.impactAlert}
-                      x={projectBehind(dashAlertItem.x - run.dist, dashAlertItem.trackLane ?? 0, 0).x - 16}
-                      y={HORIZON_Y - 26}
+                      x={projectBehind(dashAlertItem.x - run.dist, dashAlertItem.trackLane ?? 0, 0, projOpts).x - 16}
+                      y={HORIZON_Y + hillOffset - 26}
                       width={32}
                       height={24}
                       preserveAspectRatio="xMidYMid meet"
@@ -748,6 +780,18 @@ export default function RunnerScreen({
                     </Text>
                   </View>
                 ) : null}
+              </View>
+            ) : null}
+            {showPlaceBanner ? (
+              <View style={s.placeBannerWrap} pointerEvents="none">
+                <View style={s.placeBannerPill}>
+                  <Text style={s.placeBannerText}>
+                    {t('game.placeBanner', {
+                      emoji: PLACE_EMOJIS[activePlace] || '🐾',
+                      place: t(`game.place.${activePlace}`)
+                    })}
+                  </Text>
+                </View>
               </View>
             ) : null}
           </View>
@@ -1167,6 +1211,16 @@ const s = StyleSheet.create({
   },
   goalChipDone: { backgroundColor: C.limeDark },
   goalChipText: { fontFamily: F.semibold, fontSize: 11, color: C.paper },
+  placeBannerWrap: { alignItems: 'center', marginTop: 4 },
+  placeBannerPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 4,
+    borderRadius: R.pill,
+    backgroundColor: C.butter,
+    borderWidth: 2,
+    borderColor: C.ink
+  },
+  placeBannerText: { fontFamily: F.bold, fontSize: 13, color: C.ink },
   vertMeterWrap: {
     position: 'absolute',
     left: 10,

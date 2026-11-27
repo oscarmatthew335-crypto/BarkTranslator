@@ -4,7 +4,7 @@
 export default {
   'tab.play': 'Play',
   'game.title': 'Play with {petName}',
-  'game.subtitle': 'Run, jump and collect treats. Short and sweet: one stage takes about a minute.',
+  'game.subtitle': 'Ride, jump and collect treats. Short and sweet: one stage takes about a minute.',
   'game.playStage': 'Play {stage}',
   'game.pause': 'Pause',
   'game.paused': 'Paused',
@@ -371,6 +371,9 @@ export default {
   'settings.streakReminderSub': "One reminder at your usual time when {petName}'s next daily gift is ready.",
   'settings.jumpDuckButtonsTitle': "Show control buttons",
   'settings.jumpDuckButtonsSub': "Left, right, jump and duck buttons during runs (swiping always works).",
+  'settings.reduceMotionTitle': "Reduce motion",
+  'settings.reduceMotionSub': "Keep the track straight and flat (uses your phone's setting by default).",
+  'game.placeBanner': "{emoji} {place}!",
   'game.end.weeklyBest': "This week's best: {n}",
   'game.end.newWeeklyBest': "🎉 New weekly best!",
   'game.share.btn': "Share",
