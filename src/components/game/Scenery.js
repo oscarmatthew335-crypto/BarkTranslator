@@ -122,6 +122,9 @@ export const THEMES = {
   vet: {
     painted: true,
     bg: 'vetBg',
+    // Indoor paintings: the back wall meets the floor about halfway down,
+    // not at the outdoor grass line (74%).
+    bgHorizon: 0.51,
     arch: 'finishArchVet',
     top: '#F1DDC5',
     roadside: 'vet',
@@ -139,6 +142,7 @@ export const THEMES = {
   home: {
     painted: true,
     bg: 'homeBg',
+    bgHorizon: 0.52,
     top: '#F0DCC4',
     roadside: 'home',
     arch: 'finishArchHome',
@@ -276,6 +280,11 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
   const horizonY = HORIZON_Y + (Number(hillOffset) || 0);
 
   if (th.painted) {
+    // Line the painting's own horizon up with the road's. A picture whose
+    // horizon is higher up is drawn bigger, so it still fills the tallest view.
+    const frac = th.bgHorizon || SKY_HORIZON;
+    const bgH = Math.max(SKY_H, (SKY_H * SKY_HORIZON) / frac);
+    const bgW = bgH * (1080 / 1920);
     return (
       <G opacity={opacity}>
         {/* Seamless sky extension above the painting */}
@@ -285,10 +294,10 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
             view (2.4:1) shows no gap above it, and the sides crop evenly. */}
         <SvgImage
           href={SPRITES[th.bg || 'skyBg']}
-          x={CENTER_X - SKY_W / 2}
-          y={horizonY - SKY_H * SKY_HORIZON}
-          width={SKY_W}
-          height={SKY_H}
+          x={CENTER_X - bgW / 2}
+          y={horizonY - bgH * frac}
+          width={bgW}
+          height={bgH}
           preserveAspectRatio="none"
         />
       </G>
