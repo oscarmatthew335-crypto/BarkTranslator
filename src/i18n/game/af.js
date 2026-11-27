@@ -5,7 +5,7 @@
 export default {
   'tab.play': 'Speel',
   'game.title': 'Speel saam met {petName}',
-  'game.subtitle': "Hardloop, spring en tel lekkernye op. Kort en kragtig: een vlak duur omtrent 'n minuut.",
+  'game.subtitle': "Ry, spring en tel lekkernye op. Kort en kragtig: een vlak duur omtrent 'n minuut.",
   'game.playStage': 'Speel {stage}',
   'game.pause': 'Pouse',
   'game.paused': 'Gepouseer',

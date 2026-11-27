@@ -4,7 +4,7 @@
 export default {
   'tab.play': 'Play',
   'game.title': 'Play with {petName}',
-  'game.subtitle': 'Run, jump and collect treats. Short and sweet: one stage takes about a minute.',
+  'game.subtitle': 'Ride, jump and collect treats. Short and sweet: one stage takes about a minute.',
   'game.playStage': 'Play {stage}',
   'game.pause': 'Pause',
   'game.paused': 'Paused',

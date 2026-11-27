@@ -5,7 +5,7 @@
 export default {
   'tab.play': 'Dlala',
   'game.title': 'Dlala no-{petName}',
-  'game.subtitle': 'Gijima, gxuma futhi uqoqe ukudla okumnandi. Kufushane: isiteji esisodwa sithatha cishe umzuzu.',
+  'game.subtitle': 'Gibela, gxuma futhi uqoqe ukudla okumnandi. Kufushane: isiteji esisodwa sithatha cishe umzuzu.',
   'game.playStage': 'Dlala i-{stage}',
   'game.pause': 'Misa kancane',
   'game.paused': 'Kumisiwe',
