@@ -1,37 +1,59 @@
 import React, { memo } from 'react';
-import { G, Rect, Circle, Ellipse, Path, Polygon, Line, Defs, LinearGradient, Stop, Image as SvgImage } from 'react-native-svg';
+import { G, Rect, Circle, Ellipse, Path, Polygon, Polyline, Line, Defs, LinearGradient, Stop, Image as SvgImage } from 'react-native-svg';
 import { C } from '../../theme';
 import { parallaxOffsets } from '../../game/parallax';
+import {
+  CAM_W,
+  CENTER_X,
+  HORIZON_Y,
+  PLAYER_GROUND_Y,
+  VISIBLE_DEPTH,
+  LANE_WIDTH_NEAR,
+  LANE_WIDTH_FAR,
+  projectBehind
+} from '../../game/projection';
 import { SPRITES } from './sprites';
 
-export { parallaxOffsets };
-
-export const CAM_W = 276;
-export const CENTER_X = 138;
-export const HORIZON_Y = 62;
-export const PLAYER_GROUND_Y = 208;
-export const VISIBLE_DEPTH = 480;
-export const LANE_WIDTH_NEAR = 68;
-export const LANE_WIDTH_FAR = 11;
+export {
+  parallaxOffsets,
+  CAM_W,
+  CENTER_X,
+  HORIZON_Y,
+  PLAYER_GROUND_Y,
+  VISIBLE_DEPTH,
+  LANE_WIDTH_NEAR,
+  LANE_WIDTH_FAR,
+  projectBehind
+};
 
 const INK = C.ink;
 
-// Projects a world offset dx = (worldX - run.dist), trackLane (-1, 0, 1), and height y above ground
-// into behind-the-back 3D screen coordinates { x, y, groundY, scale, u, p }.
-export function projectBehind(dx, trackLane = 0, heightY = 0) {
-  const u = dx / VISIBLE_DEPTH; // 0 at player, 1 at horizon
-  const clamped = Math.max(-0.35, Math.min(1.05, u));
-  const p = clamped >= 0 ? Math.pow(1 - Math.min(1, clamped), 1.45) : 1 - clamped * 1.15;
-  const groundY = HORIZON_Y + (PLAYER_GROUND_Y - HORIZON_Y) * p;
-  const scale = 0.18 + 0.82 * p;
-  const laneSpread = LANE_WIDTH_FAR + (LANE_WIDTH_NEAR - LANE_WIDTH_FAR) * p;
-  const x = CENTER_X + trackLane * laneSpread;
-  const y = groundY - heightY * 0.66 * scale;
-  return { x, y, groundY, scale, u, p };
+function trackBandPoints(leftLane, rightLane, opts) {
+  const steps = 16;
+  const minU = -0.3;
+  const leftPts = [];
+  const rightPts = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = 1 - ((1 - minU) * i) / steps;
+    const dx = u * VISIBLE_DEPTH;
+    const lp = projectBehind(dx, leftLane, 0, opts);
+    const rp = projectBehind(dx, rightLane, 0, opts);
+    leftPts.push(`${lp.x.toFixed(1)},${lp.groundY.toFixed(1)}`);
+    rightPts.unshift(`${rp.x.toFixed(1)},${rp.groundY.toFixed(1)}`);
+  }
+  return [...leftPts, ...rightPts].join(' ');
 }
 
-function edgeX(lane, p) {
-  return CENTER_X + lane * (LANE_WIDTH_FAR + (LANE_WIDTH_NEAR - LANE_WIDTH_FAR) * p);
+function trackRailPoints(lane, opts) {
+  const steps = 16;
+  const minU = -0.3;
+  const pts = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = 1 - ((1 - minU) * i) / steps;
+    const pt = projectBehind(u * VISIBLE_DEPTH, lane, 0, opts);
+    pts.push(`${pt.x.toFixed(1)},${pt.groundY.toFixed(1)}`);
+  }
+  return pts.join(' ');
 }
 
 // Colours and background props per place (theme ids in src/game/stages.js).
@@ -248,22 +270,23 @@ const roadsideFor = (list, n) => list[((n % list.length) + list.length) % list.l
 const TRACK_BOTTOM_P = (TRACK_BOTTOM_Y - HORIZON_Y) / (PLAYER_GROUND_Y - HORIZON_Y);
 
 // Painted behind-the-back park sky + distant horizon hills and trees above HORIZON_Y.
-export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion = false }) {
+export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion = false, hillOffset = 0, opacity = 1 }) {
   const th = THEMES[theme] || THEMES.garden;
   const off = parallaxOffsets(dist, reduceMotion);
+  const horizonY = HORIZON_Y + (Number(hillOffset) || 0);
 
   if (th.painted) {
     return (
-      <G>
+      <G opacity={opacity}>
         {/* Seamless sky extension above the painting */}
         <Rect x={-40} y={-800} width={CAM_W + 80} height={820} fill={th.top || '#BFE9E7'} />
         {/* Painted sky, sun, hills and treeline. Its grass line (74% down the
-            picture) sits on HORIZON_Y; it is sized so even the tallest phone
+            picture) sits on horizonY; it is sized so even the tallest phone
             view (2.4:1) shows no gap above it, and the sides crop evenly. */}
         <SvgImage
           href={SPRITES[th.bg || 'skyBg']}
           x={CENTER_X - SKY_W / 2}
-          y={HORIZON_Y - SKY_H * SKY_HORIZON}
+          y={horizonY - SKY_H * SKY_HORIZON}
           width={SKY_W}
           height={SKY_H}
           preserveAspectRatio="none"
@@ -273,7 +296,7 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
   }
 
   return (
-    <G>
+    <G opacity={opacity}>
       <Defs>
         <LinearGradient id="skyGrad" x1="0" y1="0" x2="0" y2="1">
           <Stop offset="0%" stopColor={th.skyTop || th.sky} />
@@ -282,13 +305,13 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
         </LinearGradient>
       </Defs>
       <Rect x={-40} y={-800} width={CAM_W + 80} height={740} fill={th.skyTop || th.sky} />
-      <Rect x={-40} y={-80} width={CAM_W + 80} height={HORIZON_Y + 90} fill="url(#skyGrad)" />
+      <Rect x={-40} y={-80} width={CAM_W + 80} height={horizonY + 90} fill="url(#skyGrad)" />
       {[0, 140].map((bx) => (
         <SvgImage
           key={`th-${bx}`}
           href={SPRITES.hillsParallax}
           x={bx - 16 + ((off.far * 0.05) % 12)}
-          y={HORIZON_Y - 40}
+          y={horizonY - 40}
           width={180}
           height={48}
           preserveAspectRatio="none"
@@ -299,14 +322,18 @@ export const Backdrop = memo(function Backdrop({ theme, dist = 0, reduceMotion =
 });
 
 // 3-lane behind-the-back perspective park track, scrolling lane dashes and side trees.
-export function Midground({ theme, dist, reduceMotion = false }) {
+export function Midground({ theme, dist, reduceMotion = false, curve = 0, hillOffset = 0, opacity = 1 }) {
   const th = THEMES[theme] || THEMES.garden;
   const scroll = reduceMotion ? dist * 0.45 : dist;
+  const projOpts = { curve, hillOffset };
+  const horizonY = HORIZON_Y + (Number(hillOffset) || 0);
 
-  // Perspective polygons from HORIZON_Y (p=0) down to TRACK_BOTTOM_Y (p=TRACK_BOTTOM_P)
-  const shoulderPoly = `${edgeX(-1.68, 0)},${HORIZON_Y} ${edgeX(1.68, 0)},${HORIZON_Y} ${edgeX(1.68, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-1.68, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
-  const roadPoly = `${edgeX(-1.54, 0)},${HORIZON_Y} ${edgeX(1.54, 0)},${HORIZON_Y} ${edgeX(1.54, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-1.54, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
-  const centerLanePoly = `${edgeX(-0.5, 0)},${HORIZON_Y} ${edgeX(0.5, 0)},${HORIZON_Y} ${edgeX(0.5, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y} ${edgeX(-0.5, TRACK_BOTTOM_P)},${TRACK_BOTTOM_Y}`;
+  // Curved perspective polygons from horizonY (u=1) down past the bottom of the camera (u=-0.3)
+  const shoulderPoly = trackBandPoints(-1.68, 1.68, projOpts);
+  const roadPoly = trackBandPoints(-1.54, 1.54, projOpts);
+  const centerLanePoly = trackBandPoints(-0.5, 0.5, projOpts);
+  const leftRailPts = trackRailPoints(-1.54, projOpts);
+  const rightRailPts = trackRailPoints(1.54, projOpts);
 
   // Scrolling dashes and side scenery projected back-to-front
   const stepDx = 60;
@@ -327,10 +354,10 @@ export function Midground({ theme, dist, reduceMotion = false }) {
   }
 
   return (
-    <G>
+    <G opacity={opacity}>
       {/* Lush green park grass & verge banks */}
-      <Rect x={-40} y={HORIZON_Y} width={CAM_W + 80} height={TRACK_BOTTOM_Y - HORIZON_Y + 40} fill={th.ground} />
-      <Line x1={-40} y1={HORIZON_Y} x2={CAM_W + 40} y2={HORIZON_Y} stroke={th.edge} strokeWidth={2.5} />
+      <Rect x={-40} y={horizonY} width={CAM_W + 80} height={TRACK_BOTTOM_Y - horizonY + 40} fill={th.ground} />
+      <Line x1={-40} y1={horizonY} x2={CAM_W + 40} y2={horizonY} stroke={th.edge} strokeWidth={2.5} />
 
       {/* Outer road curb / dirt verge */}
       <Polygon points={shoulderPoly} fill={th.edge} stroke={INK} strokeWidth={2} strokeLinejoin="round" />
@@ -344,31 +371,29 @@ export function Midground({ theme, dist, reduceMotion = false }) {
       {/* Subtle scrolling cross-track ground bands to reinforce forward speed */}
       {marks.map((dx, i) => {
         const dxFar = Math.min(VISIBLE_DEPTH, dx + 22);
-        const a = projectBehind(dx, 0, 0);
-        const b = projectBehind(dxFar, 0, 0);
-        const l0 = edgeX(-1.52, a.p);
-        const r0 = edgeX(1.52, a.p);
-        const l1 = edgeX(-1.52, b.p);
-        const r1 = edgeX(1.52, b.p);
-        const dl0 = edgeX(-0.5, a.p);
-        const dr0 = edgeX(0.5, a.p);
-        const dl1 = edgeX(-0.5, b.p);
-        const dr1 = edgeX(0.5, b.p);
-        const hw = Math.max(1.2, 2.2 * a.scale);
+        const aL = projectBehind(dx, -1.52, 0, projOpts);
+        const aR = projectBehind(dx, 1.52, 0, projOpts);
+        const bL = projectBehind(dxFar, -1.52, 0, projOpts);
+        const bR = projectBehind(dxFar, 1.52, 0, projOpts);
+        const aDL = projectBehind(dx, -0.5, 0, projOpts);
+        const aDR = projectBehind(dx, 0.5, 0, projOpts);
+        const bDL = projectBehind(dxFar, -0.5, 0, projOpts);
+        const bDR = projectBehind(dxFar, 0.5, 0, projOpts);
+        const hw = Math.max(1.2, 2.2 * aL.scale);
         return (
           <G key={`m-${i}`}>
-            <Polygon points={`${l1},${b.groundY} ${r1},${b.groundY} ${r0},${a.groundY} ${l0},${a.groundY}`} fill="rgba(182,146,84,0.14)" />
+            <Polygon points={`${bL.x},${bL.groundY} ${bR.x},${bR.groundY} ${aR.x},${aR.groundY} ${aL.x},${aL.groundY}`} fill="rgba(182,146,84,0.14)" />
             {/* Boardwalk planks, brick paving or floor tiles: seams across the road */}
             {th.planks || th.bricks || th.tiles ? (
-              <Line x1={l0} y1={a.groundY} x2={r0} y2={a.groundY} stroke={th.edge} strokeWidth={Math.max(0.6, 1.6 * a.scale)} opacity={th.tiles ? 0.45 : 0.6} />
+              <Line x1={aL.x} y1={aL.groundY} x2={aR.x} y2={aR.groundY} stroke={th.edge} strokeWidth={Math.max(0.6, 1.6 * aL.scale)} opacity={th.tiles ? 0.45 : 0.6} />
             ) : null}
             {/* Left and right lane divider dashes */}
             <Polygon
-              points={`${dl1 - hw * 0.6},${b.groundY} ${dl1 + hw * 0.6},${b.groundY} ${dl0 + hw},${a.groundY} ${dl0 - hw},${a.groundY}`}
+              points={`${bDL.x - hw * 0.6},${bDL.groundY} ${bDL.x + hw * 0.6},${bDL.groundY} ${aDL.x + hw},${aDL.groundY} ${aDL.x - hw},${aDL.groundY}`}
               fill="rgba(255,252,240,0.82)"
             />
             <Polygon
-              points={`${dr1 - hw * 0.6},${b.groundY} ${dr1 + hw * 0.6},${b.groundY} ${dr0 + hw},${a.groundY} ${dr0 - hw},${a.groundY}`}
+              points={`${bDR.x - hw * 0.6},${bDR.groundY} ${bDR.x + hw * 0.6},${bDR.groundY} ${aDR.x + hw},${aDR.groundY} ${aDR.x - hw},${aDR.groundY}`}
               fill="rgba(255,252,240,0.82)"
             />
           </G>
@@ -376,20 +401,20 @@ export function Midground({ theme, dist, reduceMotion = false }) {
       })}
 
       {/* Outer track ink rails */}
-      <Line x1={edgeX(-1.54, 0)} y1={HORIZON_Y} x2={edgeX(-1.54, TRACK_BOTTOM_P)} y2={TRACK_BOTTOM_Y} stroke={INK} strokeWidth={2.2} />
-      <Line x1={edgeX(1.54, 0)} y1={HORIZON_Y} x2={edgeX(1.54, TRACK_BOTTOM_P)} y2={TRACK_BOTTOM_Y} stroke={INK} strokeWidth={2.2} />
+      <Polyline points={leftRailPts} fill="none" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
+      <Polyline points={rightRailPts} fill="none" stroke={INK} strokeWidth={2.2} strokeLinejoin="round" />
 
       {/* Scrolling perspective trees and flower tufts lining both sides of the track */}
       {treeSlots.map(({ dx, slot }, i) => {
-        const left = projectBehind(dx, -2.02, 0);
-        const right = projectBehind(dx, 2.02, 0);
+        const left = projectBehind(dx, -2.02, 0, projOpts);
+        const right = projectBehind(dx, 2.02, 0, projOpts);
         const tw = 96 * left.scale;
         const thPx = 92 * left.scale;
-        const pOff = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), 0, 0);
-        const pw = 36 * pOff.scale;
-        const ph = 28 * pOff.scale;
-        const leftFlora = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), -1.78, 0);
-        const rightFlora = projectBehind(Math.min(VISIBLE_DEPTH - 5, dx + 55), 1.78, 0);
+        const floraDx = Math.min(VISIBLE_DEPTH - 5, dx + 55);
+        const leftFlora = projectBehind(floraDx, -1.78, 0, projOpts);
+        const rightFlora = projectBehind(floraDx, 1.78, 0, projOpts);
+        const pw = 36 * leftFlora.scale;
+        const ph = 28 * leftFlora.scale;
         return (
           <G key={`sc-${i}`}>
             <SvgImage

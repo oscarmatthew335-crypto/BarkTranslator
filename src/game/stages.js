@@ -45,6 +45,23 @@ export const COLLECTIBLES = {
 
 export const POWER_UPS = ['speed', 'shield', 'magnet', 'double'];
 
+export const PLACE_CYCLE = ['garden', 'park', 'beach', 'braai', 'vet', 'home'];
+export const PLACE_SPAN_DIST = 4000; // 400 m (10 world units per metre)
+export const PLACE_EMOJIS = {
+  garden: '🌻',
+  park: '🌳',
+  beach: '🏖️',
+  braai: '🔥',
+  vet: '🩺',
+  home: '🏠'
+};
+
+export function placeAtDist(dist = 0) {
+  const d = Math.max(0, Number(dist) || 0);
+  const idx = Math.floor(d / PLACE_SPAN_DIST) % PLACE_CYCLE.length;
+  return PLACE_CYCLE[idx];
+}
+
 // hearts: bumps allowed before the stage is lost. combo: chance of a jump-then-duck (or duck-then-jump) pair.
 const PLACES = [
   { place: 'garden', seconds: 45, speed: 210, ramp: 45, density: 1.1, hearts: 5, combo: 0 },
@@ -55,7 +72,7 @@ const PLACES = [
   { place: 'home', seconds: 90, speed: 310, ramp: 95, density: 2.1, hearts: 3, combo: 0.42 }
 ];
 
-const DOG_MIX = {
+export const DOG_MIX = {
   garden: { puddle: 3, sprinkler: 3, postman: 1 },
   park: { puddle: 3, sprinkler: 2, postman: 2 },
   beach: { puddle: 4, sprinkler: 2, postman: 1 },
@@ -63,7 +80,7 @@ const DOG_MIX = {
   vet: { puddle: 2, vacuum: 3, sprinkler: 2, postman: 1, catDash: 1, bird: 1 },
   home: { vacuum: 4, puddle: 1, postman: 3, sprinkler: 1, catDash: 2, bird: 2 }
 };
-const CAT_MIX = {
+export const CAT_MIX = {
   garden: { cucumber: 3, spray: 3, dog: 1 },
   park: { cucumber: 2, spray: 2, dog: 3 },
   beach: { cucumber: 3, spray: 3, dog: 2 },
@@ -71,6 +88,27 @@ const CAT_MIX = {
   vet: { cucumber: 2, spray: 3, vacuum: 3, dogDash: 1, bird: 1 },
   home: { vacuum: 4, cucumber: 3, spray: 2, dog: 1, dogDash: 2, bird: 2 }
 };
+
+export function placeObstaclesFor(species, place) {
+  const mix = species === 'cat' ? CAT_MIX : DOG_MIX;
+  const base = mix[place] || mix.garden;
+  return { ...base, bench: 1, trash: 1 };
+}
+
+export function stageObstaclesAt(stage, dist = 0) {
+  if (!stage) return {};
+  const obs = stage.obstacles || {};
+  const isDefaultEndlessMix =
+    (stage.endless || stage.chase) &&
+    stage.usePlaceMix !== false &&
+    obs.bench === 3 &&
+    obs.trash === 3 &&
+    Object.keys(obs).length === 2;
+  if (isDefaultEndlessMix) {
+    return placeObstaclesFor(stage.species, placeAtDist(dist));
+  }
+  return obs;
+}
 
 const build = (species, mix) =>
   PLACES.map((p, i) => ({

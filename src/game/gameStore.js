@@ -106,9 +106,17 @@ export const emptyGameState = () => ({
     livesEmptyAtClose: false,
     lastReminderDay: null,
     showJumpDuckButtons: false, // swipe first; players from before keep their buttons (see loadGame)
+    reduceMotion: null, // null = follow the phone's reduce-motion setting; true/false = explicit toggle
     lastCharacterNudgeDay: null
   }
 });
+
+export function effectiveReduceMotion(options, systemReduceMotion = false) {
+  if (options?.reduceMotion === null || options?.reduceMotion === undefined) {
+    return Boolean(systemReduceMotion);
+  }
+  return Boolean(options.reduceMotion);
+}
 
 export function bestScoreFor(state, species, mode) {
   const sp = species === 'cat' ? 'cat' : 'dog';

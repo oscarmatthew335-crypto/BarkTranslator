@@ -6,8 +6,8 @@
 // same spot on screen while the world scrolls by `dist`.
 
 import { makeRng, pick, hashString } from './random';
-import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED, isSurpriseObstacleAllowed } from './stages';
-import { difficultyFor, patternsFor } from './chunks';
+import { OBSTACLES, COLLECTIBLES, ENDLESS_MAX_SPEED, isSurpriseObstacleAllowed, placeAtDist, stageObstaclesAt } from './stages';
+import { difficultyFor, patternsFor, PATTERNS, isStraightAt } from './chunks';
 
 export const VIEW_W = 400;
 export const VIEW_H = 220;
@@ -129,6 +129,81 @@ function weighted(rng, weights) {
   return entries[entries.length - 1][0];
 }
 
+function makeVarietyState() {
+  return {
+    recentTypes: [],
+    laneLast: {},
+    lastPatternId: null,
+    lastSetPieceId: null,
+    setPieceCounts: {},
+    busyCount: 0,
+    nextTreatRunDist: 10500
+  };
+}
+
+function cloneVarietyState(vs) {
+  if (!vs) return makeVarietyState();
+  const laneLast = {};
+  for (const [k, v] of Object.entries(vs.laneLast || {})) laneLast[k] = v.slice();
+  return {
+    recentTypes: (vs.recentTypes || []).slice(-12),
+    laneLast,
+    lastPatternId: vs.lastPatternId || null,
+    lastSetPieceId: vs.lastSetPieceId || null,
+    setPieceCounts: { ...(vs.setPieceCounts || {}) },
+    busyCount: vs.busyCount || 0,
+    nextTreatRunDist: vs.nextTreatRunDist ?? 10500
+  };
+}
+
+function recordObstacleChoice(state, type, trackLane = 0) {
+  if (!state || !type) return;
+  state.recentTypes.push(type);
+  if (state.recentTypes.length > 12) state.recentTypes.shift();
+  const prev = state.laneLast[trackLane] || [];
+  state.laneLast[trackLane] = [...prev.slice(-1), type];
+}
+
+// Picks an obstacle from `weights`, never picking the same type 3 times in a row
+// (globally or on `trackLane`) and ensuring every 10 obstacles cover >= 3 types
+// when `poolDistinctCount >= 3`.
+function pickVariedObstacle(rng, weights, state, { trackLane = 0, poolDistinctCount = null } = {}) {
+  const entries = Object.entries(weights || {}).filter(([, w]) => w > 0);
+  if (!entries.length) return null;
+  if (entries.length === 1) {
+    const only = entries[0][0];
+    recordObstacleChoice(state, only, trackLane);
+    return only;
+  }
+  const recent = state.recentTypes;
+  const lastGlobal2 = recent.length >= 2 && recent[recent.length - 1] === recent[recent.length - 2] ? recent[recent.length - 1] : null;
+  const lp = state.laneLast[trackLane] || [];
+  const lastLane2 = lp.length >= 2 && lp[0] === lp[1] ? lp[0] : null;
+
+  let candidates = entries.filter(([k]) => k !== lastGlobal2 && k !== lastLane2);
+  if (!candidates.length) candidates = entries.filter(([k]) => k !== lastGlobal2);
+  if (!candidates.length) candidates = entries;
+
+  const distinctTotal = poolDistinctCount ?? entries.length;
+  if (distinctTotal >= 3 && recent.length >= 3) {
+    const tail4 = new Set(recent.slice(-4));
+    if (tail4.size < 2 || (recent.length === 3 && tail4.size < 3)) {
+      const fresh = candidates.filter(([k]) => !tail4.has(k));
+      if (fresh.length) candidates = fresh;
+    } else if (recent.length >= 5) {
+      const tail9 = new Set(recent.slice(-9));
+      if (tail9.size < 3) {
+        const fresh = candidates.filter(([k]) => !tail9.has(k));
+        if (fresh.length) candidates = fresh;
+      }
+    }
+  }
+
+  const chosen = weighted(rng, Object.fromEntries(candidates));
+  recordObstacleChoice(state, chosen, trackLane);
+  return chosen;
+}
+
 // Stage length in world units: base speed plus half the ramp, for its seconds.
 export const stageLength = (stage) => Math.round((stage.speed + stage.ramp / 2) * stage.seconds);
 
@@ -147,11 +222,13 @@ export function buildLevel(stage, seed) {
 
   const warm = stage.index === 0 ? warmupDist(stage) : 0;
   const stillMix = Object.fromEntries(Object.entries(stage.obstacles).filter(([k]) => !OBSTACLES[k].move));
+  const vState = makeVarietyState();
   while (x < length - 260) {
     const progress = x / length;
     const speed = stage.speed + stage.ramp * progress;
     const warming = x < warm;
-    const type = weighted(rng, warming && Object.keys(stillMix).length ? stillMix : stage.obstacles);
+    const mix = warming && Object.keys(stillMix).length ? stillMix : stage.obstacles;
+    const type = pickVariedObstacle(rng, mix, vState, { trackLane: 0, poolDistinctCount: Object.keys(mix).length });
     const o = OBSTACLES[type];
     entities.push({ id: id++, kind: 'obstacle', type, trackLane: 0, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move });
 
@@ -211,29 +288,117 @@ export function buildLevel(stage, seed) {
   return { entities, length, totalTreats };
 }
 
-// Lay one hand-made pattern (src/game/chunks.js) at x, with the stage's own
-// still obstacles swapped into its low and high slots. Returns null when no
-// pattern fits (the random rows are the fallback).
-function placePattern(rng, stage, { x, speed, maxSpeed, treat, nextId }) {
-  const still = (lane) => Object.fromEntries(Object.entries(stage.obstacles || {}).filter(([k]) => OBSTACLES[k].lane === lane && !OBSTACLES[k].move));
+// Lay one hand-made pattern (src/game/chunks.js) at x, with the active place's own
+// obstacles swapped into its slots. Returns null when no pattern fits.
+function placePattern(rng, stage, { x, speed, maxSpeed, treat, nextId, activeMix, seed = 1, varietyState }) {
+  const pool = activeMix || stageObstaclesAt(stage, x);
+  const poolDistinctCount = Object.keys(pool).length;
+  const still = (lane) => Object.fromEntries(Object.entries(pool).filter(([k]) => OBSTACLES[k]?.lane === lane && !OBSTACLES[k].move));
+  const allHighs = Object.fromEntries(Object.entries(pool).filter(([k]) => OBSTACLES[k]?.lane === 'high'));
   const lows = still('low');
   const highs = still('high');
-  const fits = patternsFor(difficultyFor(speed, stage.speed, maxSpeed)).filter(
-    (p) => p.items.every((it) => (it.slot === 'low' ? Object.keys(lows).length : it.slot === 'high' ? Object.keys(highs).length : true))
-  );
-  if (!fits.length) return null;
-  const pattern = pick(rng, fits);
   const jd = jumpDistance(speed);
+  const prevType = varietyState?.recentTypes?.[varietyState.recentTypes.length - 1] || null;
+  const prevType2 = varietyState?.recentTypes?.[varietyState.recentTypes.length - 2] || null;
+  const straightHere = isStraightAt(x, seed) && isStraightAt(x + 2.2 * jd, seed);
+  const highPool = Object.keys(highs).length >= 2 ? highs : Object.keys(allHighs).length >= 2 ? allHighs : highs;
+  const highKeys = Object.keys(highPool);
+  const onlyHigh = highKeys.length === 1 ? highKeys[0] : null;
+  const highSlotsCount = (p) => p.items.filter((it) => it.slot === 'high').length;
+
+  const canPlace = (p) => {
+    if (p.id === varietyState?.lastPatternId) return false;
+    if (p.setPiece && p.id === varietyState?.lastSetPieceId) return false;
+    if (p.onlyStraight && !straightHere) return false;
+    if (p.id === 'bench-grind' && (!pool.bench || prevType === 'bench')) return false;
+    if (p.id === 'duck-tunnel' && Object.keys(allHighs).length < 2) return false;
+    if (onlyHigh && highSlotsCount(p) >= 2 && prevType === onlyHigh) return false;
+    if (onlyHigh && highSlotsCount(p) >= 1 && prevType === onlyHigh && prevType2 === onlyHigh) return false;
+    if (onlyHigh && highSlotsCount(p) >= 3) return false;
+    return p.items.every((it) => {
+      if (it.slot === 'low') return Object.keys(lows).length > 0;
+      if (it.slot === 'high') return highKeys.length > 0;
+      if (it.slot === 'bench') return Boolean(pool.bench);
+      if (it.slot === 'bigJump') return Object.keys(lows).length > 0 || Boolean(pool.puddle || pool.cucumber);
+      return true;
+    });
+  };
+
+  // Prefer rotating through set pieces by least-used so all 4 appear in a run and never twice in a row.
+  const eligibleSetPieces = PATTERNS.filter((p) => p.setPiece && canPlace(p));
+  let pattern = null;
+  if (eligibleSetPieces.length && (varietyState.busyCount % 2 === 1 || rng() < 0.42)) {
+    const counts = varietyState.setPieceCounts || {};
+    eligibleSetPieces.sort((a, b) => {
+      const diff = (counts[a.id] || 0) - (counts[b.id] || 0);
+      if (diff !== 0) return diff;
+      if (a.onlyStraight && !b.onlyStraight) return -1;
+      if (!a.onlyStraight && b.onlyStraight) return 1;
+      return 0;
+    });
+    pattern = eligibleSetPieces[0];
+  }
+  if (!pattern) {
+    const fits = patternsFor(difficultyFor(speed, stage.speed, maxSpeed)).filter(canPlace);
+    const anyFits = fits.length ? fits : PATTERNS.filter(canPlace);
+    if (!anyFits.length) return null;
+    pattern = pick(rng, anyFits);
+  }
+  if (varietyState) {
+    varietyState.lastPatternId = pattern.id;
+    if (pattern.setPiece) {
+      varietyState.lastSetPieceId = pattern.id;
+      varietyState.setPieceCounts[pattern.id] = (varietyState.setPieceCounts[pattern.id] || 0) + 1;
+    }
+  }
+
   const entities = [];
   let id = nextId;
   let endX = x;
   for (const it of pattern.items) {
     const ax = x + it.at * jd;
-    if (it.slot === 'low' || it.slot === 'high') {
-      const type = weighted(rng, it.slot === 'low' ? lows : highs);
+    if (it.slot === 'low' || it.slot === 'high' || it.slot === 'bench' || it.slot === 'bigJump') {
+      let weights;
+      if (it.slot === 'bench') weights = { bench: 1 };
+      else if (it.slot === 'bigJump') weights = pool.puddle ? { puddle: 1 } : pool.cucumber ? { cucumber: 1 } : lows;
+      else if (it.slot === 'high') weights = pattern.id === 'duck-tunnel' ? allHighs : highPool;
+      else weights = lows;
+      const type = pickVariedObstacle(rng, weights, varietyState, { trackLane: it.lane, poolDistinctCount });
       const o = OBSTACLES[type];
-      entities.push({ id: id++, kind: 'obstacle', type, trackLane: it.lane, x: ax, y: o.y, w: o.w, h: o.h, lane: o.lane, move: 0, bob: Boolean(o.bob), warningS: 0, pattern: pattern.id });
+      entities.push({
+        id: id++,
+        kind: 'obstacle',
+        type,
+        trackLane: it.lane,
+        x: ax,
+        y: o.y,
+        w: o.w,
+        h: o.h,
+        lane: o.lane,
+        move: 0,
+        bob: Boolean(o.bob),
+        warningS: 0,
+        pattern: pattern.id,
+        ...(pattern.id === 'big-jump' ? { hillTop: true } : {})
+      });
       endX = Math.max(endX, ax + o.w);
+    } else if (it.slot === 'bigArc') {
+      for (let k = -2; k <= 2; k++) {
+        const tt = (jd / 2 + k * jd * 0.2) / speed;
+        const h = Math.max(14, JUMP_V * tt - (GRAVITY / 2) * tt * tt + 16);
+        entities.push({
+          id: id++,
+          kind: 'treat',
+          type: treat,
+          trackLane: it.lane,
+          x: ax + 24 + k * jd * 0.2 - TREAT_W / 2,
+          y: h,
+          w: TREAT_W,
+          h: TREAT_W,
+          pattern: pattern.id
+        });
+      }
+      endX = Math.max(endX, ax + jd * 0.6);
     } else {
       for (let k = -1; k <= 1; k++) {
         if (it.slot === 'arc') {
@@ -251,7 +416,7 @@ function placePattern(rng, stage, { x, speed, maxSpeed, treat, nextId }) {
 }
 
 // Build one chunk of an endless or chase course across 3 lanes. Deterministic per (seed, chunkIndex).
-export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, nextId = 0 } = {}) {
+export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, nextId = 0, varietyState = null } = {}) {
   const rng = makeRng(hashString(`${seed}:chunk:${chunkIndex}`));
   const treatTypes = COLLECTIBLES[stage.species] || COLLECTIBLES.dog;
   const entities = [];
@@ -261,32 +426,69 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
   const maxSpeed = stage.maxSpeed || ENDLESS_MAX_SPEED;
   const warm = warmupDist(stage);
   let powerPlaced = false;
+  const vState = varietyState ? cloneVarietyState(varietyState) : makeVarietyState();
 
   while (x < endX) {
     const progress = Math.min(1, x / 18000);
     const speed = Math.min(maxSpeed, stage.speed + (stage.ramp || 180) * progress);
     const warming = x < warm;
+    const baseMix = stageObstaclesAt(stage, x);
     const allowedMix = {};
-    for (const [k, w] of Object.entries(stage.obstacles || {})) {
+    for (const [k, w] of Object.entries(baseMix || {})) {
+      if (!OBSTACLES[k]) continue;
       if (warming && OBSTACLES[k].move) continue;
       if (isSurpriseObstacleAllowed(stage, k, x)) allowedMix[k] = w;
     }
-    const pool = Object.keys(allowedMix).length ? allowedMix : stage.obstacles;
+    const pool = Object.keys(allowedMix).length ? allowedMix : baseMix;
+    const poolDistinctCount = Object.keys(pool).length;
+    const treat = pick(rng, treatTypes);
 
-    // After the warm-up, often a hand-made pattern instead of a random row.
+    // Every 30-45 s, a 2-3 s treat run across all 3 lanes with no obstacles.
+    if (!warming && x >= vState.nextTreatRunDist && stage.treatRuns !== false) {
+      const secs = 2.0 + rng() * 1.0;
+      const span = speed * secs;
+      for (let tx = x; tx <= x + span; tx += 95) {
+        for (const lane of LANES) {
+          entities.push({ id: id++, kind: 'treat', type: treat, trackLane: lane, x: tx, y: 4, w: TREAT_W, h: TREAT_W, treatRun: true });
+        }
+      }
+      vState.nextTreatRunDist = x + span + speed * (30 + rng() * 15);
+      vState.busyCount = 0;
+      x += span + jumpDistance(speed) * 0.9;
+      continue;
+    }
+
+    // After each busy patch, a 1.5-2.5 s breather stretch: no obstacles, just a curving line of treats.
+    if (!warming && vState.busyCount >= 3) {
+      const secs = 1.5 + rng() * 1.0;
+      const span = speed * secs;
+      const count = 7;
+      const dir = rng() < 0.5 ? 1 : -1;
+      for (let i = 0; i < count; i++) {
+        const u = i / (count - 1);
+        const lane = dir * Math.round(Math.sin(u * Math.PI) * 1);
+        entities.push({ id: id++, kind: 'treat', type: treat, trackLane: lane, x: x + u * span, y: 4, w: TREAT_W, h: TREAT_W, breather: true });
+      }
+      vState.busyCount = 0;
+      x += span + jumpDistance(speed) * 0.65;
+      continue;
+    }
+
+    // After the warm-up, often a hand-made pattern or set piece instead of a random row.
     if (!warming && rng() < PATTERN_CHANCE) {
-      const placed = placePattern(rng, stage, { x, speed, maxSpeed, treat: pick(rng, treatTypes), nextId: id });
+      const placed = placePattern(rng, stage, { x, speed, maxSpeed, treat, nextId: id, activeMix: pool, seed, varietyState: vState });
       if (placed) {
         entities.push(...placed.entities);
         id = placed.nextId;
+        vState.busyCount += 1;
         x = placed.endX + jumpDistance(speed) * 1.25 + 60 + (rng() * 200) / (stage.density || 1.5);
         continue;
       }
     }
 
-    const type = weighted(rng, pool);
-    const o = OBSTACLES[type];
     const laneIdx = pick(rng, LANES);
+    const type = pickVariedObstacle(rng, pool, vState, { trackLane: laneIdx, poolDistinctCount });
+    const o = OBSTACLES[type];
     const blocked = new Set([laneIdx]);
     entities.push({ id: id++, kind: 'obstacle', type, trackLane: laneIdx, x, y: o.y, w: o.w, h: o.h, lane: o.lane, move: o.move, bob: Boolean(o.bob), warningS: o.warningS || 0 });
 
@@ -294,14 +496,13 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     if (!warming && rng() < 0.4) {
       const otherLanes = LANES.filter((l) => l !== laneIdx);
       const secondLane = pick(rng, otherLanes);
-      const type2 = weighted(rng, pool);
+      const type2 = pickVariedObstacle(rng, pool, vState, { trackLane: secondLane, poolDistinctCount });
       const o2 = OBSTACLES[type2];
       blocked.add(secondLane);
       entities.push({ id: id++, kind: 'obstacle', type: type2, trackLane: secondLane, x, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: o2.move, bob: Boolean(o2.bob), warningS: o2.warningS || 0 });
     }
     const openLanes = LANES.filter((l) => !blocked.has(l));
 
-    const treat = pick(rng, treatTypes);
     if (rng() < 0.8 || warming) {
       const jd = jumpDistance(speed);
       const centre = x + o.w / 2;
@@ -323,30 +524,31 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
     if (warming) {
       // one obstacle at a time
     } else if (stage.doubleJumpCombo && rng() < stage.doubleJumpCombo && (chunkIndex > 0 || x > 650)) {
-      const lowKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'low' && !OBSTACLES[k].move);
-      const highKeys = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane === 'high' && !OBSTACLES[k].move);
-      const pairPool = o.lane === 'high' && lowKeys.length ? lowKeys : highKeys.length ? highKeys : lowKeys;
-      if (pairPool.length) {
-        const t2 = pick(rng, pairPool);
+      const lowMix = Object.fromEntries(Object.entries(pool).filter(([k]) => OBSTACLES[k]?.lane === 'low' && !OBSTACLES[k].move));
+      const highMix = Object.fromEntries(Object.entries(pool).filter(([k]) => OBSTACLES[k]?.lane === 'high' && !OBSTACLES[k].move));
+      const pairMix = o.lane === 'high' && Object.keys(lowMix).length ? lowMix : Object.keys(highMix).length ? highMix : lowMix;
+      if (Object.keys(pairMix).length) {
+        const pairLane = pick(rng, LANES);
+        const t2 = pickVariedObstacle(rng, pairMix, vState, { trackLane: pairLane, poolDistinctCount });
         const o2 = OBSTACLES[t2];
         const x2 = x + o.w + Math.round(jumpDistance(speed) * 0.62);
-        const pairLane = pick(rng, LANES);
         entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: pairLane, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0, doubleJumpPair: true });
-        // High treats along the double-jump arc
         entities.push({ id: id++, kind: 'treat', type: treat, trackLane: pairLane, x: x2 + o2.w / 2 - TREAT_W / 2, y: 88, w: TREAT_W, h: TREAT_W });
         pair = x2 + o2.w - (x + o.w);
       }
     } else if (stage.combo && rng() < stage.combo && (chunkIndex > 0 || x > 900)) {
-      const other = Object.keys(stage.obstacles).filter((k) => OBSTACLES[k].lane !== o.lane && !OBSTACLES[k].move);
-      if (other.length) {
-        const t2 = pick(rng, other);
+      const otherMix = Object.fromEntries(Object.entries(pool).filter(([k]) => OBSTACLES[k]?.lane !== o.lane && !OBSTACLES[k].move));
+      if (Object.keys(otherMix).length) {
+        const pairLane = pick(rng, LANES);
+        const t2 = pickVariedObstacle(rng, otherMix, vState, { trackLane: pairLane, poolDistinctCount });
         const o2 = OBSTACLES[t2];
         const x2 = x + o.w + jumpDistance(speed) * (o.lane === 'low' ? 1 : 0.5) + speed * 0.34;
-        entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: pick(rng, LANES), x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
+        entities.push({ id: id++, kind: 'obstacle', type: t2, trackLane: pairLane, x: x2, y: o2.y, w: o2.w, h: o2.h, lane: o2.lane, move: 0 });
         pair = x2 + o2.w - (x + o.w);
       }
     }
 
+    if (!warming) vState.busyCount += 1;
     const minGap = jumpDistance(speed) * (warming ? 1.6 : 1.25) + o.w + 40 + pair;
     const gap = minGap + (rng() * 260) / (stage.density || 1.5);
     const mid = x + o.w + gap / 2;
@@ -365,12 +567,12 @@ export function buildChunk(stage, { seed = 1, chunkIndex = 0, startX = 420, next
   }
   entities.sort((a, b) => a.x - b.x);
   const treatsInChunk = entities.filter((e) => e.kind === 'treat').length;
-  return { entities, nextX: x, nextId: id, chunkIndex: chunkIndex + 1, treatsInChunk };
+  return { entities, nextX: x, nextId: id, chunkIndex: chunkIndex + 1, treatsInChunk, varietyState: vState };
 }
 
 export function ensureChunks(run) {
   if (!run.stage.endless && !run.stage.chase) return run;
-  let { entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats } = run;
+  let { entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats, varietyState } = run;
   if (generatedTo - run.dist >= CHUNK_LOOKAHEAD) return run;
   entities = entities.slice();
   if (cursor > 60) {
@@ -378,14 +580,15 @@ export function ensureChunks(run) {
     cursor = 0;
   }
   while (generatedTo - run.dist < CHUNK_LOOKAHEAD) {
-    const chunk = buildChunk(run.stage, { seed: run.seed, chunkIndex, startX: generatedTo, nextId: nextEntityId });
+    const chunk = buildChunk(run.stage, { seed: run.seed, chunkIndex, startX: generatedTo, nextId: nextEntityId, varietyState });
     entities.push(...chunk.entities);
     generatedTo = chunk.nextX;
     chunkIndex = chunk.chunkIndex;
     nextEntityId = chunk.nextId;
     totalTreats += chunk.treatsInChunk;
+    varietyState = chunk.varietyState;
   }
-  return { ...run, entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats };
+  return { ...run, entities, cursor, generatedTo, chunkIndex, nextEntityId, totalTreats, varietyState };
 }
 
 // --- combos, multiplier and chase gap --------------------------------------
@@ -438,6 +641,7 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
       combo: stage.combo || 0,
       doubleJumpCombo: stage.doubleJumpCombo || 0,
       obstacles: stage.obstacles,
+      usePlaceMix: stage.usePlaceMix,
       powerUps: stage.powerUps || [],
       seconds: stage.seconds,
       daily: Boolean(stage.daily),
@@ -449,6 +653,9 @@ export function newRun(stage, { seed = 1, startPowerUps = [], reduceMotion = fal
     seed,
     firstRun: Boolean(firstRun),
     warmupDist: isChunked || stage.index === 0 ? warmupDist(stage) : 0,
+    place: isChunked ? placeAtDist(0) : (stage.theme || 'garden'),
+    placesReached: [isChunked ? placeAtDist(0) : (stage.theme || 'garden')],
+    varietyState: makeVarietyState(),
     t: 0,
     dist: 0,
     speed: stage.speed,
@@ -794,6 +1001,12 @@ export function step(run, dt, input = {}) {
   }
 
   const score = modeScore({ dist, treatPoints });
+  const nextPlace = run.stage.endless || run.stage.chase ? placeAtDist(dist) : run.place;
+  let placesReached = run.placesReached || [run.place || 'garden'];
+  if (nextPlace && nextPlace !== run.place) {
+    events.push('placeChange');
+    if (!placesReached.includes(nextPlace)) placesReached = [...placesReached, nextPlace];
+  }
 
   // Out of hearts: the stage is lost (treats picked up are kept). Endless ends on hearts <= 0; Chase ends when caught.
   const outOfHearts = !run.stage.chase && hearts <= 0;
@@ -815,6 +1028,8 @@ export function step(run, dt, input = {}) {
     ...run,
     t,
     dist,
+    place: nextPlace,
+    placesReached,
     speed,
     player,
     power,
